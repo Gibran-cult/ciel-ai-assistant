@@ -1,26 +1,44 @@
 import os
-
 import requests
 import streamlit as st
 from dotenv import load_dotenv
 
 
 # ============================================================
-# CONFIGURATION
+# LOAD ENVIRONMENT
 # ============================================================
 
 load_dotenv()
 
-try:
-    API_KEY = st.secrets["LANGFLOW_API_KEY"]
-except Exception:
-    API_KEY = os.getenv("sk-QcdmsuKch3r1uNzoTYwj-rOR-IYwMlI-rcVdoNasa6Y")
-FLOW_ID = "4166c4a3-3926-433e-a48f-d812bc8efb99"
 
-API_URL = (
-    f"https://charbroil-datebook-raving.ngrok-free.dev"
-    f"/api/v1/run/{FLOW_ID}?stream=false"
-)
+# ============================================================
+# CONFIG HELPER
+# ============================================================
+
+def get_config(name):
+    """
+    Ambil konfigurasi dari Streamlit Secrets.
+    Jika tidak tersedia, fallback ke environment variable.
+    """
+    try:
+        value = st.secrets.get(name)
+        if value:
+            return value
+    except Exception:
+        pass
+
+    return os.getenv(name)
+
+
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
+NGROK_URL = get_config("NGROK_URL")
+NGROK_USER = get_config("NGROK_USER")
+NGROK_PASSWORD = get_config("NGROK_PASSWORD")
+LANGFLOW_API_KEY = get_config("LANGFLOW_API_KEY")
+FLOW_ID = get_config("FLOW_ID")
 
 
 # ============================================================
@@ -38,11 +56,28 @@ st.set_page_config(
 # VALIDATE CONFIG
 # ============================================================
 
-if not API_KEY:
+missing_config = []
+
+if not NGROK_URL:
+    missing_config.append("NGROK_URL")
+
+if not NGROK_USER:
+    missing_config.append("NGROK_USER")
+
+if not NGROK_PASSWORD:
+    missing_config.append("NGROK_PASSWORD")
+
+if not LANGFLOW_API_KEY:
+    missing_config.append("LANGFLOW_API_KEY")
+
+if not FLOW_ID:
+    missing_config.append("FLOW_ID")
+
+
+if missing_config:
     st.error(
-        "❌ LANGFLOW_API_KEY tidak ditemukan.\n\n"
-        "Pastikan file `.env` berisi:\n\n"
-        "`LANGFLOW_API_KEY=API_KEY_KAMU`"
+        "❌ Konfigurasi belum lengkap.\n\n"
+        f"Variabel yang belum tersedia: {', '.join(missing_config)}"
     )
     st.stop()
 
@@ -102,64 +137,116 @@ st.caption(
 
 for message in st.session_state.messages:
 
-    with st.chat_message(
-        message["role"]
-    ):
-        st.markdown(
-            message["content"]
-        )
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
 
 # ============================================================
 # LANGFLOW API
 # ============================================================
 
-def ask_langflow(question: str) -> str:
+def ask_langflow(message):
+
+    url = (
+        f"{NGROK_URL.rstrip('/')}"
+        f"/api/v1/run/{FLOW_ID}"
+    )
 
     headers = {
         "Content-Type": "application/json",
-        "accept": "application/json",
-        "x-api-key": API_KEY,
+        "Accept": "application/json",
+        "x-api-key": LANGFLOW_API_KEY,
     }
 
     payload = {
-        "input_value": question,
+        "input_value": message,
         "input_type": "chat",
         "output_type": "chat",
     }
 
-    response = requests.post(
-        API_URL,
-        headers=headers,
-        json=payload,
-        timeout=120,
-    )
-
-    # Raise error for HTTP 4xx / 5xx
-    response.raise_for_status()
-
-    data = response.json()
-
-    # Extract Langflow response
     try:
-        answer = (
-            data["outputs"][0]
-            ["outputs"][0]
-            ["results"]["message"]
-            ["data"]["text"]
+
+        response = requests.post(
+            url,
+            headers=headers,
+
+            # Basic Auth untuk ngrok
+            auth=(
+                NGROK_USER,
+                NGROK_PASSWORD
+            ),
+
+            json=payload,
+            params={
+                "stream": "false"
+            },
+            timeout=120,
         )
 
-    except (
-        KeyError,
-        IndexError,
-        TypeError,
-    ) as error:
+        response.raise_for_status()
 
-        raise ValueError(
-            "Struktur response Langflow tidak sesuai."
-        ) from error
+        data = response.json()
 
-    return answer
+        # ====================================================
+        # EXTRACT LANGFLOW RESPONSE
+        # ====================================================
+
+        try:
+
+            answer = (
+                data["outputs"][0]
+                ["outputs"][0]
+                ["results"]["message"]
+                ["data"]["text"]
+            )
+
+            return answer
+
+        except (KeyError, IndexError, TypeError):
+
+            return (
+                "⚠️ Response Langflow diterima, "
+                "tetapi format output tidak dikenali.\n\n"
+                f"```json\n{data}\n```"
+            )
+
+    except requests.exceptions.Timeout:
+
+        return (
+            "⏱️ Request timeout.\n\n"
+            "Langflow membutuhkan terlalu lama "
+            "untuk memberikan jawaban."
+        )
+
+    except requests.exceptions.ConnectionError:
+
+        return (
+            "🔌 Tidak dapat terhubung ke ngrok.\n\n"
+            "Pastikan Langflow Desktop dan ngrok "
+            "sedang berjalan."
+        )
+
+    except requests.exceptions.HTTPError as error:
+
+        return (
+            "🚫 Langflow/ngrok menolak request.\n\n"
+            f"HTTP Error: {error}\n\n"
+            f"Response:\n{response.text}"
+        )
+
+    except requests.exceptions.RequestException as error:
+
+        return (
+            "❌ Request gagal.\n\n"
+            f"{error}"
+        )
+
+    except ValueError:
+
+        return (
+            "⚠️ Response dari Langflow "
+            "bukan JSON yang valid."
+        )
 
 
 # ============================================================
@@ -197,61 +284,13 @@ if prompt:
             "🧠 Supervisor sedang berpikir..."
         ):
 
-            try:
+            answer = ask_langflow(prompt)
 
-                answer = ask_langflow(prompt)
+            st.markdown(answer)
 
-                st.markdown(answer)
-
-                st.session_state.messages.append(
-                    {
-                        "role": "assistant",
-                        "content": answer,
-                    }
-                )
-
-            except requests.exceptions.Timeout:
-
-                st.error(
-                    "⏱️ Request timeout.\n\n"
-                    "Langflow membutuhkan terlalu lama "
-                    "untuk memberikan jawaban."
-                )
-
-            except requests.exceptions.ConnectionError:
-
-                st.error(
-                    "🔌 Tidak dapat terhubung ke Langflow.\n\n"
-                    "Pastikan Langflow Desktop sedang berjalan "
-                    "di `localhost:7860`."
-                )
-
-            except requests.exceptions.HTTPError as error:
-
-                st.error(
-                    "🚫 Langflow menolak request."
-                )
-
-                st.code(
-                    str(error)
-                )
-
-            except ValueError as error:
-
-                st.error(
-                    "⚠️ Response Langflow tidak dikenali."
-                )
-
-                st.code(
-                    str(error)
-                )
-
-            except Exception as error:
-
-                st.error(
-                    "❌ Terjadi error yang tidak terduga."
-                )
-
-                st.code(
-                    str(error)
-                )
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": answer,
+                }
+            )
