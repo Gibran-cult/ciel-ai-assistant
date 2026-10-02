@@ -1,5 +1,8 @@
 import os
 import re
+import base64
+from pathlib import Path
+
 import requests
 from dotenv import load_dotenv
 
@@ -66,6 +69,81 @@ def ask_ciel(question, timeout=120):
         "input_value": question,
         "input_type": "chat",
         "output_type": "chat",
+    }
+
+    response = requests.post(
+        url,
+        headers=headers,
+        auth=(
+            NGROK_USER,
+            NGROK_PASSWORD
+        ),
+        json=payload,
+        params={
+            "stream": "false"
+        },
+        timeout=timeout,
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    answer = (
+        data["outputs"][0]
+        ["outputs"][0]
+        ["results"]["message"]
+        ["data"]["text"]
+    )
+
+    return answer
+
+
+# ============================================================
+# VISION API
+# ============================================================
+
+def ask_ciel_with_image(
+    question,
+    image_path,
+    timeout=120,
+):
+    image_path = Path(image_path)
+
+    if not image_path.exists():
+        raise FileNotFoundError(
+            f"Image tidak ditemukan: {image_path}"
+        )
+
+    image_bytes = image_path.read_bytes()
+
+    image_b64 = base64.b64encode(
+        image_bytes
+    ).decode("utf-8")
+
+    image_data_url = (
+        "data:image/png;base64,"
+        + image_b64
+    )
+
+    url = (
+        f"{NGROK_URL}"
+        f"/api/v1/run/{FLOW_ID}"
+    )
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "x-api-key": LANGFLOW_API_KEY,
+    }
+
+    payload = {
+        "input_value": question,
+        "input_type": "chat",
+        "output_type": "chat",
+        "files": [
+            image_data_url
+        ],
     }
 
     response = requests.post(
@@ -183,22 +261,31 @@ def test_math():
 
 
 # ============================================================
-# TEST 3 — DATA ANALYST
+# TEST 4 — DATA ANALYST
 # ============================================================
 
 def test_data():
 
     answer = ask_ciel(
-        "Berapa total Sales_Amount "
-        "pada dataset?"
+        "Berapa total Sales_Amount pada dataset?"
     )
 
-    normalized = answer.replace(
-        ",", ""
+    # Normalisasi angka:
+    # 1.065.600,71
+    # 1,065,600.71
+    # 1065600.71
+    # semuanya menjadi:
+    # 106560071
+    digits_only = re.sub(
+        r"\D",
+        "",
+        answer
     )
+
+    expected_digits = "106560071"
 
     passed = (
-        "1065600.71" in normalized
+        expected_digits in digits_only
     )
 
     print_result(
@@ -267,6 +354,41 @@ def test_research():
 
 
 # ============================================================
+# TEST 7 — VISION
+# ============================================================
+
+def test_vision():
+
+    image_path = (
+        Path(__file__).parent
+        / "assets"
+        / "vision_math_regression.png"
+    )
+
+    answer = ask_ciel_with_image(
+        (
+            "Baca rumus matematika pada gambar, "
+            "lalu hitung hasil limitnya. "
+            "Jawab dengan hasil akhirnya."
+        ),
+        image_path,
+    )
+
+    passed = (
+        len(answer.strip()) > 0
+        and "6" in answer
+    )
+
+    print_result(
+        "Vision",
+        passed,
+        answer.replace("\n", " ")[:180]
+    )
+
+    return passed
+
+
+# ============================================================
 # TEST 6 — HEALTH
 # ============================================================
 
@@ -320,6 +442,7 @@ def main():
         test_data,
         test_knowledge,
         test_research,
+        test_vision,
     ]
 
     results = []
