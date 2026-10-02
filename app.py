@@ -1,14 +1,36 @@
 import os
+import time
+import uuid
+import logging
+
 import requests
 import streamlit as st
 from dotenv import load_dotenv
 
+# ============================================================
+# LOGGING
+# ============================================================
+
+logger = logging.getLogger("ciel_ai")
+
+if not logger.handlers:
+    handler = logging.StreamHandler()
+
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    )
+
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+logger.setLevel(logging.INFO)
+logger.propagate = False
 
 # ============================================================
 # PAGE CONFIG
 # ============================================================
 
-st.set_page_config(
+st.set_page_config( 
     page_title="Ciel AI Assistant",
     page_icon="🤖",
     layout="centered",
@@ -110,7 +132,15 @@ if "messages" not in st.session_state:
 
 def check_backend_health():
 
+    check_id = uuid.uuid4().hex[:8]
+    start_time = time.perf_counter()
+
     url = f"{NGROK_URL}/health_check"
+
+    logger.info(
+        "health_check_start id=%s",
+        check_id,
+    )
 
     try:
 
@@ -123,9 +153,26 @@ def check_backend_health():
             timeout=10,
         )
 
+        elapsed = time.perf_counter() - start_time
+
+        logger.info(
+            "health_check_response id=%s status=%s elapsed=%.2fs",
+            check_id,
+            response.status_code,
+            elapsed,
+        )
+
         response.raise_for_status()
 
         data = response.json()
+
+        logger.info(
+            "health_check_success id=%s status=%s chat=%s db=%s",
+            check_id,
+            data.get("status"),
+            data.get("chat"),
+            data.get("db"),
+        )
 
         return {
             "ok": True,
@@ -136,12 +183,22 @@ def check_backend_health():
 
     except requests.exceptions.Timeout:
 
+        logger.error(
+            "health_check_timeout id=%s",
+            check_id,
+        )
+
         return {
             "ok": False,
             "error": "Timeout saat menghubungi backend."
         }
 
     except requests.exceptions.ConnectionError:
+
+        logger.error(
+            "health_check_connection_error id=%s",
+            check_id,
+        )
 
         return {
             "ok": False,
@@ -150,6 +207,12 @@ def check_backend_health():
 
     except requests.exceptions.HTTPError as error:
 
+        logger.error(
+            "health_check_http_error id=%s error=%s",
+            check_id,
+            error,
+        )
+
         return {
             "ok": False,
             "error": f"HTTP Error: {error}"
@@ -157,12 +220,22 @@ def check_backend_health():
 
     except ValueError:
 
+        logger.error(
+            "health_check_json_error id=%s",
+            check_id,
+        )
+
         return {
             "ok": False,
             "error": "Response backend bukan JSON."
         }
 
     except Exception as error:
+
+        logger.exception(
+            "health_check_unexpected_error id=%s",
+            check_id,
+        )
 
         return {
             "ok": False,
@@ -175,6 +248,9 @@ def check_backend_health():
 # ============================================================
 
 def ask_langflow(message):
+
+    request_id = uuid.uuid4().hex[:8]
+    start_time = time.perf_counter()
 
     url = (
         f"{NGROK_URL}"
@@ -193,34 +269,41 @@ def ask_langflow(message):
         "output_type": "chat",
     }
 
+    logger.info(
+        "request_start id=%s flow=%s input_length=%d",
+        request_id,
+        FLOW_ID,
+        len(message),
+    )
+
     try:
 
         response = requests.post(
             url,
             headers=headers,
-
-            # Basic Auth untuk ngrok
             auth=(
                 NGROK_USER,
                 NGROK_PASSWORD
             ),
-
             json=payload,
-
             params={
                 "stream": "false"
             },
-
             timeout=120,
+        )
+
+        elapsed = time.perf_counter() - start_time
+
+        logger.info(
+            "request_response id=%s status=%s elapsed=%.2fs",
+            request_id,
+            response.status_code,
+            elapsed,
         )
 
         response.raise_for_status()
 
         data = response.json()
-
-        # ====================================================
-        # EXTRACT LANGFLOW RESPONSE
-        # ====================================================
 
         try:
 
@@ -231,9 +314,22 @@ def ask_langflow(message):
                 ["data"]["text"]
             )
 
+            logger.info(
+                "request_success id=%s elapsed=%.2fs output_length=%d",
+                request_id,
+                elapsed,
+                len(answer),
+            )
+
             return answer
 
         except (KeyError, IndexError, TypeError):
+
+            logger.error(
+                "response_parse_error id=%s elapsed=%.2fs",
+                request_id,
+                elapsed,
+            )
 
             return (
                 "⚠️ Response Langflow diterima, "
@@ -243,6 +339,14 @@ def ask_langflow(message):
 
     except requests.exceptions.Timeout:
 
+        elapsed = time.perf_counter() - start_time
+
+        logger.error(
+            "request_timeout id=%s elapsed=%.2fs",
+            request_id,
+            elapsed,
+        )
+
         return (
             "⏱️ Request timeout.\n\n"
             "Langflow membutuhkan terlalu lama "
@@ -250,6 +354,14 @@ def ask_langflow(message):
         )
 
     except requests.exceptions.ConnectionError:
+
+        elapsed = time.perf_counter() - start_time
+
+        logger.error(
+            "connection_error id=%s elapsed=%.2fs",
+            request_id,
+            elapsed,
+        )
 
         return (
             "🔌 Tidak dapat terhubung ke ngrok.\n\n"
@@ -259,6 +371,16 @@ def ask_langflow(message):
 
     except requests.exceptions.HTTPError as error:
 
+        elapsed = time.perf_counter() - start_time
+
+        logger.error(
+            "http_error id=%s status=%s elapsed=%.2fs error=%s",
+            request_id,
+            response.status_code,
+            elapsed,
+            error,
+        )
+
         return (
             "🚫 Langflow/ngrok menolak request.\n\n"
             f"HTTP Error: {error}\n\n"
@@ -267,12 +389,29 @@ def ask_langflow(message):
 
     except requests.exceptions.RequestException as error:
 
+        elapsed = time.perf_counter() - start_time
+
+        logger.error(
+            "request_error id=%s elapsed=%.2fs error=%s",
+            request_id,
+            elapsed,
+            error,
+        )
+
         return (
             "❌ Request gagal.\n\n"
             f"{error}"
         )
 
     except ValueError:
+
+        elapsed = time.perf_counter() - start_time
+
+        logger.error(
+            "json_error id=%s elapsed=%.2fs",
+            request_id,
+            elapsed,
+        )
 
         return (
             "⚠️ Response dari Langflow "
