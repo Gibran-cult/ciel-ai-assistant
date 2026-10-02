@@ -5,6 +5,17 @@ from dotenv import load_dotenv
 
 
 # ============================================================
+# PAGE CONFIG
+# ============================================================
+
+st.set_page_config(
+    page_title="Ciel AI Assistant",
+    page_icon="🤖",
+    layout="centered",
+)
+
+
+# ============================================================
 # LOAD ENVIRONMENT
 # ============================================================
 
@@ -22,12 +33,19 @@ def get_config(name):
     """
     try:
         value = st.secrets.get(name)
+
         if value:
-            return value
+            return str(value).strip()
+
     except Exception:
         pass
 
-    return os.getenv(name)
+    value = os.getenv(name)
+
+    if value:
+        return str(value).strip()
+
+    return None
 
 
 # ============================================================
@@ -40,16 +58,9 @@ NGROK_PASSWORD = get_config("NGROK_PASSWORD")
 LANGFLOW_API_KEY = get_config("LANGFLOW_API_KEY")
 FLOW_ID = get_config("FLOW_ID")
 
-
-# ============================================================
-# PAGE CONFIG
-# ============================================================
-
-st.set_page_config(
-    page_title="Ciel AI Assistant",
-    page_icon="🤖",
-    layout="centered",
-)
+# Bersihkan URL
+if NGROK_URL:
+    NGROK_URL = NGROK_URL.rstrip("/")
 
 
 # ============================================================
@@ -75,10 +86,13 @@ if not FLOW_ID:
 
 
 if missing_config:
+
     st.error(
         "❌ Konfigurasi belum lengkap.\n\n"
-        f"Variabel yang belum tersedia: {', '.join(missing_config)}"
+        f"Variabel yang belum tersedia: "
+        f"{', '.join(missing_config)}"
     )
+
     st.stop()
 
 
@@ -91,54 +105,69 @@ if "messages" not in st.session_state:
 
 
 # ============================================================
-# SIDEBAR
+# BACKEND HEALTH CHECK
 # ============================================================
 
-with st.sidebar:
+def check_backend_health():
 
-    st.header("⚙️ Settings")
+    url = f"{NGROK_URL}/health_check"
 
-    st.success("Langflow API terhubung")
+    try:
 
-    st.caption("Flow ID")
-    st.code(FLOW_ID)
+        response = requests.get(
+            url,
+            auth=(
+                NGROK_USER,
+                NGROK_PASSWORD
+            ),
+            timeout=10,
+        )
 
-    st.divider()
+        response.raise_for_status()
 
-    if st.button(
-        "🗑️ Clear Chat",
-        use_container_width=True
-    ):
-        st.session_state.messages = []
-        st.rerun()
+        data = response.json()
 
-    st.divider()
+        return {
+            "ok": True,
+            "status": data.get("status"),
+            "chat": data.get("chat"),
+            "db": data.get("db"),
+        }
 
-    st.caption(
-        "AI Backend: Langflow\n\n"
-        "Architecture: Multi-Agent System"
-    )
+    except requests.exceptions.Timeout:
 
+        return {
+            "ok": False,
+            "error": "Timeout saat menghubungi backend."
+        }
 
-# ============================================================
-# HEADER
-# ============================================================
+    except requests.exceptions.ConnectionError:
 
-st.title("🤖 Ciel AI Assistant")
+        return {
+            "ok": False,
+            "error": "Backend tidak dapat dihubungi."
+        }
 
-st.caption(
-    "Multi-Agent AI powered by Langflow"
-)
+    except requests.exceptions.HTTPError as error:
 
+        return {
+            "ok": False,
+            "error": f"HTTP Error: {error}"
+        }
 
-# ============================================================
-# CHAT HISTORY
-# ============================================================
+    except ValueError:
 
-for message in st.session_state.messages:
+        return {
+            "ok": False,
+            "error": "Response backend bukan JSON."
+        }
 
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+    except Exception as error:
+
+        return {
+            "ok": False,
+            "error": str(error)
+        }
 
 
 # ============================================================
@@ -148,7 +177,7 @@ for message in st.session_state.messages:
 def ask_langflow(message):
 
     url = (
-        f"{NGROK_URL.rstrip('/')}"
+        f"{NGROK_URL}"
         f"/api/v1/run/{FLOW_ID}"
     )
 
@@ -177,9 +206,11 @@ def ask_langflow(message):
             ),
 
             json=payload,
+
             params={
                 "stream": "false"
             },
+
             timeout=120,
         )
 
@@ -250,6 +281,122 @@ def ask_langflow(message):
 
 
 # ============================================================
+# SIDEBAR
+# ============================================================
+
+with st.sidebar:
+
+    st.header("⚙️ Settings")
+
+    st.success("Langflow API terhubung")
+
+    # --------------------------------------------------------
+    # HEALTH CHECK
+    # --------------------------------------------------------
+
+    if st.button(
+        "🔎 Check Backend",
+        use_container_width=True
+    ):
+
+        health = check_backend_health()
+
+        if health["ok"]:
+
+            if (
+                health["status"] == "ok"
+                and health["chat"] == "ok"
+                and health["db"] == "ok"
+            ):
+
+                st.success(
+                    "✅ Backend sehat"
+                )
+
+                st.caption(
+                    f"Status: {health['status']}\n\n"
+                    f"Chat: {health['chat']}\n\n"
+                    f"DB: {health['db']}"
+                )
+
+            else:
+
+                st.warning(
+                    "⚠️ Backend merespons, "
+                    "tetapi ada komponen yang bermasalah."
+                )
+
+                st.json(health)
+
+        else:
+
+            st.error(
+                f"❌ Backend tidak sehat\n\n"
+                f"{health['error']}"
+            )
+
+    # --------------------------------------------------------
+    # FLOW ID
+    # --------------------------------------------------------
+
+    st.caption("Flow ID")
+
+    st.code(FLOW_ID)
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # CLEAR CHAT
+    # --------------------------------------------------------
+
+    if st.button(
+        "🗑️ Clear Chat",
+        use_container_width=True
+    ):
+
+        st.session_state.messages = []
+
+        st.rerun()
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # ABOUT
+    # --------------------------------------------------------
+
+    st.caption(
+        "AI Backend: Langflow\n\n"
+        "Architecture: Multi-Agent System"
+    )
+
+
+# ============================================================
+# HEADER
+# ============================================================
+
+st.title("🤖 Ciel AI Assistant")
+
+st.caption(
+    "Multi-Agent AI powered by Langflow"
+)
+
+
+# ============================================================
+# CHAT HISTORY
+# ============================================================
+
+for message in st.session_state.messages:
+
+    with st.chat_message(
+        message["role"]
+    ):
+
+        st.markdown(
+            message["content"]
+        )
+
+
+# ============================================================
 # CHAT INPUT
 # ============================================================
 
@@ -272,6 +419,7 @@ if prompt:
     )
 
     with st.chat_message("user"):
+
         st.markdown(prompt)
 
     # --------------------------------------------------------
