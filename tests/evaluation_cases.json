@@ -1,0 +1,118 @@
+[
+  {
+    "id": "math_limit_01",
+    "category": "math",
+    "question": "Hitung limit (x² - 9)/(x - 3) saat x mendekati 3.",
+    "checks": {
+      "expected_contains": [
+        "6"
+      ],
+      "min_length": 20
+    }
+  },
+  {
+    "id": "math_derivative_01",
+    "category": "math",
+    "question": "Hitung turunan x³ - 4x² + 7x - 2.",
+    "checks": {
+      "expected_contains": [
+        "3x²",
+        "-8x",
+        "+7"
+      ],
+      "min_length": 20
+    }
+  },
+  {
+    "id": "data_total_sales_01",
+    "category": "data",
+    "question": "Berapa total Sales_Amount pada dataset?",
+    "checks": {
+      "expected_any": [
+        "1.065.600,71",
+        "1,065,600.71",
+        "1065600.71"
+      ],
+      "min_length": 20
+    }
+  },
+  {
+    "id": "data_average_quantity_01",
+    "category": "data",
+    "question": "Berapa rata-rata Quantity_Sold pada dataset?",
+    "checks": {
+      "expected_any": [
+        "23,685",
+        "23.685",
+        "23.6850",
+        "23.685"
+      ],
+      "min_length": 20
+    }
+  },
+  {
+    "id": "knowledge_overfitting_01",
+    "category": "knowledge",
+    "question": "Apa itu overfitting?",
+    "checks": {
+      "expected_contains": [
+        "model",
+        "training"
+      ],
+      "min_length": 80
+    }
+  },
+  {
+    "id": "knowledge_data_science_01",
+    "category": "knowledge",
+    "question": "Apa itu data science?",
+    "checks": {
+      "expected_contains": [
+        "data"
+      ],
+      "min_length": 80
+    }
+  },
+  {
+    "id": "research_python_01",
+    "category": "research",
+    "question": "Cari informasi terbaru tentang Python.",
+    "checks": {
+      "expected_contains": [
+        "Python"
+      ],
+      "min_length": 120,
+      "required_absent": [
+        "I cannot",
+        "I can't"
+      ]
+    }
+  },
+  {
+    "id": "research_machine_learning_01",
+    "category": "research",
+    "question": "Cari informasi terbaru tentang machine learning.",
+    "checks": {
+      "expected_contains": [
+        "machine"
+      ],
+      "min_length": 120,
+      "required_absent": [
+        "I cannot",
+        "I can't"
+      ]
+    }
+  },
+  {
+    "id": "vision_math_01",
+    "category": "vision",
+    "question": "Baca rumus matematika pada gambar, lalu hitung hasil limitnya.",
+    "image": "assets/vision_math_small.png",
+    "checks": {
+      "expected_contains": [
+        "6"
+      ],
+      "min_length": 20
+    }
+  }
+]
