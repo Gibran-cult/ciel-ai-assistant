@@ -1,0 +1,119 @@
+{
+  "math": {
+    "criteria": [
+      {
+        "id": "correctness",
+        "description": "Hasil matematika harus benar."
+      },
+      {
+        "id": "reasoning",
+        "description": "Langkah penyelesaian harus masuk akal dan mendukung hasil akhir."
+      },
+      {
+        "id": "relevance",
+        "description": "Jawaban fokus pada soal yang diberikan."
+      },
+      {
+        "id": "format",
+        "description": "Gunakan format matematika plain text/Unicode dan hindari LaTeX mentah."
+      }
+    ]
+  },
+
+  "data": {
+    "criteria": [
+      {
+        "id": "metric_accuracy",
+        "description": "Angka atau metrik harus sesuai dengan verified metrics."
+      },
+      {
+        "id": "grounding",
+        "description": "Jawaban harus bersumber pada dataset yang digunakan."
+      },
+      {
+        "id": "relevance",
+        "description": "Jawaban harus langsung menjawab metrik yang diminta."
+      },
+      {
+        "id": "no_hallucination",
+        "description": "Jangan mengarang angka, kolom, atau kesimpulan yang tidak didukung data."
+      }
+    ]
+  },
+
+  "knowledge": {
+    "criteria": [
+      {
+        "id": "relevance",
+        "description": "Jawaban sesuai dengan pertanyaan."
+      },
+      {
+        "id": "grounding",
+        "description": "Jawaban tidak keluar dari materi Knowledge Base yang relevan."
+      },
+      {
+        "id": "clarity",
+        "description": "Penjelasan mudah dipahami."
+      },
+      {
+        "id": "completeness",
+        "description": "Poin utama yang dibutuhkan untuk menjawab pertanyaan tercakup."
+      }
+    ]
+  },
+
+  "research": {
+    "criteria": [
+      {
+        "id": "relevance",
+        "description": "Informasi relevan dengan topik yang diminta."
+      },
+      {
+        "id": "freshness",
+        "description": "Untuk pertanyaan terbaru, jawaban harus menggunakan informasi terkini dari research process."
+      },
+      {
+        "id": "evidence",
+        "description": "Jawaban sebaiknya menyertakan atau merujuk pada sumber yang digunakan."
+      },
+      {
+        "id": "clarity",
+        "description": "Hasil research disajikan secara jelas dan tidak dipenuhi meta-commentary."
+      }
+    ]
+  },
+
+  "vision": {
+    "criteria": [
+      {
+        "id": "image_understanding",
+        "description": "Informasi penting dari gambar harus terbaca dengan benar."
+      },
+      {
+        "id": "transcription",
+        "description": "Rumus, angka, atau teks yang dibaca harus sesuai dengan gambar."
+      },
+      {
+        "id": "reasoning",
+        "description": "Perhitungan atau analisis setelah membaca gambar harus benar."
+      }
+    ]
+  },
+
+  "memory": {
+    "criteria": [
+      {
+        "id": "retrieval_relevance",
+        "description": "Memory yang diambil harus relevan dengan query."
+      },
+      {
+        "id": "semantic_accuracy",
+        "description": "Hasil semantic search harus mengarah ke memory yang paling relevan."
+      },
+      {
+        "id": "metadata_integrity",
+        "description": "Metadata penting memory tetap tersedia."
+      }
+    ]
+  }
+}
