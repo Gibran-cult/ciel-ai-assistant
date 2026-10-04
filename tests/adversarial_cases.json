@@ -1,0 +1,170 @@
+[
+  {
+    "id": "math_good_01",
+    "category": "math",
+    "question": "Hitung limit (x² - 9)/(x - 3) saat x mendekati 3.",
+    "answer": "Kita memperoleh bentuk 0/0, lalu faktorkan x² - 9 menjadi (x - 3)(x + 3). Setelah mencoret faktor x - 3, diperoleh limit x + 3. Saat x mendekati 3, hasilnya 6.",
+    "judge_context": {
+      "ground_truth": "Hasil limit adalah 6.",
+      "important_facts": [
+        "Substitusi langsung menghasilkan bentuk 0/0.",
+        "x² - 9 dapat difaktorkan menjadi (x - 3)(x + 3).",
+        "Hasil akhir adalah 6."
+      ],
+      "limitations": "Bentuk penjelasan boleh berbeda selama hasil dan logikanya benar."
+    },
+    "assertions": {
+      "overall_min": 3,
+      "criterion_min": {
+        "correctness": 3
+      }
+    }
+  },
+  {
+    "id": "math_bad_01",
+    "category": "math",
+    "question": "Hitung limit (x² - 9)/(x - 3) saat x mendekati 3.",
+    "answer": "Substitusi x = 3 menghasilkan 0/0, jadi jawabannya adalah 0. Tidak perlu melakukan penyederhanaan karena limitnya tetap 0.",
+    "judge_context": {
+      "ground_truth": "Hasil limit adalah 6.",
+      "important_facts": [
+        "Substitusi langsung menghasilkan bentuk 0/0.",
+        "x² - 9 dapat difaktorkan menjadi (x - 3)(x + 3).",
+        "Hasil akhir adalah 6."
+      ],
+      "limitations": "Jawaban yang menyatakan hasil akhir 0 adalah salah."
+    },
+    "assertions": {
+      "overall_max": 1.75,
+      "criterion_max": {
+        "correctness": 1
+      }
+    }
+  },
+  {
+    "id": "data_good_01",
+    "category": "data",
+    "question": "Berapa total Sales_Amount pada dataset?",
+    "answer": "Total Sales_Amount yang terverifikasi adalah 1.065.600,71. Dataset memiliki 200 baris.",
+    "judge_context": {
+      "ground_truth": "Total Sales_Amount terverifikasi adalah 1,065,600.71.",
+      "important_facts": [
+        "Dataset memiliki 200 baris.",
+        "Total Sales_Amount = 1,065,600.71."
+      ],
+      "limitations": "Format angka lokal berbeda diperbolehkan."
+    },
+    "assertions": {
+      "overall_min": 3,
+      "criterion_min": {
+        "metric_accuracy": 3
+      }
+    }
+  },
+  {
+    "id": "data_bad_01",
+    "category": "data",
+    "question": "Berapa total Sales_Amount pada dataset?",
+    "answer": "Total Sales_Amount pada dataset adalah 999.999.000. Nilai tersebut menunjukkan total penjualan yang sangat tinggi.",
+    "judge_context": {
+      "ground_truth": "Total Sales_Amount terverifikasi adalah 1,065,600.71.",
+      "important_facts": [
+        "Dataset memiliki 200 baris.",
+        "Total Sales_Amount = 1,065,600.71."
+      ],
+      "limitations": "Nilai 999.999.000 adalah salah dan tidak boleh dianggap benar."
+    },
+    "assertions": {
+      "overall_max": 1.75,
+      "criterion_max": {
+        "metric_accuracy": 1
+      }
+    }
+  },
+  {
+    "id": "knowledge_good_01",
+    "category": "knowledge",
+    "question": "Apa itu overfitting?",
+    "answer": "Overfitting adalah kondisi ketika model machine learning terlalu menyesuaikan diri dengan data training, termasuk noise, sehingga performanya pada data baru atau kemampuan generalisasinya menjadi buruk.",
+    "judge_context": {
+      "ground_truth": "Overfitting terjadi ketika model terlalu menyesuaikan diri dengan data training, termasuk noise, sehingga kemampuan generalisasinya buruk.",
+      "important_facts": [
+        "Berkaitan dengan model machine learning.",
+        "Berkaitan dengan training data.",
+        "Masalah utamanya adalah generalisasi."
+      ],
+      "limitations": "Jawaban boleh menggunakan kalimat berbeda selama substansinya sama."
+    },
+    "assertions": {
+      "overall_min": 3,
+      "criterion_min": {
+        "relevance": 3,
+        "grounding": 3
+      }
+    }
+  },
+  {
+    "id": "knowledge_bad_01",
+    "category": "knowledge",
+    "question": "Apa itu overfitting?",
+    "answer": "Overfitting adalah metode untuk mempercepat koneksi internet dengan menambah kapasitas router. Semakin besar overfitting, semakin cepat jaringan bekerja.",
+    "judge_context": {
+      "ground_truth": "Overfitting terjadi ketika model terlalu menyesuaikan diri dengan data training, termasuk noise, sehingga kemampuan generalisasinya buruk.",
+      "important_facts": [
+        "Berkaitan dengan model machine learning.",
+        "Berkaitan dengan training data.",
+        "Masalah utamanya adalah generalisasi."
+      ],
+      "limitations": "Jawaban yang membahas jaringan internet tidak relevan."
+    },
+    "assertions": {
+      "overall_max": 1.75,
+      "criterion_max": {
+        "relevance": 1,
+        "grounding": 1
+      }
+    }
+  },
+  {
+    "id": "research_good_01",
+    "category": "research",
+    "question": "Cari informasi terbaru tentang Python.",
+    "answer": "Python adalah bahasa pemrograman yang terus berkembang. Untuk klaim terbaru, jawaban perlu menyertakan konteks waktu dan sumber yang dapat diverifikasi. Berdasarkan sumber yang tersedia dalam research process, informasi terbaru sebaiknya dibandingkan dengan rilis resmi Python dan tanggal publikasinya.",
+    "judge_context": {
+      "ground_truth": null,
+      "verification_requirements": [
+        "Jawaban harus membahas Python.",
+        "Untuk klaim 'terbaru', harus ada konteks waktu.",
+        "Klaim terbaru idealnya didukung sumber yang dapat ditelusuri."
+      ],
+      "limitations": "Freshness tidak dapat diberi skor tinggi tanpa bukti tanggal atau sumber yang memadai."
+    },
+    "assertions": {
+      "overall_min": 2.5,
+      "criterion_min": {
+        "relevance": 3
+      }
+    }
+  },
+  {
+    "id": "research_bad_01",
+    "category": "research",
+    "question": "Cari informasi terbaru tentang Python.",
+    "answer": "Saya tidak mengetahui Python. Sebaiknya cari topik lain seperti olahraga, memasak, atau film. Informasi tentang Python tidak berhubungan dengan pertanyaan ini.",
+    "judge_context": {
+      "ground_truth": null,
+      "verification_requirements": [
+        "Jawaban harus membahas Python.",
+        "Untuk klaim 'terbaru', harus ada konteks waktu.",
+        "Klaim terbaru idealnya didukung sumber yang dapat ditelusuri."
+      ],
+      "limitations": "Jawaban yang tidak membahas Python harus dinilai rendah pada relevance."
+    },
+    "assertions": {
+      "overall_max": 1.75,
+      "criterion_max": {
+        "relevance": 1
+      }
+    }
+  }
+]
