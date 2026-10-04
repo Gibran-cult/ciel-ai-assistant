@@ -4,10 +4,16 @@
     "category": "math",
     "question": "Hitung limit (x² - 9)/(x - 3) saat x mendekati 3.",
     "checks": {
-      "expected_contains": [
-        "6"
-      ],
+      "expected_contains": ["6"],
       "min_length": 20
+    },
+    "judge_context": {
+      "ground_truth": "Hasil limit adalah 6.",
+      "important_facts": [
+        "Substitusi langsung menghasilkan bentuk 0/0.",
+        "Penyederhanaan menghasilkan limit bernilai 6."
+      ],
+      "limitations": "Nilai akhir harus 6."
     }
   },
   {
@@ -21,6 +27,16 @@
         "+7"
       ],
       "min_length": 20
+    },
+    "judge_context": {
+      "ground_truth": "Turunan adalah 3x² - 8x + 7.",
+      "important_facts": [
+        "Turunan x³ adalah 3x².",
+        "Turunan -4x² adalah -8x.",
+        "Turunan 7x adalah 7.",
+        "Konstanta -2 menjadi 0."
+      ],
+      "limitations": "Bentuk ekuivalen secara matematika dapat diterima."
     }
   },
   {
@@ -34,6 +50,14 @@
         "1065600.71"
       ],
       "min_length": 20
+    },
+    "judge_context": {
+      "ground_truth": "Total Sales_Amount terverifikasi adalah 1,065,600.71.",
+      "important_facts": [
+        "Dataset memiliki 200 baris.",
+        "Total Sales_Amount = 1,065,600.71."
+      ],
+      "limitations": "Jangan menuntut format angka tertentu selama nilainya sama."
     }
   },
   {
@@ -43,11 +67,16 @@
     "checks": {
       "expected_any": [
         "23,685",
-        "23.685",
-        "23.6850",
         "23.685"
       ],
       "min_length": 20
+    },
+    "judge_context": {
+      "ground_truth": "Rata-rata Quantity_Sold adalah 23.685.",
+      "important_facts": [
+        "Nilai mean Quantity_Sold = 23.685."
+      ],
+      "limitations": "Format angka lokal berbeda diperbolehkan."
     }
   },
   {
@@ -60,17 +89,35 @@
         "training"
       ],
       "min_length": 80
+    },
+    "judge_context": {
+      "ground_truth": "Overfitting terjadi ketika model terlalu menyesuaikan diri dengan data training, termasuk noise, sehingga kemampuan generalisasinya buruk.",
+      "important_facts": [
+        "Berkaitan dengan model machine learning.",
+        "Berkaitan dengan training data.",
+        "Masalah utamanya adalah generalisasi."
+      ],
+      "limitations": "Jawaban tidak harus menggunakan kalimat yang sama."
     }
   },
   {
     "id": "knowledge_data_science_01",
     "category": "knowledge",
-    "question": "Apa itu data science?",
+    "question": "Apa itu Data Science?",
     "checks": {
       "expected_contains": [
         "data"
       ],
       "min_length": 80
+    },
+    "judge_context": {
+      "ground_truth": "Data Science adalah bidang yang menggunakan data, metode statistik, komputasi, dan analisis untuk memperoleh insight atau mendukung pengambilan keputusan.",
+      "important_facts": [
+        "Berfokus pada data.",
+        "Melibatkan analisis atau metode komputasi/statistik.",
+        "Bertujuan memperoleh insight atau mendukung keputusan."
+      ],
+      "limitations": "Jawaban boleh menggunakan framing berbeda selama tetap substantif."
     }
   },
   {
@@ -86,6 +133,15 @@
         "I cannot",
         "I can't"
       ]
+    },
+    "judge_context": {
+      "ground_truth": null,
+      "verification_requirements": [
+        "Jawaban harus benar-benar membahas topik yang diminta.",
+        "Untuk klaim 'terbaru', idealnya ada tanggal atau konteks waktu.",
+        "Informasi terbaru harus memiliki bukti atau sumber yang dapat ditelusuri."
+      ],
+      "limitations": "Freshness tidak boleh diberi skor numerik jika tidak tersedia bukti tanggal/sumber."
     }
   },
   {
@@ -101,6 +157,15 @@
         "I cannot",
         "I can't"
       ]
+    },
+    "judge_context": {
+      "ground_truth": null,
+      "verification_requirements": [
+        "Jawaban harus benar-benar membahas topik machine learning.",
+        "Untuk klaim 'terbaru', idealnya ada tanggal atau konteks waktu.",
+        "Informasi terbaru harus memiliki bukti atau sumber yang dapat ditelusuri."
+      ],
+      "limitations": "Freshness tidak boleh diberi skor numerik jika tidak tersedia bukti tanggal/sumber."
     }
   },
   {
