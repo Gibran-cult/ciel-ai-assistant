@@ -1,15 +1,32 @@
-import requests
 import json
+import os
 
-API_URL = "http://localhost:7860/api/v1/run/4166c4a3-3926-433e-a48f-d812bc8efb99?stream=false"
-API_KEY = "sk-QcdmsuKch3r1uNzoTYwj-rOR-IYwMlI-rcVdoNasa6Y"
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
+LANGFLOW_BASE_URL = os.getenv("LANGFLOW_BASE_URL", "http://localhost:7860").rstrip("/")
+FLOW_ID = os.getenv("FLOW_ID")
+LANGFLOW_API_KEY = os.getenv("LANGFLOW_API_KEY")
+
+if not FLOW_ID:
+    raise RuntimeError("FLOW_ID belum tersedia.")
+
+if not LANGFLOW_API_KEY:
+    raise RuntimeError("LANGFLOW_API_KEY belum tersedia.")
+
+API_URL = (
+    f"{LANGFLOW_BASE_URL}/api/v1/run/"
+    f"{FLOW_ID}?stream=false"
+)
 
 question = input("Pertanyaan: ")
 
 headers = {
     "Content-Type": "application/json",
     "accept": "application/json",
-    "x-api-key": API_KEY,
+    "x-api-key": LANGFLOW_API_KEY,
 }
 
 payload = {
@@ -39,10 +56,22 @@ try:
     print("\nAI:")
     print(answer)
 
-except requests.exceptions.RequestException as e:
-    print(f"\nAPI Error: {e}")
+except requests.exceptions.Timeout:
+    print("\nAPI Error: request timeout.")
 
-except (KeyError, IndexError, TypeError) as e:
+except requests.exceptions.ConnectionError:
+    print("\nAPI Error: backend tidak dapat dihubungi.")
+
+except requests.exceptions.HTTPError as error:
+    print(f"\nAPI Error: HTTP {response.status_code} - {error}")
+
+except requests.exceptions.RequestException as error:
+    print(f"\nAPI Error: {error}")
+
+except (KeyError, IndexError, TypeError) as error:
     print("\nResponse Langflow memiliki struktur yang berbeda.")
     print(json.dumps(data, indent=2, ensure_ascii=False))
-    print(f"\nDetail: {e}")
+    print(f"\nDetail: {error}")
+
+except ValueError:
+    print("\nResponse Langflow bukan JSON yang valid.")
