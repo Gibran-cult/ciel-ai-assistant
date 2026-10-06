@@ -1,0 +1,55 @@
+{
+  "project": "Ciel AI Master",
+  "version": "v1.1.0",
+  "generated_at": "2026-10-06T16:09:15.824831+00:00",
+  "overall": {
+    "status": "healthy",
+    "score": 1.0
+  },
+  "response_quality": {
+    "passed": 0,
+    "failed": 0,
+    "total": 0,
+    "pass_rate": null
+  },
+  "performance": {
+    "cold_start_median_s": null,
+    "warm_median_s": null,
+    "overall_median_s": null,
+    "p95_s": null
+  },
+  "resilience": {
+    "passed": 0,
+    "failed": 0,
+    "total": 0,
+    "pass_rate": null
+  },
+  "memory": {
+    "recall_k1": null,
+    "recall_k3": null,
+    "recall_k5": null,
+    "context_reduction_k5_percent": null
+  },
+  "versioning": {
+    "flow_snapshot": "flow/v1.1.0/Ciel_AI_Long-Term_Memory_Master.json"
+  },
+  "automated_checks": {
+    "passed": 2,
+    "failed": 0,
+    "total": 2,
+    "details": {
+      "resilience": {
+        "passed": true,
+        "return_code": 0,
+        "output": "",
+        "error": "test_authentication_failures (__main__.TestResiliencePolicy) ... http_error id=1967ec6e status=401 elapsed=0.00s\nhttp_error id=be56aedd status=403 elapsed=0.00s\nok\ntest_connection_error (__main__.TestResiliencePolicy) ... connection_error id=fe787a7f elapsed=0.00s\nok\ntest_gateway_failures (__main__.TestResiliencePolicy) ... http_error id=8b06eda3 status=502 elapsed=0.00s\nhttp_error id=cd6e0fb5 status=503 elapsed=0.00s\nhttp_error id=ef1c0acd status=504 elapsed=0.00s\nok\ntest_internal_server_error (__main__.TestResiliencePolicy) ... http_error id=7bbbfb92 status=500 elapsed=0.00s\nok\ntest_invalid_json (__main__.TestResiliencePolicy) ... json_error id=5bddf1fe elapsed=0.00s\nok\ntest_invalid_output_structure (__main__.TestResiliencePolicy) ... response_parse_error id=8b5e415c elapsed=0.00s\nok\ntest_rate_limit (__main__.TestResiliencePolicy) ... http_error id=61918f3c status=429 elapsed=0.00s\nok\ntest_success (__main__.TestResiliencePolicy) ... ok\ntest_timeout (__main__.TestResiliencePolicy) ... request_timeout id=a1f46855 elapsed=0.00s\nok\ntest_unknown_http_status_is_graceful (__main__.TestResiliencePolicy) ... http_error id=868f4cab status=418 elapsed=0.00s\nok\n\n----------------------------------------------------------------------\nRan 10 tests in 0.004s\n\nOK\n"
+      },
+      "memory_v110_contract": {
+        "passed": true,
+        "return_code": 0,
+        "output": "",
+        "error": "test_baseline_exists (__main__.TestMemoryV110Contract) ... ok\ntest_compact_output_contract (__main__.TestMemoryV110Contract) ... ok\ntest_memory_search_exists (__main__.TestMemoryV110Contract) ... ok\ntest_old_verbose_fields_are_not_formatted (__main__.TestMemoryV110Contract) ... ok\ntest_top_k_remains_five (__main__.TestMemoryV110Contract) ... ok\ntest_v110_exists (__main__.TestMemoryV110Contract) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.016s\n\nOK\n"
+      }
+    }
+  }
+}
