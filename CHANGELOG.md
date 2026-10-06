@@ -1,4 +1,4 @@
-# Ciel AI Master — Change Log
+# Ciel AI Master ï¿½ Change Log
 
 ## Flow Snapshot Baseline
 
@@ -32,3 +32,12 @@ Each future flow revision should:
 3. Document the reason for the change.
 4. Record affected components.
 5. Record validation or regression-test results.
+
+### v1.1.0
+- Optimized Ciel Memory Search output for lower agent context usage.
+- Kept Memory Search Top K at 5.
+- Removed query, distance, and metadata from the agent-facing memory output.
+- Preserved the retrieved memory contents and ranking order.
+- Multi-query recall benchmark achieved 100% recall with Top K = 5.
+- Compact output benchmark reduced memory-context size by approximately 60.7% at Top K = 5.
+- No change was made to the v1.0.0 baseline snapshot.
