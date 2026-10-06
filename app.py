@@ -372,19 +372,45 @@ def ask_langflow(message):
     except requests.exceptions.HTTPError as error:
 
         elapsed = time.perf_counter() - start_time
+        status = response.status_code
 
         logger.error(
-            "http_error id=%s status=%s elapsed=%.2fs error=%s",
+            "http_error id=%s status=%s elapsed=%.2fs",
             request_id,
-            response.status_code,
+            status,
             elapsed,
-            error,
         )
 
+        if status in (401, 403):
+            return (
+                "🔐 Authentication gagal.\n\n"
+                "Periksa konfigurasi API key atau akses backend."
+            )
+
+        if status == 429:
+            return (
+                "⏳ Request terlalu banyak.\n\n"
+                "Backend sedang membatasi request. "
+                "Silakan coba lagi setelah beberapa saat."
+            )
+
+        if status == 500:
+            return (
+                "⚠️ Backend mengalami internal error.\n\n"
+                "Silakan coba lagi setelah backend pulih."
+            )
+
+        if status in (502, 503, 504):
+            return (
+                "🔧 Backend sedang tidak tersedia.\n\n"
+                "Langflow/ngrok belum siap atau sedang mengalami "
+                "gangguan sementara. Silakan coba lagi nanti."
+            )
+
         return (
-            "🚫 Langflow/ngrok menolak request.\n\n"
-            f"HTTP Error: {error}\n\n"
-            f"Response:\n{response.text}"
+            "🚫 Request ke Langflow gagal.\n\n"
+            f"HTTP Status: {status}\n"
+            f"Request ID: `{request_id}`"
         )
 
     except requests.exceptions.RequestException as error:
