@@ -41,5 +41,9 @@ jobs:
           python -m json.tool flow/v1.0.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
           python -m json.tool flow/v1.1.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
 
-      - name: Run unittest suite
-        run: python -m unittest discover -v tests
+      - name: Run offline test suite
+        run: |
+          python -m unittest -v \
+            tests.test_memory_v110_contract \
+            tests.test_resilience \
+            tests.test_performance_snapshot
