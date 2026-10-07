@@ -1,4 +1,5 @@
 ﻿import json
+import re
 import unittest
 from pathlib import Path
 
@@ -153,9 +154,7 @@ class TestMemoryV110Contract(
     def test_compact_output_contract(self):
         flow = load_flow(V1_1)
 
-        nodes = find_memory_search_nodes(
-            flow
-        )
+        nodes = find_memory_search_nodes(flow)
 
         self.assertGreaterEqual(
             len(nodes),
@@ -169,27 +168,54 @@ class TestMemoryV110Contract(
 
         combined = "\n".join(codes)
 
+        # Output utama tetap berupa memory content.
         self.assertIn(
-            "LONG-TERM MEMORY",
+            "HASIL LONG-TERM MEMORY",
             combined,
         )
 
         self.assertIn(
-            "return Message",
+            "[Memory {i}]",
             combined,
         )
 
         self.assertIn(
-            "document",
+            'lines.append(f"Isi: {document}")',
             combined,
         )
+
+        self.assertIn(
+            'return Message(text="\\n".join(lines))',
+            combined,
+        )
+
+        # Compact output tidak boleh memformat query,
+        # jumlah hasil, distance, atau metadata ke output agent.
+        self.assertNotRegex(
+            combined,
+            r'lines\.append\(\s*f"Query:\s*',
+        )
+
+        self.assertNotRegex(
+            combined,
+            r'lines\.append\(\s*f"Jumlah hasil:\s*',
+        )
+
+        self.assertNotRegex(
+            combined,
+            r'lines\.append\(\s*f"Distance:\s*',
+        )
+
+        self.assertNotRegex(
+            combined,
+            r'lines\.append\(\s*f"Metadata:\s*',
+        )
+
 
     def test_old_verbose_fields_are_not_formatted(self):
         flow = load_flow(V1_1)
 
-        nodes = find_memory_search_nodes(
-            flow
-        )
+        nodes = find_memory_search_nodes(flow)
 
         codes = [
             extract_component_code(node)
@@ -198,18 +224,22 @@ class TestMemoryV110Contract(
 
         combined = "\n".join(codes)
 
-        self.assertNotIn(
-            'lines.append(f"Distance:',
+        self.assertNotRegex(
             combined,
+            r'f"Query:\s*\{query\}"',
         )
 
-        self.assertNotIn(
-            'lines.append(f"Metadata:',
+        self.assertNotRegex(
             combined,
+            r'f"Jumlah hasil:\s*\{len\(documents\)\}"',
         )
 
+        self.assertNotRegex(
+            combined,
+            r'lines\.append\(\s*f"Distance:\s*',
+        )
 
-if __name__ == "__main__":
-    unittest.main(
-        verbosity=2,
-    )
+        self.assertNotRegex(
+            combined,
+            r'lines\.append\(\s*f"Metadata:\s*',
+        )
