@@ -581,6 +581,9 @@ NGROK_PASSWORD = get_config("NGROK_PASSWORD")
 LANGFLOW_API_KEY = get_config("LANGFLOW_API_KEY")
 FLOW_ID = get_config("FLOW_ID")
 
+# ID komponen Chat Input di flow Langflow; dipakai untuk mengirim gambar.
+CHAT_INPUT_ID = get_config("CHAT_INPUT_ID") or "ChatInput-X8W7I"
+
 # Bersihkan URL
 if NGROK_URL:
     NGROK_URL = NGROK_URL.rstrip("/")
@@ -764,7 +767,7 @@ def check_backend_health():
 # LANGFLOW API
 # ============================================================
 
-def ask_langflow(message):
+def ask_langflow(message, tweaks=None):
 
     request_id = uuid.uuid4().hex[:8]
     start_time = time.perf_counter()
@@ -785,6 +788,9 @@ def ask_langflow(message):
         "input_type": "chat",
         "output_type": "chat",
     }
+
+    if tweaks:
+        payload["tweaks"] = tweaks
 
     logger.info(
         "request_start id=%s flow=%s input_length=%d",
@@ -963,6 +969,154 @@ def ask_langflow(message):
 
 
 # ============================================================
+# IMAGE UPLOAD (LANGFLOW FILES API)
+# ============================================================
+
+def upload_images(images):
+    """
+    Unggah gambar ke Langflow agar bisa dipakai komponen Chat Input.
+
+    Mengembalikan (daftar_path, None) jika berhasil, atau
+    ([], pesan_error) dengan format pesan yang sama seperti
+    ask_langflow() agar UI menampilkannya sebagai error.
+    """
+
+    request_id = uuid.uuid4().hex[:8]
+    start_time = time.perf_counter()
+
+    url = (
+        f"{NGROK_URL}"
+        f"/api/v1/files/upload/{FLOW_ID}"
+    )
+
+    headers = {
+        "Accept": "application/json",
+        "x-api-key": LANGFLOW_API_KEY,
+    }
+
+    logger.info(
+        "image_upload_start id=%s count=%d",
+        request_id,
+        len(images),
+    )
+
+    paths = []
+
+    try:
+
+        for image in images:
+
+            response = requests.post(
+                url,
+                headers=headers,
+                auth=(
+                    NGROK_USER,
+                    NGROK_PASSWORD
+                ),
+                files={
+                    "file": (
+                        image["name"],
+                        image["data"],
+                        image["mime"],
+                    )
+                },
+                timeout=60,
+            )
+
+            response.raise_for_status()
+
+            data = response.json()
+
+            path = data.get("file_path") or data.get("path")
+
+            if not path:
+                raise ValueError("file_path tidak ada di response")
+
+            paths.append(path)
+
+        logger.info(
+            "image_upload_success id=%s count=%d elapsed=%.2fs",
+            request_id,
+            len(paths),
+            time.perf_counter() - start_time,
+        )
+
+        return paths, None
+
+    except requests.exceptions.Timeout:
+
+        logger.error("image_upload_timeout id=%s", request_id)
+
+        return [], (
+            "⏱️ Upload gambar timeout.\n\n"
+            "Gambar terlalu besar atau koneksi lambat. "
+            "Coba gambar yang lebih kecil."
+        )
+
+    except requests.exceptions.ConnectionError:
+
+        logger.error("image_upload_connection_error id=%s", request_id)
+
+        return [], (
+            "🔌 Tidak dapat terhubung ke ngrok saat mengunggah gambar.\n\n"
+            "Pastikan Langflow Desktop dan ngrok sedang berjalan."
+        )
+
+    except requests.exceptions.HTTPError:
+
+        status = response.status_code
+
+        logger.error(
+            "image_upload_http_error id=%s status=%s",
+            request_id,
+            status,
+        )
+
+        if status in (401, 403):
+            return [], (
+                "🔐 Authentication gagal saat mengunggah gambar.\n\n"
+                "Periksa konfigurasi API key atau akses backend."
+            )
+
+        if status in (404, 405):
+            return [], (
+                "🚫 Endpoint upload gambar tidak ditemukan.\n\n"
+                "Versi Langflow mungkin berbeda atau flow ID salah.\n\n"
+                f"HTTP Status: {status}\n"
+                f"Request ID: `{request_id}`"
+            )
+
+        return [], (
+            "🚫 Upload gambar ke Langflow gagal.\n\n"
+            f"HTTP Status: {status}\n"
+            f"Request ID: `{request_id}`"
+        )
+
+    except (ValueError, requests.exceptions.JSONDecodeError):
+
+        logger.error("image_upload_parse_error id=%s", request_id)
+
+        return [], (
+            "⚠️ Upload gambar berhasil dikirim, tetapi response "
+            "Langflow tidak dikenali.\n\n"
+            f"Request ID: `{request_id}`"
+        )
+
+    except requests.exceptions.RequestException as error:
+
+        logger.error(
+            "image_upload_error id=%s error=%s",
+            request_id,
+            error,
+        )
+
+        return [], (
+            "❌ Upload gambar gagal.\n\n"
+            f"{error}"
+        )
+
+
+# ============================================================
 # UI HELPERS
 # ============================================================
 
@@ -1007,11 +1161,21 @@ ALLOWED_FILE_TYPES = [
     "yaml", "yml", "xml", "html", "css", "js", "ts", "py",
     "sql", "log", "ini", "toml",
 ]
+ALLOWED_IMAGE_TYPES = ["png", "jpg", "jpeg", "bmp"]
+IMAGE_MIME = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "bmp": "image/bmp",
+}
+MAX_IMAGES_PER_MESSAGE = 4
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_FILES_PER_MESSAGE = 5
 MAX_FILE_CHARS = 60_000
 MAX_CONTEXT_CHARS = 150_000
 HISTORY_LIMIT = 12
 DEFAULT_FILE_QUESTION = "Tolong baca dan rangkum file yang saya lampirkan."
+DEFAULT_IMAGE_QUESTION = "Tolong jelaskan gambar yang saya lampirkan."
 
 
 def short(text, limit):
@@ -1145,12 +1309,42 @@ def project_files_for(project_id):
     return project["files"] if project else []
 
 
+def file_extension(name):
+    return str(name).rsplit(".", 1)[-1].lower() if "." in str(name) else ""
+
+
+def read_image(uploaded):
+    """Baca gambar unggahan. Kembalikan (data, error)."""
+
+    raw = uploaded.getvalue()
+
+    if len(raw) > MAX_IMAGE_BYTES:
+        return None, (
+            f"{uploaded.name}: ukuran melebihi "
+            f"{MAX_IMAGE_BYTES // (1024 * 1024)} MB."
+        )
+
+    return {
+        "name": uploaded.name,
+        "data": raw,
+        "mime": IMAGE_MIME.get(file_extension(uploaded.name), "image/png"),
+    }, None
+
+
 def make_pending(text, uploaded_files):
     """Bangun permintaan yang menunggu diproses dari teks dan lampiran."""
 
+    uploaded_files = list(uploaded_files)
+
+    image_uploads = [
+        u for u in uploaded_files
+        if file_extension(u.name) in ALLOWED_IMAGE_TYPES
+    ]
+    text_uploads = [u for u in uploaded_files if u not in image_uploads]
+
     files = []
 
-    for uploaded in list(uploaded_files)[:MAX_FILES_PER_MESSAGE]:
+    for uploaded in text_uploads[:MAX_FILES_PER_MESSAGE]:
 
         data, error = read_text_file(uploaded)
 
@@ -1160,17 +1354,39 @@ def make_pending(text, uploaded_files):
 
         files.append(data)
 
-    if len(uploaded_files) > MAX_FILES_PER_MESSAGE:
+    if len(text_uploads) > MAX_FILES_PER_MESSAGE:
         st.toast(
             f"Maksimal {MAX_FILES_PER_MESSAGE} file per pesan.",
             icon=":material/info:",
         )
 
-    text = (text or "").strip() or DEFAULT_FILE_QUESTION
+    images = []
+
+    for uploaded in image_uploads[:MAX_IMAGES_PER_MESSAGE]:
+
+        data, error = read_image(uploaded)
+
+        if error:
+            st.toast(error, icon=":material/error:")
+            continue
+
+        images.append(data)
+
+    if len(image_uploads) > MAX_IMAGES_PER_MESSAGE:
+        st.toast(
+            f"Maksimal {MAX_IMAGES_PER_MESSAGE} foto per pesan.",
+            icon=":material/info:",
+        )
+
+    text = (text or "").strip()
+
+    if not text:
+        text = DEFAULT_IMAGE_QUESTION if images else DEFAULT_FILE_QUESTION
 
     return {
         "text": text,
         "files": [f["name"] for f in files],
+        "images": images,
         "payload": build_payload(
             text,
             files,
@@ -1293,6 +1509,7 @@ def retry_last():
         st.session_state.pending = {
             "text": user["content"],
             "files": user.get("files", []),
+            "images": user.get("images", []),
             "payload": user.get("payload", user["content"]),
         }
 
@@ -1321,6 +1538,15 @@ def render_files(names):
 def render_user(message):
     st.markdown(message["content"])
     render_files(message.get("files"))
+
+    images = message.get("images") or []
+
+    if images:
+        st.image(
+            [image["data"] for image in images],
+            caption=[image["name"] for image in images],
+            width=180,
+        )
 
 
 def render_error(content, index, show_retry):
@@ -1606,7 +1832,7 @@ with st.container(key="topbar"):
 chat_value = st.chat_input(
     "Tanyakan sesuatu kepada Ciel...",
     accept_file="multiple",
-    file_type=ALLOWED_FILE_TYPES,
+    file_type=ALLOWED_FILE_TYPES + ALLOWED_IMAGE_TYPES,
 )
 
 if chat_value:
@@ -1640,7 +1866,7 @@ if not messages and not pending_request:
             "<h1>Apa yang ingin kita kerjakan?</h1>"
             "<p>Ciel merutekan pertanyaan Anda ke riset web, pencarian "
             "pengetahuan, matematika dan analisis, serta long-term memory. "
-            "Lampirkan file teks dari tombol di kotak pesan.</p>"
+            "Lampirkan file teks atau foto dari tombol di kotak pesan.</p>"
             "</div>"
             f'<div class="ciel-caps">{capabilities_html}</div>',
             unsafe_allow_html=True,
@@ -1727,6 +1953,7 @@ if pending_request:
         "role": "user",
         "content": pending_request["text"],
         "files": pending_request["files"],
+        "images": pending_request["images"],
         "payload": pending_request["payload"],
     }
 
@@ -1750,7 +1977,23 @@ if pending_request:
             unsafe_allow_html=True,
         )
 
-        answer = ask_langflow(pending_request["payload"])
+        if pending_request["images"]:
+
+            image_paths, upload_error = upload_images(
+                pending_request["images"]
+            )
+
+            if upload_error:
+                answer = upload_error
+            else:
+                answer = ask_langflow(
+                    pending_request["payload"],
+                    tweaks={CHAT_INPUT_ID: {"files": image_paths}},
+                )
+
+        else:
+
+            answer = ask_langflow(pending_request["payload"])
 
         working_slot.empty()
 
