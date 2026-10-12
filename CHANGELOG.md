@@ -7,6 +7,8 @@
 - Sidebar now has New chat, chat History, and Projects; Connection, Configuration, and backend status panels were removed.
 - Added Add files: text files can be attached in the composer or stored as project files, and are inserted into the prompt as context. `ask_langflow` is unchanged.
 - Chat history and projects live in the browser session only (not persisted).
+- Added photo attachments (png, jpg, jpeg, bmp): images are uploaded to Langflow (`/api/v1/files/upload/{flow_id}`) and passed to the Chat Input component through `tweaks`. `ask_langflow` only gained an optional `tweaks` argument.
+- New optional config `CHAT_INPUT_ID` (default `ChatInput-X8W7I`, the Chat Input ID in the v1.1.0 flow).
 - Added `.streamlit/config.toml` theme; `requirements.txt` now requires `streamlit>=1.43` (container keys, button icons, chat input file attachments).
 - No changes to `ask_langflow`, `check_backend_health`, flow, memory, or tests.
 
