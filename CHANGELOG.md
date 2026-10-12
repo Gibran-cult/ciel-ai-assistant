@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### UI
+- Polished the Streamlit workspace UI: dark theme with teal accent, responsive layout, empty state, working indicator, error card with technical details and retry, informative long-term memory panel.
+- Backend status now reflects the last real health check instead of a static label.
+- Added `.streamlit/config.toml` theme; `requirements.txt` now requires `streamlit>=1.40` (container keys, button icons).
+- No changes to `ask_langflow`, `check_backend_health`, flow, memory, or tests.
+
 ### CI / Automation
 - Added GitHub Actions CI workflow.
 - Added automated flow JSON validation.
