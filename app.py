@@ -427,6 +427,74 @@ header[data-testid="stHeader"] { background: transparent; }
 [data-testid="stChatInputSubmitButton"]:active { transform: scale(0.94); }
 [data-testid="stChatInputSubmitButton"]:disabled { background: var(--c-raised); color: var(--c-faint); }
 
+/* ---------- Projects, history, files ---------- */
+[data-testid="stSidebar"] .stButton > button,
+[data-testid="stSidebar"] [data-testid="stPopover"] > button { width: 100%; }
+.st-key-projects .stButton > button,
+.st-key-history .stButton > button {
+    justify-content: flex-start;
+    text-align: left;
+    border-color: transparent;
+    background: transparent;
+    color: var(--c-muted);
+    border-radius: 10px;
+    min-height: 2.2rem;
+}
+.st-key-projects .stButton > button:hover,
+.st-key-history .stButton > button:hover {
+    background: var(--c-raised);
+    color: var(--c-text);
+    border-color: var(--c-line);
+}
+[class*="st-key-projactive_"] .stButton > button,
+[class*="st-key-chatactive_"] .stButton > button,
+.stButton[class*="st-key-projactive_"] > button,
+.stButton[class*="st-key-chatactive_"] > button {
+    background: var(--c-accent-soft);
+    border-color: rgba(60, 201, 182, 0.35);
+    color: var(--c-text);
+}
+.st-key-history .stButton > button p,
+.st-key-projects .stButton > button p {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] section {
+    background: var(--c-bg);
+    border: 1px dashed var(--c-line-strong);
+    border-radius: 12px;
+}
+.ciel-projfile {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    margin: 0.5rem 0 0.15rem;
+    font-size: 0.8rem;
+    color: var(--c-text);
+    overflow-wrap: anywhere;
+}
+.ciel-projfile em { font-style: normal; color: var(--c-faint); font-family: var(--font-mono); font-size: 0.72rem; white-space: nowrap; }
+.ciel-files { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.55rem; }
+.ciel-filechip {
+    padding: 0.2rem 0.6rem;
+    border: 1px solid var(--c-line-strong);
+    border-radius: 999px;
+    background: var(--c-raised);
+    font-size: 0.76rem;
+    color: var(--c-muted);
+    overflow-wrap: anywhere;
+}
+.ciel-filechip::before {
+    content: "";
+    display: inline-block;
+    width: 5px; height: 5px;
+    margin-right: 0.45rem;
+    border-radius: 2px;
+    background: var(--c-accent);
+    vertical-align: 0.1em;
+}
+
 /* ---------- Motion ---------- */
 @keyframes ciel-rise {
     from { opacity: 0; transform: translateY(10px); }
@@ -555,14 +623,24 @@ if missing_config:
 # SESSION STATE
 # ============================================================
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# Riwayat chat dan proyek hanya hidup selama sesi browser ini.
+if "chats" not in st.session_state:
+    st.session_state.chats = {}
+
+if "projects" not in st.session_state:
+    st.session_state.projects = {}
+
+if "active_chat" not in st.session_state:
+    st.session_state.active_chat = None
+
+if "active_project" not in st.session_state:
+    st.session_state.active_project = None
 
 if "pending" not in st.session_state:
     st.session_state.pending = None
 
-if "health" not in st.session_state:
-    st.session_state.health = None
+if "upload_nonce" not in st.session_state:
+    st.session_state.upload_nonce = 0
 
 
 # ============================================================
@@ -922,6 +1000,35 @@ THINKING_HTML = (
     "</div>"
 )
 
+# File yang dilampirkan dibaca sebagai teks lalu disisipkan ke prompt.
+# Backend Langflow hanya menerima teks, jadi hanya format teks yang didukung.
+ALLOWED_FILE_TYPES = [
+    "txt", "md", "markdown", "csv", "tsv", "json", "jsonl",
+    "yaml", "yml", "xml", "html", "css", "js", "ts", "py",
+    "sql", "log", "ini", "toml",
+]
+MAX_FILES_PER_MESSAGE = 5
+MAX_FILE_CHARS = 60_000
+MAX_CONTEXT_CHARS = 150_000
+HISTORY_LIMIT = 12
+DEFAULT_FILE_QUESTION = "Tolong baca dan rangkum file yang saya lampirkan."
+
+
+def short(text, limit):
+    text = " ".join(str(text).split())
+
+    if len(text) <= limit:
+        return text
+
+    return text[: limit - 1].rstrip() + "…"
+
+
+def format_size(size):
+    if size < 1024:
+        return f"{size} B"
+
+    return f"{size / 1024:.1f} KB"
+
 
 def is_error_answer(text):
     return str(text).lstrip().startswith(ERROR_MARKERS)
@@ -948,42 +1055,232 @@ def split_error(text):
     return title, plain, technical
 
 
-def health_view(health):
-    """Terjemahkan hasil check_backend_health() menjadi status tampilan."""
+# ------------------------------------------------------------
+# FILES
+# ------------------------------------------------------------
 
-    if health is None:
-        return "idle", "Not checked", []
+def read_text_file(uploaded):
+    """Baca file unggahan sebagai teks. Kembalikan (data, error)."""
 
-    if not health["ok"]:
-        return "error", "Unreachable", [health.get("error", "")]
+    raw = uploaded.getvalue()
 
-    details = [
-        f"status: {health.get('status')}",
-        f"chat: {health.get('chat')}",
-        f"db: {health.get('db')}",
-    ]
+    if b"\x00" in raw[:4096]:
+        return None, f"{uploaded.name}: bukan file teks."
 
-    if (
-        health.get("status") == "ok"
-        and health.get("chat") == "ok"
-        and health.get("db") == "ok"
-    ):
-        return "ok", "Healthy", details
+    text = raw.decode("utf-8", errors="replace")
+    truncated = len(text) > MAX_FILE_CHARS
 
-    return "warn", "Degraded", details
+    if truncated:
+        text = text[:MAX_FILE_CHARS]
 
-
-def queue_prompt(text):
-    st.session_state.pending = text
+    return {
+        "name": uploaded.name,
+        "text": text,
+        "size": len(raw),
+        "truncated": truncated,
+    }, None
 
 
-def clear_chat():
-    st.session_state.messages = []
+def build_payload(text, files, project_files):
+    """Gabungkan isi file dan pertanyaan menjadi satu teks untuk Langflow."""
+
+    blocks = []
+    budget = MAX_CONTEXT_CHARS
+
+    def add(label, item):
+        nonlocal budget
+
+        if budget <= 0:
+            return
+
+        body = item["text"][:budget]
+        budget -= len(body)
+
+        cut = item.get("truncated") or len(body) < len(item["text"])
+        note = " (dipotong)" if cut else ""
+
+        blocks.append(f"### {label}: {item['name']}{note}\n{body}")
+
+    for item in project_files:
+        add("File proyek", item)
+
+    for item in files:
+        add("File terlampir", item)
+
+    if not blocks:
+        return text
+
+    return (
+        "Gunakan isi file berikut sebagai konteks.\n\n"
+        + "\n\n".join(blocks)
+        + "\n\n### Pertanyaan\n"
+        + text
+    )
+
+
+# ------------------------------------------------------------
+# STATE: CHATS & PROJECTS
+# ------------------------------------------------------------
+
+def active_chat():
+    return st.session_state.chats.get(st.session_state.active_chat)
+
+
+def current_messages():
+    chat = active_chat()
+    return chat["messages"] if chat else []
+
+
+def context_project_id():
+    chat = active_chat()
+
+    if chat:
+        return chat["project_id"]
+
+    return st.session_state.active_project
+
+
+def project_files_for(project_id):
+    project = st.session_state.projects.get(project_id)
+    return project["files"] if project else []
+
+
+def make_pending(text, uploaded_files):
+    """Bangun permintaan yang menunggu diproses dari teks dan lampiran."""
+
+    files = []
+
+    for uploaded in list(uploaded_files)[:MAX_FILES_PER_MESSAGE]:
+
+        data, error = read_text_file(uploaded)
+
+        if error:
+            st.toast(error, icon=":material/error:")
+            continue
+
+        files.append(data)
+
+    if len(uploaded_files) > MAX_FILES_PER_MESSAGE:
+        st.toast(
+            f"Maksimal {MAX_FILES_PER_MESSAGE} file per pesan.",
+            icon=":material/info:",
+        )
+
+    text = (text or "").strip() or DEFAULT_FILE_QUESTION
+
+    return {
+        "text": text,
+        "files": [f["name"] for f in files],
+        "payload": build_payload(
+            text,
+            files,
+            project_files_for(context_project_id()),
+        ),
+    }
+
+
+def unpack_chat_input(value):
+    if isinstance(value, str):
+        return value, []
+
+    return value["text"], list(value["files"] or [])
+
+
+def new_chat():
+    st.session_state.active_chat = None
     st.session_state.pending = None
 
 
+def select_chat(chat_id):
+    st.session_state.active_chat = chat_id
+    st.session_state.pending = None
+
+
+def select_project(project_id):
+    st.session_state.active_project = project_id
+    st.session_state.active_chat = None
+    st.session_state.pending = None
+
+
+def create_project():
+    name = (st.session_state.get("newproj_name") or "").strip()
+
+    if not name:
+        return
+
+    project_id = uuid.uuid4().hex[:8]
+
+    st.session_state.projects[project_id] = {
+        "id": project_id,
+        "name": name,
+        "files": [],
+    }
+
+    st.session_state.newproj_name = ""
+    select_project(project_id)
+
+
+def delete_project(project_id):
+    st.session_state.projects.pop(project_id, None)
+
+    for chat in st.session_state.chats.values():
+        if chat["project_id"] == project_id:
+            chat["project_id"] = None
+
+    select_project(None)
+
+
+def add_project_files(project_id, upload_key):
+    uploaded_files = st.session_state.get(upload_key) or []
+    project = st.session_state.projects.get(project_id)
+
+    if project is None:
+        return
+
+    known = {item["name"] for item in project["files"]}
+
+    for uploaded in uploaded_files:
+
+        if uploaded.name in known:
+            continue
+
+        data, error = read_text_file(uploaded)
+
+        if error:
+            st.toast(error, icon=":material/error:")
+            continue
+
+        project["files"].append(data)
+        known.add(uploaded.name)
+
+    # Ganti key uploader agar daftar yang sudah diproses dikosongkan.
+    st.session_state.upload_nonce += 1
+
+
+def remove_project_file(project_id, name):
+    project = st.session_state.projects.get(project_id)
+
+    if project:
+        project["files"] = [
+            item for item in project["files"] if item["name"] != name
+        ]
+
+
+def clear_chat():
+    chat_id = st.session_state.active_chat
+
+    if chat_id:
+        st.session_state.chats.pop(chat_id, None)
+
+    new_chat()
+
+
+def queue_prompt(text):
+    st.session_state.pending = make_pending(text, [])
+
+
 def retry_last():
-    messages = st.session_state.messages
+    messages = current_messages()
 
     if (
         len(messages) >= 2
@@ -991,8 +1288,39 @@ def retry_last():
         and messages[-1].get("error")
         and messages[-2]["role"] == "user"
     ):
-        st.session_state.pending = messages[-2]["content"]
+        user = messages[-2]
+
+        st.session_state.pending = {
+            "text": user["content"],
+            "files": user.get("files", []),
+            "payload": user.get("payload", user["content"]),
+        }
+
         del messages[-2:]
+
+
+# ------------------------------------------------------------
+# RENDER
+# ------------------------------------------------------------
+
+def render_files(names):
+    if not names:
+        return
+
+    chips = "".join(
+        f'<span class="ciel-filechip">{html.escape(name)}</span>'
+        for name in names
+    )
+
+    st.markdown(
+        f'<div class="ciel-files" aria-label="Lampiran">{chips}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_user(message):
+    st.markdown(message["content"])
+    render_files(message.get("files"))
 
 
 def render_error(content, index, show_retry):
@@ -1039,53 +1367,166 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+    # --------------------------------------------------------
+    # NEW CHAT
+    # --------------------------------------------------------
+
+    st.button(
+        "New chat",
+        key="newchat",
+        type="primary",
+        icon=":material/add:",
+        on_click=new_chat,
+    )
+
+    # --------------------------------------------------------
+    # PROJECTS
+    # --------------------------------------------------------
+
     st.markdown(
-        '<div class="ciel-eyebrow">System</div>',
+        '<div class="ciel-eyebrow">Projects</div>',
         unsafe_allow_html=True,
     )
 
-    status_slot = st.empty()
+    active_project_id = st.session_state.active_project
 
-    # --------------------------------------------------------
-    # HEALTH CHECK
-    # --------------------------------------------------------
+    with st.container(key="projects"):
 
-    if st.button(
-        "Check backend",
-        use_container_width=True,
-        icon=":material/monitor_heart:",
-    ):
-
-        with st.spinner("Memeriksa backend..."):
-            st.session_state.health = check_backend_health()
-
-    health_state, health_label, health_details = health_view(
-        st.session_state.health
-    )
-
-    details_html = ""
-
-    if health_details:
-        details_html = (
-            '<p class="ciel-detail">'
-            + "<br>".join(html.escape(str(d)) for d in health_details)
-            + "</p>"
+        st.button(
+            "All chats",
+            key=(
+                "projactive_all"
+                if active_project_id is None
+                else "proj_all"
+            ),
+            icon=":material/forum:",
+            on_click=select_project,
+            args=(None,),
         )
 
-    status_slot.markdown(
-        '<div class="ciel-statuslist">'
-        '<div class="ciel-statusrow" data-state="ok">'
-        "<span>Configuration</span>"
-        '<span class="ciel-val"><span class="ciel-dot" aria-hidden="true"></span>Complete</span>'
-        "</div>"
-        f'<div class="ciel-statusrow" data-state="{health_state}">'
-        "<span>Backend</span>"
-        f'<span class="ciel-val"><span class="ciel-dot" aria-hidden="true"></span>{health_label}</span>'
-        "</div>"
-        "</div>"
-        + details_html,
+        for project_id, project in st.session_state.projects.items():
+
+            is_active = project_id == active_project_id
+
+            st.button(
+                short(project["name"], 30),
+                key=(
+                    f"projactive_{project_id}"
+                    if is_active
+                    else f"proj_{project_id}"
+                ),
+                icon=":material/folder:",
+                on_click=select_project,
+                args=(project_id,),
+            )
+
+    with st.popover("New project", icon=":material/create_new_folder:"):
+
+        st.text_input(
+            "Project name",
+            key="newproj_name",
+            max_chars=40,
+            placeholder="Contoh: Riset kompetitor",
+        )
+
+        st.button(
+            "Create project",
+            key="createproj",
+            type="primary",
+            on_click=create_project,
+        )
+
+    if active_project_id in st.session_state.projects:
+
+        project = st.session_state.projects[active_project_id]
+        upload_key = f"pfup_{active_project_id}_{st.session_state.upload_nonce}"
+
+        with st.expander(
+            f"Project files ({len(project['files'])})",
+            expanded=not project["files"],
+        ):
+
+            st.file_uploader(
+                "Add files to this project",
+                type=ALLOWED_FILE_TYPES,
+                accept_multiple_files=True,
+                key=upload_key,
+                on_change=add_project_files,
+                args=(active_project_id, upload_key),
+                help=(
+                    "File teks akan dipakai sebagai konteks di semua "
+                    "chat dalam proyek ini."
+                ),
+            )
+
+            if not project["files"]:
+                st.caption("Belum ada file di proyek ini.")
+
+            for item in project["files"]:
+
+                st.markdown(
+                    '<div class="ciel-projfile">'
+                    f"<span>{html.escape(short(item['name'], 28))}</span>"
+                    f"<em>{format_size(item['size'])}</em>"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+
+                st.button(
+                    f"Remove {short(item['name'], 20)}",
+                    key=f"rmfile_{active_project_id}_{item['name']}",
+                    icon=":material/close:",
+                    on_click=remove_project_file,
+                    args=(active_project_id, item["name"]),
+                )
+
+            st.button(
+                "Delete project",
+                key=f"delproj_{active_project_id}",
+                icon=":material/delete:",
+                on_click=delete_project,
+                args=(active_project_id,),
+            )
+
+    # --------------------------------------------------------
+    # HISTORY
+    # --------------------------------------------------------
+
+    st.markdown(
+        '<div class="ciel-eyebrow">History</div>',
         unsafe_allow_html=True,
     )
+
+    history = sorted(
+        (
+            chat
+            for chat in st.session_state.chats.values()
+            if active_project_id is None
+            or chat["project_id"] == active_project_id
+        ),
+        key=lambda chat: chat["updated"],
+        reverse=True,
+    )[:HISTORY_LIMIT]
+
+    if not history:
+        st.caption("Belum ada percakapan.")
+
+    with st.container(key="history"):
+
+        for chat in history:
+
+            is_active = chat["id"] == st.session_state.active_chat
+
+            st.button(
+                short(chat["title"], 34),
+                key=(
+                    f"chatactive_{chat['id']}"
+                    if is_active
+                    else f"chat_{chat['id']}"
+                ),
+                on_click=select_chat,
+                args=(chat["id"],),
+            )
 
     # --------------------------------------------------------
     # MEMORY (INFORMATIF)
@@ -1102,49 +1543,24 @@ with st.sidebar:
             '<div class="ciel-note">'
             "<p>Backend Ciel memiliki long-term memory untuk mengingat "
             "konteks penting lintas percakapan.</p>"
-            "<p>Ini berbeda dari riwayat chat di layar, yang hanya tersimpan "
-            "selama sesi browser ini dan hilang saat chat dibersihkan.</p>"
+            "<p>Ini berbeda dari riwayat chat di sidebar, yang hanya "
+            "tersimpan selama sesi browser ini.</p>"
             "<p>Memory belum dapat dilihat atau diubah dari sini.</p>"
             "</div>",
             unsafe_allow_html=True,
         )
 
     # --------------------------------------------------------
-    # CONNECTION
-    # --------------------------------------------------------
-
-    st.markdown(
-        '<div class="ciel-eyebrow">Connection</div>',
-        unsafe_allow_html=True,
-    )
-
-    with st.expander("Connection details"):
-
-        st.caption("Flow ID")
-
-        st.code(FLOW_ID)
-
-        st.caption(
-            "AI Backend: Langflow\n\n"
-            "Architecture: Multi-Agent System"
-        )
-
-    # --------------------------------------------------------
     # CLEAR CHAT (AKSI SEKUNDER)
     # --------------------------------------------------------
-
-    st.markdown(
-        '<div class="ciel-eyebrow">Conversation</div>',
-        unsafe_allow_html=True,
-    )
 
     with st.container(key="clearchat"):
 
         st.button(
             "Clear chat",
-            use_container_width=True,
+            key="clearchat_btn",
             icon=":material/delete:",
-            disabled=not st.session_state.messages,
+            disabled=active_chat() is None,
             on_click=clear_chat,
         )
 
@@ -1153,7 +1569,21 @@ with st.sidebar:
 # HEADER
 # ============================================================
 
+topbar_project = st.session_state.projects.get(
+    st.session_state.active_project
+)
+
 with st.container(key="topbar"):
+
+    project_chip = ""
+
+    if topbar_project:
+        project_chip = (
+            '<div class="ciel-status" data-state="ok">'
+            '<span class="ciel-dot" aria-hidden="true"></span>'
+            f"<span>Project <b>{html.escape(short(topbar_project['name'], 28))}</b></span>"
+            "</div>"
+        )
 
     st.markdown(
         '<div class="ciel-topbar">'
@@ -1161,10 +1591,7 @@ with st.container(key="topbar"):
         '<span class="ciel-wordmark">Ciel</span>'
         '<span class="ciel-tagline">Multi-agent AI powered by Langflow</span>'
         "</div>"
-        f'<div class="ciel-status" data-state="{health_state}">'
-        '<span class="ciel-dot" aria-hidden="true"></span>'
-        f"<span>Backend <b>{health_label}</b></span>"
-        "</div>"
+        f"{project_chip}"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -1176,14 +1603,20 @@ with st.container(key="topbar"):
 # Dipanggil sebelum riwayat dirender agar empty state langsung hilang
 # saat pesan pertama dikirim. Posisi visual composer tetap di bawah.
 
-typed_prompt = st.chat_input(
-    "Tanyakan sesuatu kepada Ciel..."
+chat_value = st.chat_input(
+    "Tanyakan sesuatu kepada Ciel...",
+    accept_file="multiple",
+    file_type=ALLOWED_FILE_TYPES,
 )
 
-if typed_prompt:
-    st.session_state.pending = typed_prompt
+if chat_value:
 
-pending_prompt = st.session_state.pending
+    typed_text, typed_files = unpack_chat_input(chat_value)
+
+    if typed_text.strip() or typed_files:
+        st.session_state.pending = make_pending(typed_text, typed_files)
+
+pending_request = st.session_state.pending
 st.session_state.pending = None
 
 
@@ -1191,7 +1624,9 @@ st.session_state.pending = None
 # EMPTY STATE
 # ============================================================
 
-if not st.session_state.messages and not pending_prompt:
+messages = current_messages()
+
+if not messages and not pending_request:
 
     with st.container(key="emptystate"):
 
@@ -1204,7 +1639,8 @@ if not st.session_state.messages and not pending_prompt:
             '<div class="ciel-hero">'
             "<h1>Apa yang ingin kita kerjakan?</h1>"
             "<p>Ciel merutekan pertanyaan Anda ke riset web, pencarian "
-            "pengetahuan, matematika dan analisis, serta long-term memory.</p>"
+            "pengetahuan, matematika dan analisis, serta long-term memory. "
+            "Lampirkan file teks dari tombol di kotak pesan.</p>"
             "</div>"
             f'<div class="ciel-caps">{capabilities_html}</div>',
             unsafe_allow_html=True,
@@ -1228,16 +1664,20 @@ if not st.session_state.messages and not pending_prompt:
 # CHAT HISTORY
 # ============================================================
 
-last_index = len(st.session_state.messages) - 1
+last_index = len(messages) - 1
 
-for index, message in enumerate(st.session_state.messages):
+for index, message in enumerate(messages):
 
     with st.chat_message(
         message["role"],
         avatar=AVATARS.get(message["role"]),
     ):
 
-        if message.get("error"):
+        if message["role"] == "user":
+
+            render_user(message)
+
+        elif message.get("error"):
 
             render_error(
                 message["content"],
@@ -1256,22 +1696,46 @@ for index, message in enumerate(st.session_state.messages):
 # PROCESS NEW MESSAGE
 # ============================================================
 
-if pending_prompt:
+if pending_request:
+
+    # --------------------------------------------------------
+    # CHAT (BUAT BARU JIKA BELUM ADA)
+    # --------------------------------------------------------
+
+    chat = active_chat()
+
+    if chat is None:
+
+        chat_id = uuid.uuid4().hex[:8]
+
+        chat = {
+            "id": chat_id,
+            "title": short(pending_request["text"], 48),
+            "messages": [],
+            "project_id": st.session_state.active_project,
+            "updated": time.time(),
+        }
+
+        st.session_state.chats[chat_id] = chat
+        st.session_state.active_chat = chat_id
 
     # --------------------------------------------------------
     # USER MESSAGE
     # --------------------------------------------------------
 
-    st.session_state.messages.append(
-        {
-            "role": "user",
-            "content": pending_prompt,
-        }
-    )
+    user_message = {
+        "role": "user",
+        "content": pending_request["text"],
+        "files": pending_request["files"],
+        "payload": pending_request["payload"],
+    }
+
+    chat["messages"].append(user_message)
+    chat["updated"] = time.time()
 
     with st.chat_message("user", avatar=AVATARS["user"]):
 
-        st.markdown(pending_prompt)
+        render_user(user_message)
 
     # --------------------------------------------------------
     # ASSISTANT MESSAGE
@@ -1286,18 +1750,19 @@ if pending_prompt:
             unsafe_allow_html=True,
         )
 
-        answer = ask_langflow(pending_prompt)
+        answer = ask_langflow(pending_request["payload"])
 
         working_slot.empty()
 
-    st.session_state.messages.append(
+    chat["messages"].append(
         {
             "role": "assistant",
             "content": answer,
             "error": is_error_answer(answer),
         }
     )
+    chat["updated"] = time.time()
 
-    # Render ulang agar jawaban dan tombol retry tampil dari riwayat
-    # dengan struktur yang sama seperti pesan lama.
+    # Render ulang agar jawaban, riwayat sidebar, dan tombol retry tampil
+    # dari state dengan struktur yang sama seperti pesan lama.
     st.rerun()
