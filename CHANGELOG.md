@@ -4,8 +4,10 @@
 
 ### UI
 - Polished the Streamlit workspace UI: dark theme with teal accent, responsive layout, empty state, working indicator, error card with technical details and retry, informative long-term memory panel.
-- Backend status now reflects the last real health check instead of a static label.
-- Added `.streamlit/config.toml` theme; `requirements.txt` now requires `streamlit>=1.40` (container keys, button icons).
+- Sidebar now has New chat, chat History, and Projects; Connection, Configuration, and backend status panels were removed.
+- Added Add files: text files can be attached in the composer or stored as project files, and are inserted into the prompt as context. `ask_langflow` is unchanged.
+- Chat history and projects live in the browser session only (not persisted).
+- Added `.streamlit/config.toml` theme; `requirements.txt` now requires `streamlit>=1.43` (container keys, button icons, chat input file attachments).
 - No changes to `ask_langflow`, `check_backend_health`, flow, memory, or tests.
 
 ### CI / Automation
