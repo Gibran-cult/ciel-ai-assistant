@@ -34,7 +34,7 @@ logger.propagate = False
 
 st.set_page_config(
     page_title="Ciel AI Assistant",
-    page_icon=":material/auto_awesome:",
+    page_icon=":material/cloud:",
     layout="wide",
     initial_sidebar_state="auto",
 )
@@ -48,33 +48,37 @@ st.set_page_config(
 
 CIEL_CSS = """
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
+
 :root {
-    --c-bg: #0c1011;
-    --c-surface: #12181a;
-    --c-raised: #172023;
-    --c-line: rgba(220, 240, 238, 0.09);
-    --c-line-strong: rgba(220, 240, 238, 0.16);
-    --c-text: #e7eeee;
-    --c-muted: #93a3a6;
-    --c-faint: #6b7b7f;
-    --c-accent: #3cc9b6;
-    --c-accent-ink: #062521;
-    --c-accent-soft: rgba(60, 201, 182, 0.12);
-    --c-ok: #4cc38a;
-    --c-warn: #e2ae55;
-    --c-err: #ee7f74;
-    --font-sans: "Geist", "Satoshi", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --c-bg: #0f1112;
+    --c-surface: #151819;
+    --c-raised: #1c2021;
+    --c-line: rgba(233, 236, 236, 0.09);
+    --c-line-strong: rgba(233, 236, 236, 0.18);
+    --c-control: #727c7e;
+    --c-text: #e9ecec;
+    --c-muted: #a3abad;
+    --c-faint: #8a9395;
+    --c-accent: #5bbfae;
+    --c-accent-ink: #06201c;
+    --c-ok: #5cb98a;
+    --c-warn: #d9a74a;
+    --c-err: #ee8479;
+    --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     --ease: cubic-bezier(0.32, 0.72, 0, 1);
+    --r-sm: 6px;
+    --r-md: 8px;
+    --r-lg: 12px;
 }
 
 /* ---------- Base ---------- */
 .stApp {
-    background:
-        radial-gradient(60rem 28rem at 78% -8%, rgba(60, 201, 182, 0.07), transparent 70%),
-        var(--c-bg);
+    background: var(--c-bg);
     color: var(--c-text);
     font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
 }
 .stApp, .stApp p, .stApp li, .stApp label, .stApp button, .stApp textarea, .stApp input {
     font-family: var(--font-sans);
@@ -84,23 +88,24 @@ header[data-testid="stHeader"] { background: transparent; }
 
 [data-testid="stMain"] .block-container,
 .stMain .block-container {
-    max-width: 52rem;
+    max-width: 50rem;
     padding: 2.25rem 1.5rem 9rem;
 }
 
-/* Long content must never push the layout sideways */
 .stApp { overflow-x: hidden; }
 .stMarkdown, .stMarkdown p, .stMarkdown li { overflow-wrap: anywhere; }
+.stMarkdown p { text-wrap: pretty; }
 .stMarkdown pre {
     overflow-x: auto;
     max-width: 100%;
     background: var(--c-surface);
     border: 1px solid var(--c-line);
-    border-radius: 12px;
+    border-radius: var(--r-md);
 }
 .stMarkdown code { font-family: var(--font-mono); font-size: 0.86em; }
 .stMarkdown table { display: block; max-width: 100%; overflow-x: auto; }
-.stMarkdown img, [data-testid="stImage"] img { max-width: 100%; height: auto; border-radius: 12px; }
+.stMarkdown img, [data-testid="stImage"] img { max-width: 100%; height: auto; border-radius: var(--r-md); }
+[data-testid="stImageCaption"] { font-family: var(--font-mono); font-size: 0.72rem; color: var(--c-faint); }
 
 /* ---------- Focus ---------- */
 .stApp :is(button, a, textarea, input, summary, [role="button"]):focus-visible {
@@ -110,96 +115,60 @@ header[data-testid="stHeader"] { background: transparent; }
 
 /* ---------- Top bar ---------- */
 .st-key-topbar {
-    padding-bottom: 1.1rem;
-    margin-bottom: 1.4rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1.6rem;
     border-bottom: 1px solid var(--c-line);
 }
 .ciel-topbar {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     justify-content: space-between;
     gap: 1rem;
     flex-wrap: wrap;
 }
-.ciel-brand { display: flex; align-items: baseline; gap: 0.7rem; min-width: 0; }
+.ciel-brand { display: flex; align-items: baseline; gap: 0.8rem; min-width: 0; }
 .ciel-wordmark {
-    font-size: 1.35rem;
-    font-weight: 650;
+    font-size: 1.3rem;
+    font-weight: 600;
     letter-spacing: -0.03em;
     color: var(--c-text);
 }
-.ciel-tagline { font-size: 0.84rem; color: var(--c-muted); }
+.ciel-tagline { font-size: 0.82rem; color: var(--c-muted); }
 
-/* ---------- Status ---------- */
 .ciel-status {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.28rem 0.7rem 0.28rem 0.6rem;
-    border: 1px solid var(--c-line);
-    border-radius: 999px;
-    background: var(--c-surface);
-    font-size: 0.78rem;
-    color: var(--c-muted);
-    white-space: nowrap;
-}
-.ciel-status b { font-weight: 560; color: var(--c-text); }
-.ciel-dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: var(--c-faint);
-    flex: none;
-}
-.ciel-status[data-state="ok"] .ciel-dot { background: var(--c-ok); }
-.ciel-status[data-state="warn"] .ciel-dot { background: var(--c-warn); }
-.ciel-status[data-state="error"] .ciel-dot { background: var(--c-err); }
-
-.ciel-statuslist { display: grid; gap: 0.5rem; margin: 0.25rem 0 0.75rem; }
-.ciel-statusrow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.55rem 0.7rem;
-    border: 1px solid var(--c-line);
-    border-radius: 10px;
-    background: var(--c-surface);
-    font-size: 0.82rem;
-}
-.ciel-statusrow span:first-child { color: var(--c-muted); }
-.ciel-statusrow .ciel-val { display: inline-flex; align-items: center; gap: 0.45rem; font-weight: 560; }
-.ciel-statusrow[data-state="ok"] .ciel-dot { background: var(--c-ok); }
-.ciel-statusrow[data-state="warn"] .ciel-dot { background: var(--c-warn); }
-.ciel-statusrow[data-state="error"] .ciel-dot { background: var(--c-err); }
-.ciel-detail {
-    margin: 0 0 0.6rem;
+    padding: 0.2rem 0.6rem;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--r-sm);
     font-family: var(--font-mono);
     font-size: 0.74rem;
     color: var(--c-muted);
-    line-height: 1.6;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
 }
+.ciel-status b { font-weight: 500; color: var(--c-text); }
+.ciel-dot { width: 6px; height: 6px; border-radius: 1px; background: var(--c-accent); flex: none; }
 
 /* ---------- Sidebar ---------- */
 [data-testid="stSidebar"] {
     background: var(--c-surface);
     border-right: 1px solid var(--c-line);
 }
-[data-testid="stSidebar"] .block-container,
 [data-testid="stSidebarContent"] { padding-top: 1.4rem; }
 .ciel-sidehead { margin-bottom: 1.1rem; }
 .ciel-sidehead .ciel-wordmark { display: block; }
-.ciel-sidehead .ciel-tagline { display: block; margin-top: 0.2rem; }
+.ciel-sidehead .ciel-tagline { display: block; margin-top: 0.15rem; }
 .ciel-eyebrow {
-    margin: 1.3rem 0 0.55rem;
-    font-size: 0.68rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
+    margin: 1.4rem 0 0.4rem;
+    font-size: 0.78rem;
     color: var(--c-faint);
-    font-weight: 560;
+    font-weight: 500;
+    letter-spacing: 0.01em;
 }
 [data-testid="stSidebar"] [data-testid="stExpander"] {
     border: 1px solid var(--c-line);
-    border-radius: 12px;
+    border-radius: var(--r-md);
     background: var(--c-bg);
 }
 [data-testid="stSidebar"] [data-testid="stExpander"] summary { font-size: 0.86rem; }
@@ -207,87 +176,89 @@ header[data-testid="stHeader"] { background: transparent; }
 .ciel-note p { margin: 0 0 0.6rem; }
 
 /* ---------- Buttons ---------- */
-.stApp .stButton > button {
-    border-radius: 999px;
+.stApp .stButton > button,
+[data-testid="stSidebar"] [data-testid="stPopover"] > button {
+    border-radius: var(--r-md);
     border: 1px solid var(--c-line-strong);
-    background: var(--c-raised);
+    background: transparent;
     color: var(--c-text);
-    font-weight: 540;
-    transition: transform 0.45s var(--ease), background 0.45s var(--ease), border-color 0.45s var(--ease);
+    font-weight: 500;
+    transition: transform 0.4s var(--ease), background-color 0.4s var(--ease), border-color 0.4s var(--ease);
 }
-.stApp .stButton > button:hover {
-    border-color: rgba(60, 201, 182, 0.55);
-    background: #1b272a;
+.stApp .stButton > button:hover,
+[data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
+    background: var(--c-raised);
+    border-color: var(--c-faint);
 }
-.stApp .stButton > button:active { transform: scale(0.98) translateY(1px); }
+.stApp .stButton > button:active { transform: translateY(1px); }
 .stApp .stButton > button[kind="primary"] {
     background: var(--c-accent);
     border-color: var(--c-accent);
     color: var(--c-accent-ink);
+    font-weight: 600;
 }
+.stApp .stButton > button[kind="primary"]:hover { background: #73cdbd; border-color: #73cdbd; }
 .st-key-clearchat .stButton > button {
-    background: transparent;
-    border-color: var(--c-line);
+    border-color: transparent;
     color: var(--c-muted);
 }
 .st-key-clearchat .stButton > button:hover {
     color: var(--c-err);
-    border-color: rgba(238, 127, 116, 0.5);
-    background: rgba(238, 127, 116, 0.06);
+    border-color: rgba(238, 132, 121, 0.45);
+    background: transparent;
 }
 
 /* ---------- Empty state ---------- */
-.st-key-emptystate { padding: 1.5rem 0 0.5rem; }
+.st-key-emptystate { padding: 1.2rem 0 0.5rem; }
 .ciel-hero h1 {
-    margin: 0 0 0.6rem;
+    margin: 0 0 0.9rem;
     padding: 0;
-    font-size: clamp(1.7rem, 3.2vw, 2.35rem);
-    font-weight: 620;
-    letter-spacing: -0.035em;
-    line-height: 1.12;
+    font-size: clamp(1.9rem, 3.8vw, 2.7rem);
+    font-weight: 560;
+    letter-spacing: -0.045em;
+    line-height: 1.05;
+    text-wrap: balance;
     color: var(--c-text);
 }
 .ciel-hero p {
     margin: 0;
-    max-width: 38rem;
+    max-width: 34rem;
     font-size: 1rem;
     line-height: 1.65;
     color: var(--c-muted);
+    text-wrap: pretty;
 }
-.ciel-caps {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0;
-    margin: 2rem 0 1.6rem;
-    border-top: 1px solid var(--c-line);
-}
+.ciel-caps { margin: 2.2rem 0 1.8rem; border-top: 1px solid var(--c-line); }
 .ciel-cap {
-    padding: 1.05rem 1.1rem 1.05rem 0;
+    display: grid;
+    grid-template-columns: 11rem 1fr;
+    gap: 1rem;
+    padding: 0.95rem 0;
     border-bottom: 1px solid var(--c-line);
 }
-.ciel-cap:nth-child(even) { padding-left: 1.1rem; border-left: 1px solid var(--c-line); }
-.ciel-cap strong { display: block; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em; }
-.ciel-cap span { display: block; margin-top: 0.25rem; font-size: 0.86rem; line-height: 1.55; color: var(--c-muted); }
-.ciel-cap strong::before {
-    content: "";
-    display: inline-block;
-    width: 6px; height: 6px;
-    margin-right: 0.55rem;
-    border-radius: 2px;
-    background: var(--c-accent);
-    vertical-align: 0.12em;
-}
+.ciel-cap strong { font-size: 0.92rem; font-weight: 560; letter-spacing: -0.01em; }
+.ciel-cap span { font-size: 0.88rem; line-height: 1.55; color: var(--c-muted); }
 .st-key-starters .stButton > button {
     width: 100%;
     justify-content: flex-start;
     text-align: left;
-    border-radius: 14px;
-    padding: 0.7rem 1rem;
-    background: var(--c-surface);
-    border-color: var(--c-line);
+    border: 0;
+    border-bottom: 1px solid var(--c-line);
+    border-radius: 0;
+    padding: 0.8rem 0;
+    background: transparent;
     color: var(--c-text);
+    font-weight: 400;
 }
-.st-key-starters .stButton > button:hover { background: var(--c-raised); }
+.st-key-starters .stButton > button::before {
+    content: "\\2192";
+    font-family: var(--font-mono);
+    color: var(--c-accent);
+    margin-right: 0.85rem;
+    transition: transform 0.4s var(--ease);
+}
+.st-key-starters .stButton > button:hover { background: transparent; }
+.st-key-starters .stButton > button:hover::before { transform: translateX(3px); }
 .st-key-starters .stButton > button p { white-space: normal; text-align: left; }
 
 /* ---------- Messages ---------- */
@@ -295,55 +266,49 @@ header[data-testid="stHeader"] { background: transparent; }
     background: transparent;
     padding: 0.9rem 0;
     gap: 0.9rem;
-    animation: ciel-rise 0.7s var(--ease) both;
+    animation: ciel-rise 0.6s var(--ease) both;
 }
 [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
     font-size: 0.98rem;
     line-height: 1.75;
-    max-width: 46rem;
+    max-width: 44rem;
 }
 [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
     background: var(--c-surface);
     border: 1px solid var(--c-line);
-    border-radius: 16px;
+    border-radius: var(--r-lg);
     padding: 0.85rem 1.05rem;
     margin: 0.6rem 0;
 }
 [data-testid="stChatMessageAvatarUser"],
 [data-testid="stChatMessageAvatarAssistant"] {
-    border-radius: 10px;
-    width: 2rem; height: 2rem;
+    border-radius: var(--r-sm);
+    width: 1.9rem; height: 1.9rem;
+    font-family: var(--font-mono);
+    font-weight: 500;
 }
 [data-testid="stChatMessageAvatarUser"] { background: var(--c-raised); color: var(--c-muted); }
-[data-testid="stChatMessageAvatarAssistant"] { background: var(--c-accent-soft); color: var(--c-accent); }
+[data-testid="stChatMessageAvatarAssistant"] { background: var(--c-accent); color: var(--c-accent-ink); }
 
 /* ---------- Working indicator ---------- */
-.ciel-thinking {
-    max-width: 26rem;
-    padding: 0.2rem 0 0.4rem;
-}
-.ciel-thinking-head {
-    display: flex;
-    align-items: center;
-    gap: 0.65rem;
-    font-size: 0.92rem;
-    font-weight: 540;
-}
-.ciel-dots { display: inline-flex; gap: 4px; }
-.ciel-dots i {
-    width: 6px; height: 6px;
-    border-radius: 50%;
+.ciel-thinking { max-width: 26rem; padding: 0.2rem 0 0.4rem; }
+.ciel-thinking-head { font-size: 0.92rem; font-weight: 500; }
+.ciel-thinking-head::after {
+    content: "";
+    display: inline-block;
+    width: 0.5ch;
+    height: 1em;
+    margin-left: 0.4ch;
+    vertical-align: -0.15em;
     background: var(--c-accent);
-    animation: ciel-pulse 1.2s var(--ease) infinite;
+    animation: ciel-caret 1.1s steps(1) infinite;
 }
-.ciel-dots i:nth-child(2) { animation-delay: 0.15s; }
-.ciel-dots i:nth-child(3) { animation-delay: 0.3s; }
 .ciel-skel { display: grid; gap: 0.5rem; margin: 0.9rem 0 0.7rem; }
 .ciel-skel b {
     position: relative;
     display: block;
-    height: 0.62rem;
-    border-radius: 6px;
+    height: 0.6rem;
+    border-radius: 3px;
     background: var(--c-raised);
     overflow: hidden;
 }
@@ -354,77 +319,62 @@ header[data-testid="stHeader"] { background: transparent; }
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(90deg, transparent, rgba(60, 201, 182, 0.14), transparent);
+    background: linear-gradient(90deg, transparent, rgba(233, 236, 236, 0.07), transparent);
     transform: translateX(-100%);
     animation: ciel-shimmer 1.7s var(--ease) infinite;
 }
-.ciel-thinking-note { margin: 0; font-size: 0.78rem; color: var(--c-faint); }
+.ciel-thinking-note { margin: 0; font-size: 0.8rem; color: var(--c-faint); }
 
 /* ---------- Error card ---------- */
 [class*="st-key-errcard"] {
     padding: 0.95rem 1.05rem;
-    border: 1px solid rgba(238, 127, 116, 0.32);
+    border: 1px solid rgba(238, 132, 121, 0.3);
     border-left: 3px solid var(--c-err);
-    border-radius: 14px;
-    background: rgba(238, 127, 116, 0.05);
-    max-width: 46rem;
+    border-radius: var(--r-md);
+    background: rgba(238, 132, 121, 0.05);
+    max-width: 44rem;
 }
 .ciel-errhead { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem; }
-.ciel-errhead strong { font-size: 0.98rem; font-weight: 600; }
+.ciel-errhead strong { font-size: 0.98rem; font-weight: 560; }
 .ciel-badge {
-    padding: 0.12rem 0.5rem;
-    border-radius: 999px;
-    background: rgba(238, 127, 116, 0.16);
+    padding: 0.1rem 0.45rem;
+    border-radius: 3px;
+    background: rgba(238, 132, 121, 0.16);
     color: var(--c-err);
-    font-size: 0.68rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    font-weight: 620;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 500;
 }
 [class*="st-key-errcard"] [data-testid="stExpander"] {
     border: 1px solid var(--c-line);
-    border-radius: 10px;
+    border-radius: var(--r-md);
     background: var(--c-bg);
     margin: 0.5rem 0 0.7rem;
-}
-[class*="st-key-errcard"] .stButton > button {
-    background: var(--c-accent);
-    border-color: var(--c-accent);
-    color: var(--c-accent-ink);
 }
 
 /* ---------- Composer ---------- */
 [data-testid="stBottom"] > div,
 [data-testid="stBottomBlockContainer"] {
-    background: linear-gradient(to top, var(--c-bg) 62%, transparent);
+    background: linear-gradient(to top, var(--c-bg) 70%, transparent);
 }
-[data-testid="stBottomBlockContainer"] { max-width: 52rem; padding-bottom: 1.4rem; }
+[data-testid="stBottomBlockContainer"] { max-width: 50rem; padding-bottom: 1.4rem; }
 [data-testid="stChatInput"] {
-    padding: 5px;
-    border: 1px solid var(--c-line);
-    border-radius: 24px;
-    background: rgba(220, 240, 238, 0.04);
-    transition: border-color 0.45s var(--ease), box-shadow 0.45s var(--ease);
-}
-[data-testid="stChatInput"] > div {
-    border: 1px solid var(--c-line-strong);
-    border-radius: 19px;
+    border: 1px solid var(--c-control);
+    border-radius: var(--r-lg);
     background: var(--c-surface);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    transition: border-color 0.4s var(--ease);
 }
-[data-testid="stChatInput"]:focus-within {
-    border-color: rgba(60, 201, 182, 0.5);
-    box-shadow: 0 0 0 3px var(--c-accent-soft);
-}
+[data-testid="stChatInput"] > div { background: transparent; border: 0; }
+[data-testid="stChatInput"]:focus-within { border-color: var(--c-accent); }
 [data-testid="stChatInput"] textarea { color: var(--c-text); font-size: 0.98rem; }
 [data-testid="stChatInput"] textarea::placeholder { color: var(--c-faint); }
 [data-testid="stChatInputSubmitButton"] {
-    border-radius: 999px;
+    border-radius: var(--r-md);
     background: var(--c-accent);
     color: var(--c-accent-ink);
-    transition: transform 0.45s var(--ease);
+    transition: transform 0.4s var(--ease);
 }
-[data-testid="stChatInputSubmitButton"]:active { transform: scale(0.94); }
+[data-testid="stChatInputSubmitButton"]:active { transform: translateY(1px); }
 [data-testid="stChatInputSubmitButton"]:disabled { background: var(--c-raised); color: var(--c-faint); }
 
 /* ---------- Projects, history, files ---------- */
@@ -435,24 +385,23 @@ header[data-testid="stHeader"] { background: transparent; }
     justify-content: flex-start;
     text-align: left;
     border-color: transparent;
-    background: transparent;
     color: var(--c-muted);
-    border-radius: 10px;
     min-height: 2.2rem;
 }
 .st-key-projects .stButton > button:hover,
 .st-key-history .stButton > button:hover {
     background: var(--c-raised);
     color: var(--c-text);
-    border-color: var(--c-line);
+    border-color: transparent;
 }
 [class*="st-key-projactive_"] .stButton > button,
 [class*="st-key-chatactive_"] .stButton > button,
 .stButton[class*="st-key-projactive_"] > button,
 .stButton[class*="st-key-chatactive_"] > button {
-    background: var(--c-accent-soft);
-    border-color: rgba(60, 201, 182, 0.35);
+    background: var(--c-raised);
+    border-color: var(--c-line-strong);
     color: var(--c-text);
+    box-shadow: inset 2px 0 0 var(--c-accent);
 }
 .st-key-history .stButton > button p,
 .st-key-projects .stButton > button p {
@@ -462,8 +411,8 @@ header[data-testid="stHeader"] { background: transparent; }
 }
 [data-testid="stSidebar"] [data-testid="stFileUploader"] section {
     background: var(--c-bg);
-    border: 1px dashed var(--c-line-strong);
-    border-radius: 12px;
+    border: 1px dashed var(--c-control);
+    border-radius: var(--r-md);
 }
 .ciel-projfile {
     display: flex;
@@ -477,32 +426,23 @@ header[data-testid="stHeader"] { background: transparent; }
 .ciel-projfile em { font-style: normal; color: var(--c-faint); font-family: var(--font-mono); font-size: 0.72rem; white-space: nowrap; }
 .ciel-files { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.55rem; }
 .ciel-filechip {
-    padding: 0.2rem 0.6rem;
+    padding: 0.18rem 0.55rem;
     border: 1px solid var(--c-line-strong);
-    border-radius: 999px;
-    background: var(--c-raised);
-    font-size: 0.76rem;
+    border-radius: var(--r-sm);
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
     color: var(--c-muted);
     overflow-wrap: anywhere;
-}
-.ciel-filechip::before {
-    content: "";
-    display: inline-block;
-    width: 5px; height: 5px;
-    margin-right: 0.45rem;
-    border-radius: 2px;
-    background: var(--c-accent);
-    vertical-align: 0.1em;
 }
 
 /* ---------- Motion ---------- */
 @keyframes ciel-rise {
-    from { opacity: 0; transform: translateY(10px); }
+    from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
 }
-@keyframes ciel-pulse {
-    0%, 100% { opacity: 0.25; transform: scale(0.8); }
-    50% { opacity: 1; transform: scale(1); }
+@keyframes ciel-caret {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
 }
 @keyframes ciel-shimmer {
     to { transform: translateX(100%); }
@@ -512,7 +452,6 @@ header[data-testid="stHeader"] { background: transparent; }
         animation: none !important;
         transition: none !important;
     }
-    .ciel-dots i { opacity: 0.7; }
 }
 
 /* ---------- Tablet / phone ---------- */
@@ -523,13 +462,13 @@ header[data-testid="stHeader"] { background: transparent; }
 @media (max-width: 640px) {
     [data-testid="stMain"] .block-container,
     .stMain .block-container { padding: 1rem 0.9rem 8rem; }
-    .ciel-caps { grid-template-columns: 1fr; }
-    .ciel-cap, .ciel-cap:nth-child(even) { padding: 0.95rem 0; border-left: 0; }
+    .ciel-cap { grid-template-columns: 1fr; gap: 0.2rem; }
     .ciel-tagline { display: none; }
     [data-testid="stChatMessage"] { gap: 0.65rem; }
     [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) { padding: 0.75rem 0.85rem; }
     [data-testid="stBottomBlockContainer"] { padding-left: 0.7rem; padding-right: 0.7rem; padding-bottom: 1rem; }
-    .st-key-starters .stButton > button { min-height: 2.9rem; }
+    .stApp .stButton > button,
+    [data-testid="stSidebar"] [data-testid="stPopover"] > button { min-height: 2.75rem; }
 }
 </style>
 """
@@ -1122,7 +1061,7 @@ def upload_images(images):
 
 AVATARS = {
     "user": ":material/person:",
-    "assistant": ":material/auto_awesome:",
+    "assistant": "C",
 }
 
 # ask_langflow() reports failures as friendly text that starts with one of
@@ -1588,7 +1527,7 @@ with st.sidebar:
     st.markdown(
         '<div class="ciel-sidehead">'
         '<span class="ciel-wordmark">Ciel</span>'
-        '<span class="ciel-tagline">Research workspace</span>'
+        '<span class="ciel-tagline">Asisten riset</span>'
         "</div>",
         unsafe_allow_html=True,
     )
@@ -1815,7 +1754,7 @@ with st.container(key="topbar"):
         '<div class="ciel-topbar">'
         '<div class="ciel-brand">'
         '<span class="ciel-wordmark">Ciel</span>'
-        '<span class="ciel-tagline">Multi-agent AI powered by Langflow</span>'
+        '<span class="ciel-tagline">Asisten riset multi-agent, ditenagai Langflow</span>'
         "</div>"
         f"{project_chip}"
         "</div>",
@@ -1863,9 +1802,9 @@ if not messages and not pending_request:
 
         st.markdown(
             '<div class="ciel-hero">'
-            "<h1>Apa yang ingin kita kerjakan?</h1>"
-            "<p>Ciel merutekan pertanyaan Anda ke riset web, pencarian "
-            "pengetahuan, matematika dan analisis, serta long-term memory. "
+            "<h1>Tanya, riset, hitung, ingat.</h1>"
+            "<p>Ciel memilih sendiri alatnya: pencarian web, basis "
+            "pengetahuan, perhitungan, atau memori jangka panjang. "
             "Lampirkan file teks atau foto dari tombol di kotak pesan.</p>"
             "</div>"
             f'<div class="ciel-caps">{capabilities_html}</div>',
@@ -1988,7 +1927,15 @@ if pending_request:
             else:
                 answer = ask_langflow(
                     pending_request["payload"],
-                    tweaks={CHAT_INPUT_ID: {"files": image_paths}},
+                    tweaks={
+                        CHAT_INPUT_ID: {
+                            "files": (
+                                image_paths[0]
+                                if len(image_paths) == 1
+                                else image_paths
+                            )
+                        }
+                    },
                 )
 
         else:
