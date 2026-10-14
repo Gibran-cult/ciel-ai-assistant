@@ -1,7 +1,7 @@
 {
   "project": "Ciel AI Master",
-  "version": "v1.1.0",
-  "generated_at": "2026-10-07T10:31:26.615745+00:00",
+  "version": "v1.4.0",
+  "generated_at": "2026-10-14T12:52:42.845355+00:00",
   "overall": {
     "status": "healthy",
     "score": 1.0
@@ -14,10 +14,10 @@
     "status": "healthy"
   },
   "performance": {
-    "first_request_s": 26.675,
-    "warm_median_s": 38.581,
-    "overall_median_s": 36.157,
-    "p95_s": 51.143
+    "first_request_s": 21.788,
+    "warm_median_s": 16.056,
+    "overall_median_s": 16.167,
+    "p95_s": 20.891
   },
   "resilience": {
     "passed": 1,
@@ -32,7 +32,7 @@
     "context_reduction_k5_percent": 60.7
   },
   "versioning": {
-    "flow_snapshot": "flow/v1.1.0/Ciel_AI_Long-Term_Memory_Master.json"
+    "flow_snapshot": "flow/v1.4.0/Ciel_AI_Long-Term_Memory_Master.json"
   },
   "automated_checks": {
     "passed": 5,

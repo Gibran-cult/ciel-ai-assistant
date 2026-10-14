@@ -1229,23 +1229,23 @@ AVATARS = {
 ERROR_MARKERS = ("⏱", "🔌", "🔐", "⏳", "🔧", "🚫", "❌", "⚠")
 
 STARTER_PROMPTS = (
-    "Rangkum perkembangan terbaru model bahasa open-source",
-    "Hitung cicilan KPR Rp800 juta, tenor 15 tahun, bunga 7,5% per tahun",
-    "Bandingkan dua pendekatan RAG dan kapan masing-masing cocok dipakai",
+    "Ajari aku limit fungsi dari dasar, lalu kasih 2 soal latihan",
+    "Analisis: apakah model bahasa open-source sudah layak dipakai untuk riset skripsi?",
+    "Rangkum perkembangan terbaru model bahasa open-source beserta sumbernya",
 )
 
 CAPABILITIES = (
-    ("Web research", "Mencari dan merangkum sumber terkini dari web."),
-    ("Knowledge search", "Menemukan jawaban dari basis pengetahuan yang tersedia."),
-    ("Math &amp; analysis", "Menghitung dan menganalisis dengan langkah yang jelas."),
-    ("Long-term memory", "Mengingat konteks penting lintas percakapan."),
+    ("Riset anti-ngarang", "Jawaban riset disertai sumber. Kalau buktinya tidak ada, Ciel bilang belum tahu."),
+    ("Teman belajar", "Menjelaskan bertahap, memberi latihan, dan mengingat progresmu (perlu login)."),
+    ("Mode analisis", "Awali dengan &ldquo;analisis&rdquo; untuk jawaban terstruktur lengkap dengan tingkat keyakinan."),
+    ("Hitung &amp; data", "Angka dihitung oleh Math Tutor dan Data Analyst, bukan ditebak."),
 )
 
 THINKING_HTML = (
     '<div class="ciel-thinking" role="status" aria-live="polite">'
     '<div class="ciel-thinking-head">'
     '<span class="ciel-dots" aria-hidden="true"><i></i><i></i><i></i></span>'
-    "<span>Supervisor sedang berpikir</span>"
+    "<span>Ciel sedang mencari dan memeriksa</span>"
     "</div>"
     '<div class="ciel-skel" aria-hidden="true"><b></b><b></b><b></b></div>'
     '<p class="ciel-thinking-note">Permintaan riset dapat memakan waktu hingga dua menit.</p>'
@@ -1739,7 +1739,7 @@ with st.sidebar:
     st.markdown(
         '<div class="ciel-sidehead">'
         '<span class="ciel-wordmark">Ciel</span>'
-        '<span class="ciel-tagline">Asisten riset</span>'
+        '<span class="ciel-tagline">Riset &amp; teman belajar</span>'
         "</div>",
         unsafe_allow_html=True,
     )
@@ -2019,7 +2019,7 @@ with st.container(key="topbar"):
         '<div class="ciel-topbar">'
         '<div class="ciel-brand">'
         '<span class="ciel-wordmark">Ciel</span>'
-        '<span class="ciel-tagline">Asisten riset multi-agent, ditenagai Langflow</span>'
+        '<span class="ciel-tagline">Riset tanpa ngarang, teman belajar yang ingat progresmu</span>'
         "</div>"
         f"{project_chip}"
         "</div>",
@@ -2077,10 +2077,11 @@ if not messages and not pending_request:
 
         st.markdown(
             '<div class="ciel-hero">'
-            "<h1>Tanya, riset, hitung, ingat.</h1>"
-            "<p>Ciel memilih sendiri alatnya: pencarian web, basis "
-            "pengetahuan, perhitungan, atau memori jangka panjang. "
-            "Lampirkan file teks atau foto dari tombol di kotak pesan.</p>"
+            "<h1>Riset yang jujur, belajar yang ditemani.</h1>"
+            "<p>Ciel menjawab dari sumber dan data yang bisa dicek, bilang "
+            "terus terang kalau belum tahu, dan menemanimu belajar langkah "
+            "demi langkah. Lampirkan file teks atau foto dari tombol di "
+            "kotak pesan.</p>"
             "</div>"
             f'<div class="ciel-caps">{capabilities_html}</div>',
             unsafe_allow_html=True,

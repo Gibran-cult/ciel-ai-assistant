@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Ciel identity: anti-fabrication research + study companion (flow v1.4.0)
+- New flow snapshot `flow/v1.4.0`: identical to v1.3.0 except the Agent system prompt (v14.0, 8.7k -> 13.4k chars; DeepSeek caches the unchanged prefix).
+- **Two persona modes.** Default is warm and casual ("aku"/"kamu"). When the user explicitly asks for analysis ("analisis", "bedah", "kaji", ...), Ciel switches to a terse "Great Sage" style that opens with "Analisis dimulai." and answers as Kesimpulan / Dasar (each point labeled [Terverifikasi] or [Dugaan]) / Tingkat keyakinan / Batasan.
+- **Anti-ngarang rules** for every mode: never invent titles, authors, DOIs, URLs or quotes; research answers end with a "Sumber:" list of sources the tools actually returned; non-trivial numbers go through Math Tutor or Verified Data Analyst; no fabricated bibliographies for theses (point to Google Scholar, Garuda, SINTA instead).
+- **Study companion:** step-by-step explanations with a short comprehension check or practice offer; practice questions are given without answers first; learning topics and recurring mistakes may be stored in (per-user) long-term memory.
+- App copy (tagline, empty state, capabilities, starter prompts, working indicator) now presents this identity, including an example "Analisis: ..." prompt.
+- `tests/test_flow_v140_contract.py` checks that only the system prompt changed and that the earlier rules are kept.
+- Live validation (2026-10-14, v1.4.0 imported as a separate test flow in local Langflow 1.12.4, production flow untouched, requests sent to `127.0.0.1:7860` instead of through ngrok):
+  - `tests/collect_quality.py`: 5/5 automated checks, response quality 9/9, memory recall K=5 100%. Median latency 36.2 s -> 16.2 s, P95 51.1 s -> 20.9 s versus the v1.1.0 baseline. Most of the gain likely comes from v1.2.0 no longer sending every message through the vision model; the baseline may also have gone through ngrok, so the numbers are not a strict A/B.
+  - Style check: "halo" -> casual mode; "analisis kelebihan RAG" -> Great Sage structure with every point labeled [Dugaan] because no sources were fetched; "ajari aku turunan" -> step-by-step explanation ending with a comprehension question.
+  - The first analysis answer had 9 points and a casual closing offer, so the prompt now limits Dasar to 5 points and ends at Batasan. Re-run: 5 points, 52 s -> 37 s.
+
 ### Public-ready isolation and cost control (flow v1.3.0)
 - **Conversation isolation.** `ask_langflow` now sends a `session_id` (`<user>-<chat id>`). Before, every request used Langflow's default session, so the Agent's last 10 messages (`n_messages`) were shared by all visitors and "New chat" did not reset the Agent's context. Each chat now has its own history, which also keeps prompts shorter.
 - **Per-user long-term memory.** New flow snapshot `flow/v1.3.0`: Ciel Memory Search/Store (sources in `flow/components/ciel_memory_search.py` and `ciel_memory_store.py`) take a `user_id` input that the app sets through `tweaks`. It is not a tool argument, so the Agent cannot choose it. Store tags each memory with `user_id`; Search filters on it and skips the embedding call when the user has no memories. Empty `user_id` (anonymous visitor) disables memory: nothing is stored or read.

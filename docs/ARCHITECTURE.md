@@ -312,6 +312,8 @@ v1.1.0 contains the long-term memory context optimization while preserving the o
 
 v1.2.0 replaces the always-on vision preprocessor with Ciel Vision Router and runs Math Tutor as a native Run Flow tool.
 
+v1.4.0 changes only the Agent system prompt: two persona modes (warm default, "Great Sage" analysis mode), anti-fabrication rules, and study-companion behavior.
+
 v1.3.0 scopes long-term memory to the signed-in user and removes the unconnected Research Agent API Tool node. Custom component sources live in `flow/components/`, and contract tests check that the flow JSON embeds the same code.
 
 ## Public Deployment Safeguards
