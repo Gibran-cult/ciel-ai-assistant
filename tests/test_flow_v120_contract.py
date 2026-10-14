@@ -54,8 +54,26 @@ class FlowV120ContractTest(unittest.TestCase):
             normalize(COMPONENT_PATH.read_text(encoding="utf-8")),
         )
 
+    def test_math_tutor_runs_as_native_run_flow_tool(self):
+        # Dulu Math Tutor dipanggil lewat HTTP dengan API key tertanam di kode.
+        math_nodes = [
+            node_id
+            for node_id, node in self.nodes.items()
+            if node_id.startswith("RunFlow")
+            and node["data"]["node"]["template"]["flow_name_selected"]["value"] == "Math Tutor Agent"
+        ]
+        self.assertEqual(len(math_nodes), 1)
+        tool_sources = {
+            e["source"]
+            for e in self.edges
+            if e["data"]["targetHandle"].get("fieldName") == "tools"
+        }
+        self.assertIn(math_nodes[0], tool_sources)
+        self.assertNotIn("CustomComponent-aoG7C", self.nodes)
+
     def test_snapshot_contains_no_hardcoded_api_keys(self):
         self.assertIsNone(re.search(r"sk-[A-Za-z0-9_-]{16,}", self.raw))
+        self.assertNotIn("REDACTED", self.raw)
 
 
 if __name__ == "__main__":
