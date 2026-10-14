@@ -1,7 +1,7 @@
 {
   "project": "Ciel AI Master",
-  "version": "v1.5.0",
-  "generated_at": "2026-10-14T14:32:46.681307+00:00",
+  "version": "v1.5.1",
+  "generated_at": "2026-10-14T16:05:52.491917+00:00",
   "overall": {
     "status": "degraded",
     "score": 0.8
@@ -11,13 +11,22 @@
     "failed": 1,
     "total": 9,
     "pass_rate": 0.8888888888888888,
-    "status": "degraded"
+    "status": "degraded",
+    "failed_cases": [
+      {
+        "id": "research_machine_learning_01",
+        "reasons": [
+          "Tidak menemukan: 'machine'"
+        ],
+        "answer_preview": ""
+      }
+    ]
   },
   "performance": {
-    "first_request_s": 50.615,
-    "warm_median_s": 18.434,
-    "overall_median_s": 18.854,
-    "p95_s": 43.135
+    "first_request_s": 16.837,
+    "warm_median_s": 15.431,
+    "overall_median_s": 15.526,
+    "p95_s": 29.811
   },
   "resilience": {
     "passed": 1,
@@ -32,7 +41,7 @@
     "context_reduction_k5_percent": 60.7
   },
   "versioning": {
-    "flow_snapshot": "flow/v1.5.0/Ciel_AI_Long-Term_Memory_Master.json"
+    "flow_snapshot": "flow/v1.5.1/Ciel_AI_Long-Term_Memory_Master.json"
   },
   "automated_checks": {
     "passed": 4,

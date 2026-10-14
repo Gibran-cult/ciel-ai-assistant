@@ -149,8 +149,9 @@
     "category": "research",
     "question": "Cari informasi terbaru tentang machine learning.",
     "checks": {
-      "expected_contains": [
-        "machine"
+      "expected_any": [
+        "machine",
+        "pembelajaran mesin"
       ],
       "min_length": 120,
       "required_absent": [

@@ -43,6 +43,10 @@ CASES_FILE = (
     TEST_DIR / "evaluation_cases.json"
 )
 
+# Panjang cuplikan jawaban yang dicetak per kasus.
+PASSED_PREVIEW_CHARS = 160
+FAILED_PREVIEW_CHARS = 1200
+
 
 # ============================================================
 # VALIDATE CONFIG
@@ -534,6 +538,8 @@ def main():
 
         # Jangan print seluruh response
         # supaya output terminal tidak terlalu panjang.
+        # Kasus gagal mendapat cuplikan lebih panjang; collect_quality.py
+        # menyimpannya agar penyebab kegagalan bisa dilihat kemudian.
         if result["answer"]:
 
             preview = (
@@ -542,9 +548,15 @@ def main():
                 .strip()
             )
 
+            limit = (
+                PASSED_PREVIEW_CHARS
+                if result["passed"]
+                else FAILED_PREVIEW_CHARS
+            )
+
             print(
                 f"   Output: "
-                f"{preview[:160]}"
+                f"{preview[:limit]}"
             )
 
         print()
