@@ -1,13 +1,17 @@
+import hashlib
 import html
+import io
 import logging
 import os
 import re
+import threading
 import time
 import uuid
 
 import requests
 import streamlit as st
 from dotenv import load_dotenv
+from PIL import Image
 
 from pricing import render_pricing
 
@@ -517,6 +521,24 @@ def get_config(name):
     return None
 
 
+def get_int_config(name, default):
+    value = get_config(name)
+
+    try:
+        return max(1, int(value)) if value else default
+    except ValueError:
+        logger.warning("config_invalid_int name=%s", name)
+        return default
+
+
+def auth_configured():
+    """Login Google aktif hanya jika blok [auth] ada di secrets."""
+    try:
+        return "auth" in st.secrets
+    except Exception:
+        return False
+
+
 # ============================================================
 # CONFIGURATION
 # ============================================================
@@ -529,6 +551,18 @@ FLOW_ID = get_config("FLOW_ID")
 
 # ID komponen Chat Input di flow Langflow; dipakai untuk mengirim gambar.
 CHAT_INPUT_ID = get_config("CHAT_INPUT_ID") or "ChatInput-X8W7I"
+
+# ID komponen memory di flow (v1.3.0); app mengirim pemilik memory lewat tweaks.
+MEMORY_SEARCH_ID = get_config("MEMORY_SEARCH_ID") or "CielMemorySearch-BC6pl"
+MEMORY_STORE_ID = get_config("MEMORY_STORE_ID") or "CielMemoryStore-uBmzx"
+
+# Batas pesan per jam untuk menjaga biaya model dan beban backend.
+# Batas total anonim mencegah orang melewati batas dengan memuat ulang tab.
+RATE_LIMIT_PER_HOUR = get_int_config("RATE_LIMIT_PER_HOUR", 20)
+RATE_LIMIT_PER_HOUR_LOGIN = get_int_config("RATE_LIMIT_PER_HOUR_LOGIN", 60)
+RATE_LIMIT_ANON_TOTAL_PER_HOUR = get_int_config("RATE_LIMIT_ANON_TOTAL_PER_HOUR", 150)
+
+AUTH_ENABLED = auth_configured()
 
 # Opsional: tujuan tombol paket berbayar di halaman harga (https:// atau mailto:).
 CONTACT_URL = get_config("CONTACT_URL")
@@ -593,6 +627,112 @@ if "pending" not in st.session_state:
 
 if "upload_nonce" not in st.session_state:
     st.session_state.upload_nonce = 0
+
+# Identitas anonim per sesi browser, dipakai untuk session_id dan rate limit.
+if "visitor_id" not in st.session_state:
+    st.session_state.visitor_id = uuid.uuid4().hex[:16]
+
+
+# ============================================================
+# USER IDENTITY
+# ============================================================
+
+def logged_in():
+    return AUTH_ENABLED and bool(st.user.get("is_logged_in"))
+
+
+def memory_owner_id():
+    """
+    ID pemilik long-term memory: hash stabil dari akun login.
+    Kosong untuk pengguna anonim, sehingga komponen memory di flow
+    menolak membaca/menyimpan dan memory tidak bocor antar pengunjung.
+    """
+    if not logged_in():
+        return ""
+
+    subject = st.user.get("sub") or st.user.get("email")
+
+    if not subject:
+        return ""
+
+    return hashlib.sha256(f"ciel-memory:{subject}".encode()).hexdigest()[:16]
+
+
+def user_key():
+    return memory_owner_id() or st.session_state.visitor_id
+
+
+# ============================================================
+# RATE LIMIT
+# ============================================================
+
+def rate_limit_ok(store, limits, now, window=3600):
+    """
+    Catat satu request jika semua key di `limits` ({key: batas}) masih di
+    bawah batasnya dalam `window` detik terakhir. Tidak mencatat apa pun
+    jika salah satu batas sudah tercapai.
+    """
+    recent = {
+        key: [t for t in store.get(key, ()) if now - t < window]
+        for key in limits
+    }
+
+    allowed = all(len(recent[key]) < limit for key, limit in limits.items())
+
+    for key, times in recent.items():
+
+        if allowed:
+            times.append(now)
+
+        if times:
+            store[key] = times
+        else:
+            store.pop(key, None)
+
+    return allowed
+
+
+@st.cache_resource
+def rate_limit_state():
+    # Dibagi semua sesi di proses server ini; reset saat app restart.
+    return {"lock": threading.Lock(), "hits": {}}
+
+
+def check_rate_limit():
+    """Kembalikan None jika boleh lanjut, atau pesan error ber-marker ⏳."""
+
+    if logged_in():
+        limit = RATE_LIMIT_PER_HOUR_LOGIN
+        limits = {f"user:{user_key()}": limit}
+    else:
+        limit = RATE_LIMIT_PER_HOUR
+        limits = {
+            f"visitor:{user_key()}": limit,
+            "anon:total": RATE_LIMIT_ANON_TOTAL_PER_HOUR,
+        }
+
+    state = rate_limit_state()
+
+    with state["lock"]:
+        allowed = rate_limit_ok(state["hits"], limits, time.time())
+
+    if allowed:
+        return None
+
+    logger.warning("rate_limited logged_in=%s", logged_in())
+
+    hint = (
+        " Masuk dengan akun Google untuk batas yang lebih tinggi."
+        if AUTH_ENABLED and not logged_in()
+        else ""
+    )
+
+    return (
+        "⏳ Batas pemakaian tercapai.\n\n"
+        f"Ciel menerima hingga {limit} pesan per jam per pengguna, dan "
+        "pemakaian anonim juga dibatasi bersama. Silakan coba lagi nanti."
+        f"{hint}"
+    )
 
 
 # ============================================================
@@ -716,7 +856,7 @@ def check_backend_health():
 # LANGFLOW API
 # ============================================================
 
-def ask_langflow(message, tweaks=None):
+def ask_langflow(message, tweaks=None, session_id=None):
 
     request_id = uuid.uuid4().hex[:8]
     start_time = time.perf_counter()
@@ -740,6 +880,11 @@ def ask_langflow(message, tweaks=None):
 
     if tweaks:
         payload["tweaks"] = tweaks
+
+    # Tanpa session_id Langflow memakai satu session default, sehingga
+    # riwayat Agent tercampur antar pengunjung dan antar chat.
+    if session_id:
+        payload["session_id"] = session_id
 
     logger.info(
         "request_start id=%s flow=%s input_length=%d",
@@ -1084,23 +1229,23 @@ AVATARS = {
 ERROR_MARKERS = ("⏱", "🔌", "🔐", "⏳", "🔧", "🚫", "❌", "⚠")
 
 STARTER_PROMPTS = (
-    "Rangkum perkembangan terbaru model bahasa open-source",
-    "Hitung cicilan KPR Rp800 juta, tenor 15 tahun, bunga 7,5% per tahun",
-    "Bandingkan dua pendekatan RAG dan kapan masing-masing cocok dipakai",
+    "Ajari aku limit fungsi dari dasar, lalu kasih 2 soal latihan",
+    "Analisis: apakah model bahasa open-source sudah layak dipakai untuk riset skripsi?",
+    "Rangkum perkembangan terbaru model bahasa open-source beserta sumbernya",
 )
 
 CAPABILITIES = (
-    ("Web research", "Mencari dan merangkum sumber terkini dari web."),
-    ("Knowledge search", "Menemukan jawaban dari basis pengetahuan yang tersedia."),
-    ("Math &amp; analysis", "Menghitung dan menganalisis dengan langkah yang jelas."),
-    ("Long-term memory", "Mengingat konteks penting lintas percakapan."),
+    ("Riset anti-ngarang", "Jawaban riset disertai sumber. Kalau buktinya tidak ada, Ciel bilang belum tahu."),
+    ("Teman belajar", "Menjelaskan bertahap, memberi latihan, dan mengingat progresmu (perlu login)."),
+    ("Mode analisis", "Awali dengan &ldquo;analisis&rdquo; untuk jawaban terstruktur lengkap dengan tingkat keyakinan."),
+    ("Hitung &amp; data", "Angka dihitung oleh Math Tutor dan Data Analyst, bukan ditebak."),
 )
 
 THINKING_HTML = (
     '<div class="ciel-thinking" role="status" aria-live="polite">'
     '<div class="ciel-thinking-head">'
     '<span class="ciel-dots" aria-hidden="true"><i></i><i></i><i></i></span>'
-    "<span>Supervisor sedang berpikir</span>"
+    "<span>Ciel sedang mencari dan memeriksa</span>"
     "</div>"
     '<div class="ciel-skel" aria-hidden="true"><b></b><b></b><b></b></div>'
     '<p class="ciel-thinking-note">Permintaan riset dapat memakan waktu hingga dua menit.</p>'
@@ -1123,6 +1268,7 @@ IMAGE_MIME = {
 }
 MAX_IMAGES_PER_MESSAGE = 4
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
+THUMBNAIL_PX = 360
 MAX_FILES_PER_MESSAGE = 5
 MAX_FILE_CHARS = 60_000
 MAX_CONTEXT_CHARS = 150_000
@@ -1282,6 +1428,42 @@ def read_image(uploaded):
         "data": raw,
         "mime": IMAGE_MIME.get(file_extension(uploaded.name), "image/png"),
     }, None
+
+
+def make_thumbnail(image):
+    """
+    Perkecil gambar yang sudah terkirim agar riwayat chat tidak menyimpan
+    file asli (hingga 5 MB per foto) di memori server selama sesi berjalan.
+    """
+    try:
+        with Image.open(io.BytesIO(image["data"])) as img:
+            img.thumbnail((THUMBNAIL_PX, THUMBNAIL_PX))
+            out = io.BytesIO()
+            img.convert("RGB").save(out, format="JPEG", quality=82)
+    except Exception:
+        return image
+
+    return {**image, "data": out.getvalue(), "mime": "image/jpeg"}
+
+
+def build_tweaks(image_paths=None):
+    owner = memory_owner_id()
+
+    tweaks = {
+        MEMORY_SEARCH_ID: {"user_id": owner},
+        MEMORY_STORE_ID: {"user_id": owner},
+    }
+
+    if image_paths:
+        tweaks[CHAT_INPUT_ID] = {
+            "files": (
+                image_paths[0]
+                if len(image_paths) == 1
+                else image_paths
+            )
+        }
+
+    return tweaks
 
 
 def make_pending(text, uploaded_files):
@@ -1557,7 +1739,7 @@ with st.sidebar:
     st.markdown(
         '<div class="ciel-sidehead">'
         '<span class="ciel-wordmark">Ciel</span>'
-        '<span class="ciel-tagline">Asisten riset</span>'
+        '<span class="ciel-tagline">Riset &amp; teman belajar</span>'
         "</div>",
         unsafe_allow_html=True,
     )
@@ -1745,12 +1927,52 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+    if AUTH_ENABLED:
+
+        if logged_in():
+
+            st.caption(
+                f"Masuk sebagai {st.user.get('name') or st.user.get('email') or 'pengguna'}"
+            )
+
+            st.button(
+                "Keluar",
+                key="logout",
+                icon=":material/logout:",
+                on_click=st.logout,
+            )
+
+        else:
+
+            st.button(
+                "Masuk dengan Google",
+                key="login",
+                icon=":material/login:",
+                on_click=st.login,
+            )
+
+    if logged_in():
+        memory_status = (
+            "<p>Long-term memory aktif dan hanya milik akunmu. Ciel bisa "
+            "mengingat konteks penting lintas percakapan.</p>"
+            f"<p>ID memory: <code>{memory_owner_id()}</code></p>"
+        )
+    elif AUTH_ENABLED:
+        memory_status = (
+            "<p>Kamu belum masuk, jadi Ciel tidak menyimpan atau membaca "
+            "long-term memory untukmu. Masuk untuk mengaktifkannya.</p>"
+        )
+    else:
+        memory_status = (
+            "<p>Long-term memory nonaktif di deployment ini karena login "
+            "belum dikonfigurasi.</p>"
+        )
+
     with st.expander("About long-term memory"):
 
         st.markdown(
             '<div class="ciel-note">'
-            "<p>Backend Ciel memiliki long-term memory untuk mengingat "
-            "konteks penting lintas percakapan.</p>"
+            f"{memory_status}"
             "<p>Ini berbeda dari riwayat chat di sidebar, yang hanya "
             "tersimpan selama sesi browser ini.</p>"
             "<p>Memory belum dapat dilihat atau diubah dari sini.</p>"
@@ -1797,7 +2019,7 @@ with st.container(key="topbar"):
         '<div class="ciel-topbar">'
         '<div class="ciel-brand">'
         '<span class="ciel-wordmark">Ciel</span>'
-        '<span class="ciel-tagline">Asisten riset multi-agent, ditenagai Langflow</span>'
+        '<span class="ciel-tagline">Riset tanpa ngarang, teman belajar yang ingat progresmu</span>'
         "</div>"
         f"{project_chip}"
         "</div>",
@@ -1855,10 +2077,11 @@ if not messages and not pending_request:
 
         st.markdown(
             '<div class="ciel-hero">'
-            "<h1>Tanya, riset, hitung, ingat.</h1>"
-            "<p>Ciel memilih sendiri alatnya: pencarian web, basis "
-            "pengetahuan, perhitungan, atau memori jangka panjang. "
-            "Lampirkan file teks atau foto dari tombol di kotak pesan.</p>"
+            "<h1>Riset yang jujur, belajar yang ditemani.</h1>"
+            "<p>Ciel menjawab dari sumber dan data yang bisa dicek, bilang "
+            "terus terang kalau belum tahu, dan menemanimu belajar langkah "
+            "demi langkah. Lampirkan file teks atau foto dari tombol di "
+            "kotak pesan.</p>"
             "</div>"
             f'<div class="ciel-caps">{capabilities_html}</div>',
             unsafe_allow_html=True,
@@ -1969,7 +2192,13 @@ if pending_request:
             unsafe_allow_html=True,
         )
 
-        if pending_request["images"]:
+        # Satu session Langflow per chat: "New chat" benar-benar mulai
+        # dari konteks kosong dan riwayat Agent tidak tercampur antar pengguna.
+        session_id = f"{user_key()}-{chat['id']}"
+
+        answer = check_rate_limit()
+
+        if answer is None and pending_request["images"]:
 
             image_paths, upload_error = upload_images(
                 pending_request["images"]
@@ -1980,28 +2209,34 @@ if pending_request:
             else:
                 answer = ask_langflow(
                     pending_request["payload"],
-                    tweaks={
-                        CHAT_INPUT_ID: {
-                            "files": (
-                                image_paths[0]
-                                if len(image_paths) == 1
-                                else image_paths
-                            )
-                        }
-                    },
+                    tweaks=build_tweaks(image_paths),
+                    session_id=session_id,
                 )
 
-        else:
+        elif answer is None:
 
-            answer = ask_langflow(pending_request["payload"])
+            answer = ask_langflow(
+                pending_request["payload"],
+                tweaks=build_tweaks(),
+                session_id=session_id,
+            )
 
         working_slot.empty()
+
+    failed = is_error_answer(answer)
+
+    # Lampiran asli hanya perlu disimpan untuk tombol Retry.
+    if not failed:
+        user_message.pop("payload", None)
+        user_message["images"] = [
+            make_thumbnail(image) for image in user_message["images"]
+        ]
 
     chat["messages"].append(
         {
             "role": "assistant",
             "content": answer,
-            "error": is_error_answer(answer),
+            "error": failed,
         }
     )
     chat["updated"] = time.time()

@@ -16,19 +16,23 @@ The flow is built and tested with Langflow 1.12.4.
 User
  |
  v
+Streamlit app (app.py)
+ |   session_id = <user>-<chat id>, tweaks: memory user_id, images
+ v
 Chat Input
  |
  v
-Ollama Chat Component
+Ciel Vision Router
  |
  v
 Agent
  +-- DeepSeek Model
- +-- Ciel Memory Search
- +-- Ciel Memory Store
- +-- Math Tutor API Tool
- +-- Knowledge Retriever
- +-- Web Research Assistant
+ +-- Ciel Memory Search   (filtered by user_id)
+ +-- Ciel Memory Store    (tagged with user_id)
+ +-- Math Tutor Agent     (Run Flow)
+ +-- Verified Data Analyst (Run Flow)
+ +-- Knowledge Retriever  (Run Flow)
+ +-- Web Research Assistant (Run Flow)
  |
  v
 Chat Output
@@ -42,9 +46,13 @@ Chat Input is the entry point for user messages.
 
 It provides the incoming message and session-related information to the flow.
 
-### Ollama Chat Component
+### Ciel Vision Router
 
-The Chat Input message is processed through the Ollama chat component before reaching the main Agent.
+Text-only messages pass straight to the Agent. When a message has images, only the images go to the local vision model (`qwen2.5vl:3b`), and its reading is appended to the original message. Source: `flow/components/ciel_vision_router.py`.
+
+### Sessions
+
+The app sends one Langflow `session_id` per chat (`<user key>-<chat id>`). The Agent's chat history (`n_messages`) therefore only contains messages from the same chat of the same user, and "New chat" starts with an empty context.
 
 ### Agent
 
@@ -109,6 +117,15 @@ The local Chroma database is stored under:
 
 ~/.ciel_ai/long_term_memory
 
+### Memory Ownership (v1.3.0)
+
+Both memory components have a `user_id` input that is not a tool argument: the app sets it through `tweaks`, so the Agent cannot read or write another user's memories.
+
+- Signed-in user (Google login via `st.login`): `user_id` is a hash of the account.
+- Anonymous visitor: `user_id` is empty and both tools refuse to store or search.
+
+Store writes `user_id` into each memory's metadata; Search filters with `where={"user_id": ...}`. Memories saved by older flows have no owner until `tools/migrate_memory_owner.py` assigns them.
+
 ### Ciel Memory Store
 
 Memory storage follows this pipeline:
@@ -134,7 +151,7 @@ Secrets and credentials are not intended to be stored in long-term memory.
 
 ### Math Tutor
 
-Mathematical requests are delegated to the Math Tutor API Tool when specialist mathematical reasoning is required.
+Mathematical requests are delegated to the Math Tutor Agent flow through a native Run Flow tool (no API key in the flow).
 
 ### Knowledge Retriever
 
@@ -147,8 +164,6 @@ The nested flow is exposed as a tool available to the Agent.
 Current or web-based research is delegated to the Web Research Assistant.
 
 The main flow exposes a Run Flow tool for the Web Research Assistant.
-
-The project also contains a Research Agent API Tool custom component for invoking the research flow through the Langflow API.
 
 Sensitive API configuration is kept outside source control.
 
@@ -198,7 +213,6 @@ Main Agent
 Final Response
 ```
 
-The Research Agent API Tool can also invoke a Langflow flow through the local Langflow API.
 
 ## Model Architecture
 
@@ -226,7 +240,7 @@ The model acts as the reasoning engine while the Agent remains responsible for o
 2. Chat Input receives the message
         |
         v
-3. Input is processed through the Ollama chat component
+3. Ciel Vision Router reads attached images, if any
         |
         v
 4. Agent receives the request
@@ -283,12 +297,30 @@ flow/
 |   +-- Ciel_AI_Long-Term_Memory_Master.json
 |
 +-- v1.1.0/
-    +-- Ciel_AI_Long-Term_Memory_Master.json
++-- v1.2.0/
++-- v1.3.0/
+|   +-- Ciel_AI_Long-Term_Memory_Master.json
++-- components/
+    +-- ciel_vision_router.py
+    +-- ciel_memory_search.py
+    +-- ciel_memory_store.py
 ```
 
 v1.0.0 is preserved as the production baseline.
 
 v1.1.0 contains the long-term memory context optimization while preserving the overall orchestration architecture.
+
+v1.2.0 replaces the always-on vision preprocessor with Ciel Vision Router and runs Math Tutor as a native Run Flow tool.
+
+v1.4.0 changes only the Agent system prompt: two persona modes (warm default, "Great Sage" analysis mode), anti-fabrication rules, and study-companion behavior.
+
+v1.3.0 scopes long-term memory to the signed-in user and removes the unconnected Research Agent API Tool node. Custom component sources live in `flow/components/`, and contract tests check that the flow JSON embeds the same code.
+
+## Public Deployment Safeguards
+
+- One Langflow session per chat (no shared Agent history).
+- Long-term memory per signed-in user; disabled for anonymous visitors.
+- Hourly message limits per user plus a shared anonymous budget, checked in the app before any backend call (`RATE_LIMIT_*` settings).
 
 ## Architecture Principles
 

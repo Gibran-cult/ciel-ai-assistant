@@ -34,19 +34,24 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install requests chromadb "streamlit>=1.43"
+          python -m pip install requests chromadb "streamlit>=1.45"
 
       - name: Validate flow JSON
         run: |
           python -m json.tool flow/v1.0.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
           python -m json.tool flow/v1.1.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
           python -m json.tool flow/v1.2.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
+          python -m json.tool flow/v1.3.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
+          python -m json.tool flow/v1.4.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
 
       - name: Run offline test suite
         run: |
           python -m unittest -v \
             tests.test_memory_v110_contract \
             tests.test_flow_v120_contract \
+            tests.test_flow_v130_contract \
+            tests.test_flow_v140_contract \
             tests.test_resilience \
+            tests.test_rate_limit \
             tests.test_performance_snapshot \
             tests.test_pricing
