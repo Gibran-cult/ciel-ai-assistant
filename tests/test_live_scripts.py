@@ -134,16 +134,49 @@ class CollectorFailedCasesTest(unittest.TestCase):
             "❌ research_python_01             FAIL\n"
             "   └─ Tidak menemukan kata kunci: 'Python'\n"
             "   └─ Jawaban terlalu pendek\n"
-            "   Output: ...\n\n"
+            "   Output: Ini rangkuman terbaru soal bahasa pemrograman...\n\n"
+            "✅ knowledge_data_science_01      PASS\n"
+            "   Output: Data Science adalah...\n\n"
             "❌ vision_math_01                 FAIL\n"
             "RESULT: 7/9 PASSED\n"
         )
 
         self.assertEqual(parse_failed_cases(output), [
-            {"id": "research_python_01", "reasons": ["Tidak menemukan kata kunci: 'Python'", "Jawaban terlalu pendek"]},
-            {"id": "vision_math_01", "reasons": []},
+            {
+                "id": "research_python_01",
+                "reasons": ["Tidak menemukan kata kunci: 'Python'", "Jawaban terlalu pendek"],
+                "answer_preview": "Ini rangkuman terbaru soal bahasa pemrograman...",
+            },
+            {"id": "vision_math_01", "reasons": [], "answer_preview": ""},
         ])
         self.assertEqual(parse_failed_cases("RESULT: 9/9 PASSED"), [])
+
+
+class EvaluationCaseChecksTest(unittest.TestCase):
+    # research_machine_learning_01 flaked once with "Tidak menemukan: 'machine'"
+    # while two reruns answered correctly; an Indonesian answer may say
+    # "pembelajaran mesin" instead of "machine learning".
+
+    @classmethod
+    def setUpClass(cls):
+        env = {
+            "NGROK_URL": "https://example.invalid", "NGROK_USER": "u", "NGROK_PASSWORD": "p",
+            "LANGFLOW_API_KEY": "k", "FLOW_ID": "flow",
+        }
+        with patch.dict(os.environ, env):
+            cls.module = importlib.import_module("tests.test_response_quality")
+        cases = json.loads((ROOT / "tests" / "evaluation_cases.json").read_text(encoding="utf-8"))
+        cls.ml_checks = next(c for c in cases if c["id"] == "research_machine_learning_01")["checks"]
+
+    def passes(self, answer):
+        # evaluate_answer returns the list of failures; empty means passed.
+        return not self.module.evaluate_answer(answer, self.ml_checks)
+
+    def test_machine_learning_case_accepts_english_or_indonesian_term(self):
+        filler = " Sumber dan tanggal rilis dicantumkan untuk setiap temuan." * 3
+        self.assertTrue(self.passes("Perkembangan terbaru machine learning tahun ini." + filler))
+        self.assertTrue(self.passes("Perkembangan terbaru pembelajaran mesin tahun ini." + filler))
+        self.assertFalse(self.passes("Perkembangan terbaru basis data relasional tahun ini." + filler))
 
 
 if __name__ == "__main__":

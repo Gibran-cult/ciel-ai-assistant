@@ -1,23 +1,24 @@
 {
   "project": "Ciel AI Master",
-  "version": "v1.5.0",
-  "generated_at": "2026-10-14T14:32:46.681307+00:00",
+  "version": "v1.5.1",
+  "generated_at": "2026-10-14T16:20:54.087056+00:00",
   "overall": {
-    "status": "degraded",
-    "score": 0.8
+    "status": "healthy",
+    "score": 1.0
   },
   "response_quality": {
-    "passed": 8,
-    "failed": 1,
+    "passed": 9,
+    "failed": 0,
     "total": 9,
-    "pass_rate": 0.8888888888888888,
-    "status": "degraded"
+    "pass_rate": 1.0,
+    "status": "healthy",
+    "failed_cases": []
   },
   "performance": {
-    "first_request_s": 50.615,
-    "warm_median_s": 18.434,
-    "overall_median_s": 18.854,
-    "p95_s": 43.135
+    "first_request_s": 17.433,
+    "warm_median_s": 14.583,
+    "overall_median_s": 14.621,
+    "p95_s": 16.735
   },
   "resilience": {
     "passed": 1,
@@ -32,11 +33,11 @@
     "context_reduction_k5_percent": 60.7
   },
   "versioning": {
-    "flow_snapshot": "flow/v1.5.0/Ciel_AI_Long-Term_Memory_Master.json"
+    "flow_snapshot": "flow/v1.5.1/Ciel_AI_Long-Term_Memory_Master.json"
   },
   "automated_checks": {
-    "passed": 4,
-    "failed": 1,
+    "passed": 5,
+    "failed": 0,
     "total": 5,
     "details": {
       "resilience": {
@@ -48,8 +49,8 @@
         "return_code": 0
       },
       "response_quality": {
-        "passed": false,
-        "return_code": 1
+        "passed": true,
+        "return_code": 0
       },
       "memory_multi_query": {
         "passed": true,

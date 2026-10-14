@@ -61,24 +61,40 @@ def run_script(path):
 
 def parse_failed_cases(output):
     """
-    Read failing case IDs and their reasons from test_response_quality.py
-    output ("❌ <id> FAIL" followed by "└─ <reason>" lines), so a
-    degraded run says which case failed.
+    Read failing case IDs, their reasons, and the answer preview from
+    test_response_quality.py output ("❌ <id> FAIL", then "└─ <reason>"
+    lines, then "Output: <answer>"), so a degraded run shows which case
+    failed and what Ciel actually answered.
     """
     failed = []
+    current = None
 
     for line in (output or "").splitlines():
 
         match = re.match(r"^\s*❌\s+(\S+)\s+FAIL\s*$", line)
 
         if match:
-            failed.append({"id": match.group(1), "reasons": []})
+            current = {"id": match.group(1), "reasons": [], "answer_preview": ""}
+            failed.append(current)
+            continue
+
+        if re.match(r"^\s*✅\s+\S+\s+PASS\s*$", line):
+            current = None
+            continue
+
+        if current is None:
             continue
 
         reason = re.match(r"^\s*└─\s*(.+)$", line)
 
-        if reason and failed:
-            failed[-1]["reasons"].append(reason.group(1).strip())
+        if reason:
+            current["reasons"].append(reason.group(1).strip())
+            continue
+
+        preview = re.match(r"^\s*Output:\s*(.*)$", line)
+
+        if preview and not current["answer_preview"]:
+            current["answer_preview"] = preview.group(1).strip()
 
     return failed
 
@@ -366,6 +382,8 @@ def main():
             f"[FAILED CASE] {case['id']}: "
             + ("; ".join(case["reasons"]) or "no reason printed")
         )
+        if case["answer_preview"]:
+            print(f"              answer: {case['answer_preview'][:200]}")
 
     # DEBUG OUTPUT ONLY WHEN PARSER FAILS
     if response_quality["total"] == 0:
