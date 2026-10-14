@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Project files are no longer resent with every message
+- Problem: project file text (up to 150k characters) was added to every message in a project chat. Langflow stores each message with that text and the Agent loads the last 10 messages, so from the 3rd turn the same file reached the model several times in one request (up to 6 copies).
+- The app now sends project file text only for a new chat, when the project files change (`project_signature`), or every `PROJECT_CONTEXT_REFRESH_TURNS = 4` turns, before the last copy leaves the Agent's 10-message window. Other turns name the files ("isinya sudah dikirim di pesan sebelumnya") so the Agent uses the copy in its history. The record is kept per chat and updated only after a successful answer.
+- Budgets: `MAX_CONTEXT_CHARS` 150,000 -> 80,000 and `MAX_FILE_CHARS` 60,000 -> 40,000 per text file, so the at most two copies in a request stay modest. CSV/TSV files are unaffected (preview in the prompt, full file to Ciel Table Analyst).
+- Simulation with the app's own functions (60k-character project file, 10 turns, 1.5k-character answers): peak context per request 368k -> 88k characters, total over 10 turns 2.76M -> 0.62M (-78%), copies of the file per request at most 2 instead of 6. `tests/test_project_context.py` keeps that bound over 12 turns and checks that the file is always visible to the Agent.
+- Live on the test flow: after sending a proposal once, turns 2-4 sent about 200 characters instead of 1,400, and the Agent answered three detail questions from it correctly (supervisor, a budget line, risk and harvest week).
+
 ### Fix: duplicated answers and English-format numbers (flow v1.5.1)
 - **Duplicated or glued answers.** In Langflow 1.12.4 `Message.text` (and `data.text`) joins every text block of every Agent round: text written before a tool call, an answer the model wrote twice, and internal narration. Users saw answers twice ("…23,685 … 23,69.Rata-rata Quantity_Sold…"), text glued without a space ("…filenya ya.Ini hasilnya"), and on research questions the agent's narration ("Saya akan mencari… Pertama, mari cek tanggal…"). `ask_langflow` now returns the last text block the model wrote (`final_answer_text`), skipping Langflow's own "Output" blocks, and falls back to `data.text` when there are no content blocks.
   - Checked on real responses (greeting, math, research, CSV): the new answer is always the end of the old text, so nothing from the final answer is lost. Research 7,600 -> 2,186 chars with the "Sumber:" list intact; math 1,296 -> 519 (the sub-agent's full explanation no longer repeats the final one).
