@@ -54,9 +54,10 @@ The v1.1.0 optimization reduced retrieved context size by approximately 60.7% at
 .
 ├── .github/
 ├── flow/
-│   ├── v1.0.0/
-│   └── v1.1.0/
+│   ├── v1.0.0/ … v1.3.0/
+│   └── components/
 ├── tests/
+├── tools/
 ├── app.py
 ├── langflow_client.py
 ├── quality_dashboard.py
@@ -88,16 +89,30 @@ Do not place real credentials, passwords, API keys, or tokens in this README or 
 
 Optional: `CHAT_INPUT_ID` (defaults to the Chat Input component ID in the v1.1.0 flow) and `CONTACT_URL` (https:// or mailto: link used by the paid-plan buttons on the pricing page).
 
+Optional for public deployments:
+
+- `RATE_LIMIT_PER_HOUR` (default 20), `RATE_LIMIT_PER_HOUR_LOGIN` (default 60), `RATE_LIMIT_ANON_TOTAL_PER_HOUR` (default 150): hourly message limits, checked before any backend call.
+- `[auth]` block (Google OAuth client): enables "Masuk dengan Google". Long-term memory is only available to signed-in users and is private to each account; without `[auth]` memory is disabled.
+- `MEMORY_SEARCH_ID`, `MEMORY_STORE_ID`: memory component IDs (defaults match `flow/v1.3.0`).
+
 A template is provided in `.streamlit/secrets.toml.example`. For local runs copy it to `.streamlit/secrets.toml` (git-ignored) or use a `.env` file.
 
 ## Deployment (Streamlit Community Cloud)
 
 1. Start the backend on the host machine: Langflow (port 7860) with its Ollama and Chroma dependencies, then the ngrok tunnel with Basic Auth pointing at `localhost:7860`.
-2. Deploy `app.py` from the `main` branch of this repository.
-3. Paste the variables above into App settings -> Secrets, using the template format.
-4. Open the app and send a test message. If the backend host or tunnel is down, the app shows a connection error card with a retry button.
+2. Import `flow/v1.3.0/Ciel_AI_Long-Term_Memory_Master.json` into Langflow and set `FLOW_ID` to the imported flow.
+3. Deploy `app.py` from the `main` branch of this repository.
+4. Paste the variables above into App settings -> Secrets, using the template format. For Google login, create an OAuth client (Web application) in Google Cloud Console with `https://<your-app>.streamlit.app/oauth2callback` as the redirect URI, and keep the `[auth]` block at the end of the secrets.
+5. Open the app and send a test message. If the backend host or tunnel is down, the app shows a connection error card with a retry button.
+6. Existing memories from older flows have no owner. Sign in, copy "ID memory" from the sidebar memory panel, then on the Langflow host run `python tools/migrate_memory_owner.py --user-id <ID> --dry-run`, and again without `--dry-run`.
 
 The deployed app is only available while the host machine, Langflow, and the ngrok tunnel are running.
+
+### Hosting on a low budget
+
+Streamlit Community Cloud (free) is a good fit for the frontend: the app is a thin client and the heavy work runs on the Langflow host. Apps sleep after 12 hours without traffic and have about 1 GB of memory.
+
+The limiting part is the backend host and tunnel. ngrok's free plan is capped at roughly 20,000 HTTP requests and 1 GB of outbound data per month, which is enough for light use. If traffic grows, a Cloudflare Tunnel (free, no request quota) with an inexpensive domain is the next step. A cloud VPS with enough RAM/GPU for Ollama costs far more than the remaining main expense, DeepSeek tokens, which the rate limits keep in check.
 
 ## Local Development
 

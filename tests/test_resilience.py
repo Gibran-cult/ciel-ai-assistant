@@ -364,6 +364,42 @@ class TestResiliencePolicy(unittest.TestCase):
             1,
         )
 
+    def test_session_id_and_tweaks_are_sent(self):
+
+        tweaks = {
+            "CielMemorySearch-BC6pl": {"user_id": "abc"},
+        }
+
+        with patch(
+            "requests.post",
+            return_value=success_response(),
+        ) as mock_post:
+
+            ask_langflow(
+                "test",
+                tweaks=tweaks,
+                session_id="visitor-chat1",
+            )
+
+        payload = mock_post.call_args.kwargs["json"]
+
+        self.assertEqual(payload["session_id"], "visitor-chat1")
+        self.assertEqual(payload["tweaks"], tweaks)
+
+    def test_session_id_is_omitted_when_not_given(self):
+
+        with patch(
+            "requests.post",
+            return_value=success_response(),
+        ) as mock_post:
+
+            ask_langflow("test")
+
+        payload = mock_post.call_args.kwargs["json"]
+
+        self.assertNotIn("session_id", payload)
+        self.assertNotIn("tweaks", payload)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
