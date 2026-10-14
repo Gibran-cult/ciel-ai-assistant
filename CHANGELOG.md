@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Remove unused code
+- Removed `check_backend_health` from `app.py` (117 lines). It was left behind when the backend status panel was removed and was never called. The `/health_check` endpoint itself is unchanged and is still used by `tests/test_ciel_master.py` and the recovery checks in `docs/`.
+- `tests/test_app_hygiene.py` (in CI) fails when a top-level function or constant in `app.py` is never referenced; run against the previous `main` it flags exactly `check_backend_health`.
+- Checked that `app.py` still renders with Streamlit's `AppTest` (no exceptions; chat input, sidebar and starter prompts present).
+
 ### Error messages no longer show internal details to users
 - Three error paths showed raw technical text to public users: an unknown Langflow response shape printed the whole response JSON (flow structure, tool content), and other request errors and image-upload errors printed the raw exception, which can contain the ngrok host and URL.
 - Users now get a short explanation and a Request ID (shown under "Technical details" in the existing error card). The response JSON (first 500 characters) and the exception type and text go to the server log under the same Request ID. The title lines are unchanged, so the error card and Retry work as before.
