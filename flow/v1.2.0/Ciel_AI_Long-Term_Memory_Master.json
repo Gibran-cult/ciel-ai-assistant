@@ -3114,184 +3114,6 @@
         }
       },
       {
-        "id": "CustomComponent-aoG7C",
-        "type": "genericNode",
-        "position": {
-          "x": -332.0373200945792,
-          "y": 220.8336523591831
-        },
-        "data": {
-          "node": {
-            "template": {
-              "_type": "Component",
-              "code": {
-                "type": "code",
-                "required": true,
-                "placeholder": "",
-                "list": false,
-                "show": true,
-                "multiline": true,
-                "value": "from langflow.custom import Component\r\nfrom langflow.io import MessageTextInput, Output\r\nimport requests\r\n\r\n\r\nclass MathTutorAPITool(Component):\r\n    display_name = \"Math Tutor API Tool\"\r\n    description = \"Memanggil Math Tutor Agent melalui Langflow API.\"\r\n    icon = \"calculator\"\r\n\r\n    inputs = [\r\n        MessageTextInput(\r\n            name=\"question\",\r\n            display_name=\"Question\",\r\n            info=\"Soal matematika yang dikirim ke Math Tutor.\",\r\n            tool_mode=True,\r\n        ),\r\n    ]\r\n\r\n    outputs = [\r\n        Output(\r\n            name=\"result\",\r\n            display_name=\"Math Result\",\r\n            method=\"run_math\",\r\n        ),\r\n    ]\r\n\r\n    def run_math(self) -> str:\r\n        # GANTI DENGAN DATA MILIKMU\r\n        FLOW_ID = \"411fae9c-987f-4ccb-907d-fb499965eea6\"\r\n        API_KEY = \"<REDACTED: set via Langflow global variable>\"\r\n\r\n        url = (\r\n            f\"http://127.0.0.1:7860/api/v1/run/\"\r\n            f\"{FLOW_ID}?stream=false\"\r\n        )\r\n\r\n        headers = {\r\n            \"Content-Type\": \"application/json\",\r\n            \"accept\": \"application/json\",\r\n            \"x-api-key\": API_KEY,\r\n        }\r\n\r\n        payload = {\r\n            \"input_value\": self.question,\r\n            \"input_type\": \"chat\",\r\n            \"output_type\": \"chat\",\r\n        }\r\n\r\n        response = requests.post(\r\n            url,\r\n            headers=headers,\r\n            json=payload,\r\n            timeout=120,\r\n        )\r\n\r\n        if response.status_code != 200:\r\n            raise ValueError(\r\n                f\"Math Tutor API gagal.\\n\"\r\n                f\"Status: {response.status_code}\\n\"\r\n                f\"Response: {response.text}\"\r\n            )\r\n\r\n        data = response.json()\r\n\r\n        try:\r\n            return (\r\n                data[\"outputs\"][0]\r\n                    [\"outputs\"][0]\r\n                    [\"results\"][\"message\"][\"data\"][\"text\"]\r\n            )\r\n        except (KeyError, IndexError, TypeError) as exc:\r\n            raise ValueError(\r\n                f\"Struktur response Math Tutor tidak dikenali:\\n{data}\"\r\n            ) from exc",
-                "fileTypes": [],
-                "file_path": "",
-                "password": false,
-                "name": "code",
-                "advanced": true,
-                "api_editable": false,
-                "dynamic": true,
-                "info": "",
-                "load_from_db": false,
-                "title_case": false
-              },
-              "question": {
-                "tool_mode": true,
-                "trace_as_input": true,
-                "trace_as_metadata": true,
-                "load_from_db": false,
-                "list": false,
-                "list_add_label": "Add More",
-                "override_skip": false,
-                "required": false,
-                "placeholder": "",
-                "show": true,
-                "name": "question",
-                "value": "",
-                "display_name": "Question",
-                "advanced": false,
-                "api_editable": false,
-                "input_types": [
-                  "Message"
-                ],
-                "dynamic": false,
-                "info": "Soal matematika yang dikirim ke Math Tutor.",
-                "title_case": false,
-                "track_in_telemetry": false,
-                "type": "str",
-                "_input_type": "MessageTextInput"
-              },
-              "tools_metadata": {
-                "tool_mode": false,
-                "trace_as_metadata": true,
-                "is_list": true,
-                "list_add_label": "Add More",
-                "override_skip": false,
-                "required": false,
-                "placeholder": "",
-                "show": true,
-                "name": "tools_metadata",
-                "value": [
-                  {
-                    "name": "run_math",
-                    "description": "Memanggil Math Tutor Agent melalui Langflow API.",
-                    "tags": [
-                      "run_math"
-                    ],
-                    "status": true,
-                    "approval_actions": [],
-                    "display_name": "run_math",
-                    "display_description": "Memanggil Math Tutor Agent melalui Langflow API.",
-                    "readonly": false,
-                    "args": {
-                      "question": {
-                        "default": "",
-                        "description": "Soal matematika yang dikirim ke Math Tutor.",
-                        "title": "Question",
-                        "type": "string"
-                      }
-                    }
-                  }
-                ],
-                "display_name": "Actions",
-                "advanced": false,
-                "api_editable": false,
-                "dynamic": false,
-                "info": "Modify tool names and descriptions to help agents understand when to use each tool.",
-                "real_time_refresh": true,
-                "title_case": false,
-                "track_in_telemetry": false,
-                "type": "tools",
-                "_input_type": "ToolsInput"
-              },
-              "_frontend_node_flow_id": {
-                "value": "017ff67c-0b52-4b39-ac85-7a9248156cf9"
-              },
-              "_frontend_node_folder_id": {
-                "value": "a2d59350-41bd-42ff-9b85-b20e8c91a63d"
-              },
-              "is_refresh": false
-            },
-            "description": "Memanggil Math Tutor Agent melalui Langflow API.",
-            "icon": "calculator",
-            "base_classes": [
-              "Text"
-            ],
-            "display_name": "Math Tutor API Tool",
-            "documentation": "",
-            "minimized": false,
-            "custom_fields": {},
-            "output_types": [],
-            "pinned": false,
-            "conditional_paths": [],
-            "frozen": false,
-            "outputs": [
-              {
-                "types": [
-                  "Tool"
-                ],
-                "selected": "Tool",
-                "name": "component_as_tool",
-                "hidden": null,
-                "display_name": "Toolset",
-                "method": "to_toolkit",
-                "value": "__UNDEFINED__",
-                "cache": true,
-                "required_inputs": null,
-                "allows_loop": false,
-                "loop_types": null,
-                "group_outputs": false,
-                "options": null,
-                "tool_mode": true
-              }
-            ],
-            "field_order": [
-              "question"
-            ],
-            "beta": false,
-            "legacy": false,
-            "edited": true,
-            "metadata": {
-              "module": "custom_components.math_tutor_api_tool",
-              "code_hash": "92a0f7f5bd53",
-              "dependencies": {
-                "total_dependencies": 2,
-                "dependencies": [
-                  {
-                    "name": "langflow",
-                    "version": "1.12.2"
-                  },
-                  {
-                    "name": "requests",
-                    "version": "2.34.2"
-                  }
-                ]
-              }
-            },
-            "tool_mode": true,
-            "last_updated": "2026-10-14T08:34:56.738Z",
-            "lf_version": "1.12.4"
-          },
-          "showNode": true,
-          "type": "MathTutorAPITool",
-          "id": "CustomComponent-aoG7C"
-        },
-        "selected": false,
-        "dragging": false,
-        "measured": {
-          "width": 320,
-          "height": 210
-        }
-      },
-      {
         "id": "CielMemorySearch-BC6pl",
         "type": "genericNode",
         "position": {
@@ -4508,6 +4330,514 @@
           "width": 320,
           "height": 576
         }
+      },
+      {
+        "id": "RunFlow-m4thT",
+        "type": "genericNode",
+        "position": {
+          "x": -332.0373200945792,
+          "y": 220.8336523591831
+        },
+        "data": {
+          "node": {
+            "template": {
+              "_type": "Component",
+              "cache_flow": {
+                "_input_type": "BoolInput",
+                "advanced": true,
+                "api_editable": false,
+                "display_name": "Cache Flow",
+                "dynamic": false,
+                "info": "Whether to cache the selected flow.",
+                "list": false,
+                "list_add_label": "Add More",
+                "name": "cache_flow",
+                "override_skip": false,
+                "placeholder": "",
+                "required": false,
+                "show": true,
+                "title_case": false,
+                "tool_mode": false,
+                "trace_as_metadata": true,
+                "track_in_telemetry": true,
+                "type": "bool",
+                "value": false
+              },
+              "code": {
+                "advanced": true,
+                "api_editable": false,
+                "dynamic": true,
+                "fileTypes": [],
+                "file_path": "",
+                "info": "",
+                "list": false,
+                "load_from_db": false,
+                "multiline": true,
+                "name": "code",
+                "password": false,
+                "placeholder": "",
+                "required": true,
+                "show": true,
+                "title_case": false,
+                "type": "code",
+                "value": "from copy import deepcopy\nfrom datetime import datetime\nfrom typing import Any\n\nfrom lfx.base.tools.run_flow import RunFlowBaseComponent\nfrom lfx.log.logger import logger\nfrom lfx.schema.data import Data\nfrom lfx.schema.dotdict import dotdict\n\n\nclass RunFlowComponent(RunFlowBaseComponent):\n    display_name = \"Run Flow\"\n    description = (\n        \"Executes another flow from within the same project. Can also be used as a tool for agents.\"\n        \" \\n **Select a Flow to use the tool mode**\"\n    )\n    documentation: str = \"https://docs.langflow.org/run-flow\"\n    beta = True\n    name = \"RunFlow\"\n    icon = \"Workflow\"\n\n    # Keep the concrete class templates detached from the base-class templates;\n    # Component.__init__ still makes the per-instance copies used at runtime.\n    inputs = deepcopy(RunFlowBaseComponent.get_base_inputs())\n    outputs = deepcopy(RunFlowBaseComponent.get_base_outputs())\n\n    async def update_build_config(\n        self,\n        build_config: dotdict,\n        field_value: Any,\n        field_name: str | None = None,\n    ):\n        missing_keys = [key for key in self.default_keys if key not in build_config]\n        for key in missing_keys:  # TODO: create a defaults dict to avoid hardcoding the defaults here\n            if key == \"flow_name_selected\":\n                build_config[key] = {\"options\": [], \"options_metadata\": [], \"value\": None}\n            elif key == \"flow_id_selected\":\n                build_config[key] = {\"value\": None}\n            elif key == \"cache_flow\":\n                build_config[key] = {\"value\": False}\n            else:\n                build_config[key] = {}\n        if field_name == \"flow_name_selected\" and (build_config.get(\"is_refresh\", False) or field_value is None):\n            # refresh button was clicked or componented was initialized, so list the flows\n            options: list[str] = await self.alist_flows_by_flow_folder()\n            build_config[\"flow_name_selected\"][\"options\"] = [flow.data[\"name\"] for flow in options]\n            build_config[\"flow_name_selected\"][\"options_metadata\"] = []\n            for flow in options:\n                # populate options_metadata\n                build_config[\"flow_name_selected\"][\"options_metadata\"].append(\n                    {\"id\": flow.data[\"id\"], \"updated_at\": flow.data[\"updated_at\"]}\n                )\n                # update selected flow if it is stale\n                if str(flow.data[\"id\"]) == self.flow_id_selected:\n                    await self.check_and_update_stale_flow(flow, build_config)\n        elif field_name in {\"flow_name_selected\", \"flow_id_selected\"} and field_value is not None:\n            # flow was selected by name or id, so get the flow and update the bcfg\n            try:\n                # derive flow id if the field_name is flow_name_selected\n                build_config[\"flow_id_selected\"][\"value\"] = (\n                    self.get_selected_flow_meta(build_config, \"id\") or build_config[\"flow_id_selected\"][\"value\"]\n                )\n                updated_at = self.get_selected_flow_meta(build_config, \"updated_at\")\n                await self.load_graph_and_update_cfg(\n                    build_config, build_config[\"flow_id_selected\"][\"value\"], updated_at\n                )\n            except Exception as e:\n                msg = f\"Error building graph for flow {field_value}\"\n                await logger.aexception(msg)\n                raise RuntimeError(msg) from e\n\n        return build_config\n\n    def get_selected_flow_meta(self, build_config: dotdict, field: str) -> dict:\n        \"\"\"Get the selected flow's metadata from the build config.\"\"\"\n        return build_config.get(\"flow_name_selected\", {}).get(\"selected_metadata\", {}).get(field)\n\n    async def load_graph_and_update_cfg(\n        self,\n        build_config: dotdict,\n        flow_id: str,\n        updated_at: str | datetime,\n    ) -> None:\n        \"\"\"Load a flow's graph and update the build config.\"\"\"\n        graph = await self.get_graph(\n            flow_id_selected=flow_id,\n            updated_at=self.get_str_isots(updated_at),\n        )\n        self.update_build_config_from_graph(build_config, graph)\n\n    def should_update_stale_flow(self, flow: Data, build_config: dotdict) -> bool:\n        \"\"\"Check if the flow should be updated.\"\"\"\n        return (\n            (updated_at := self.get_str_isots(flow.data[\"updated_at\"]))  # true updated_at date just fetched from db\n            and (stale_at := self.get_selected_flow_meta(build_config, \"updated_at\"))  # outdated date in bcfg\n            and self._parse_timestamp(updated_at) > self._parse_timestamp(stale_at)  # stale flow condition\n        )\n\n    async def check_and_update_stale_flow(self, flow: Data, build_config: dotdict) -> None:\n        \"\"\"Check if the flow should be updated and update it if necessary.\"\"\"\n        # TODO: improve contract/return value\n        if self.should_update_stale_flow(flow, build_config):\n            await self.load_graph_and_update_cfg(\n                build_config,\n                flow.data[\"id\"],\n                flow.data[\"updated_at\"],\n            )\n\n    def get_str_isots(self, date: datetime | str) -> str:\n        \"\"\"Get a string timestamp from a datetime or string.\"\"\"\n        return date.isoformat() if hasattr(date, \"isoformat\") else date\n"
+              },
+              "flow_id_selected": {
+                "_input_type": "StrInput",
+                "advanced": false,
+                "api_editable": false,
+                "display_name": "Flow ID",
+                "dynamic": false,
+                "info": "The ID of the flow to run.",
+                "list": false,
+                "list_add_label": "Add More",
+                "load_from_db": false,
+                "name": "flow_id_selected",
+                "override_skip": true,
+                "placeholder": "",
+                "required": false,
+                "show": false,
+                "title_case": false,
+                "tool_mode": false,
+                "trace_as_metadata": true,
+                "track_in_telemetry": false,
+                "type": "str",
+                "value": "411fae9c-987f-4ccb-907d-fb499965eea6"
+              },
+              "flow_name_selected": {
+                "_input_type": "DropdownInput",
+                "advanced": false,
+                "api_editable": false,
+                "combobox": false,
+                "dialog_inputs": {},
+                "display_name": "Flow Name",
+                "dynamic": false,
+                "external_options": {},
+                "info": "The name of the flow to run.",
+                "name": "flow_name_selected",
+                "options": [
+                  "Vision Preprocessor",
+                  "Multi-Agent Supervisor",
+                  "Math Vision Tutor",
+                  "Math Tutor Agent",
+                  "Web Research Assistant",
+                  "Knowledge Retriever",
+                  "Verified Data Analyst",
+                  "Data Analysis Assistant",
+                  "Knowledge Base",
+                  "New Flow",
+                  "RAG",
+                  "Sentiment Analysis (STARTER)"
+                ],
+                "options_metadata": [
+                  {
+                    "id": "22883c78-a0f7-4820-9625-7fd3e63e47c4",
+                    "updated_at": "2026-09-29T15:54:36.533867"
+                  },
+                  {
+                    "id": "4166c4a3-3926-433e-a48f-d812bc8efb99",
+                    "updated_at": "2026-09-29T14:20:46.143134"
+                  },
+                  {
+                    "id": "93b1caca-fba0-4865-aefa-9561feec4941",
+                    "updated_at": "2026-09-29T14:17:15.084181"
+                  },
+                  {
+                    "id": "411fae9c-987f-4ccb-907d-fb499965eea6",
+                    "updated_at": "2026-09-29T13:01:17.750294"
+                  },
+                  {
+                    "id": "43ddd876-8835-4e14-8125-307eb928f75a",
+                    "updated_at": "2026-09-29T03:00:05.422033"
+                  },
+                  {
+                    "id": "dfdf69bb-2fb7-4671-936b-1cdeb398e753",
+                    "updated_at": "2026-09-28T17:39:37.470836"
+                  },
+                  {
+                    "id": "5d4c447c-83e9-47d3-bd21-6c15888e5f0a",
+                    "updated_at": "2026-09-28T16:37:58.632993"
+                  },
+                  {
+                    "id": "0523aef6-0b6c-459a-8a1c-80b0c9a57ff9",
+                    "updated_at": "2026-09-28T16:13:27.010906"
+                  },
+                  {
+                    "id": "dabbf04e-aa9d-4f3e-b6c1-d8a8567583bd",
+                    "updated_at": "2026-09-28T15:31:21.964438"
+                  },
+                  {
+                    "id": "a80b8365-9252-4847-b74a-d1afcc0c29dd",
+                    "updated_at": "2026-09-28T13:35:28.764116"
+                  },
+                  {
+                    "id": "98f50138-68e7-42a4-91ca-56378d5e418c",
+                    "updated_at": "2026-09-28T12:47:02.442071"
+                  },
+                  {
+                    "id": "f1e4f424-b5e9-4e34-88e1-c41847663873",
+                    "updated_at": "2026-09-25T14:46:53.009990"
+                  }
+                ],
+                "override_skip": false,
+                "placeholder": "",
+                "real_time_refresh": true,
+                "refresh_button": true,
+                "required": false,
+                "show": true,
+                "title_case": false,
+                "toggle": false,
+                "tool_mode": false,
+                "trace_as_metadata": true,
+                "track_in_telemetry": true,
+                "type": "str",
+                "value": "Math Tutor Agent",
+                "selected_metadata": {
+                  "id": "411fae9c-987f-4ccb-907d-fb499965eea6",
+                  "updated_at": "2026-10-04T09:17:52+00:00"
+                }
+              },
+              "session_id": {
+                "_input_type": "MessageTextInput",
+                "advanced": true,
+                "api_editable": false,
+                "display_name": "Session ID",
+                "dynamic": false,
+                "info": "The session ID to run the flow in.",
+                "input_types": [
+                  "Message"
+                ],
+                "list": false,
+                "list_add_label": "Add More",
+                "load_from_db": false,
+                "name": "session_id",
+                "override_skip": false,
+                "placeholder": "",
+                "required": false,
+                "show": true,
+                "title_case": false,
+                "tool_mode": false,
+                "trace_as_input": true,
+                "trace_as_metadata": true,
+                "track_in_telemetry": false,
+                "type": "str",
+                "value": ""
+              },
+              "ChatInput-CSF4n~input_value": {
+                "_input_type": "MultilineInput",
+                "advanced": false,
+                "ai_enabled": false,
+                "api_editable": false,
+                "copy_field": false,
+                "display_name": "Input Text (Chat Input)",
+                "dynamic": false,
+                "info": "Message to be passed as input.",
+                "input_types": [
+                  "Message"
+                ],
+                "list": false,
+                "list_add_label": "Add More",
+                "load_from_db": false,
+                "multiline": true,
+                "name": "ChatInput-CSF4n~input_value",
+                "override_skip": false,
+                "password": false,
+                "placeholder": "",
+                "required": false,
+                "show": true,
+                "title_case": false,
+                "tool_mode": true,
+                "trace_as_input": true,
+                "trace_as_metadata": true,
+                "track_in_telemetry": false,
+                "type": "str",
+                "value": ""
+              },
+              "ChatInput-CSF4n~should_store_message": {
+                "_input_type": "BoolInput",
+                "advanced": true,
+                "api_editable": false,
+                "display_name": "Store Messages (Chat Input)",
+                "dynamic": false,
+                "info": "Store the message in the history.",
+                "list": false,
+                "list_add_label": "Add More",
+                "name": "ChatInput-CSF4n~should_store_message",
+                "override_skip": false,
+                "placeholder": "",
+                "required": false,
+                "show": true,
+                "title_case": false,
+                "tool_mode": false,
+                "trace_as_metadata": true,
+                "track_in_telemetry": true,
+                "type": "bool",
+                "value": true,
+                "input_types": []
+              },
+              "ChatInput-CSF4n~sender": {
+                "_input_type": "DropdownInput",
+                "advanced": true,
+                "api_editable": false,
+                "combobox": false,
+                "dialog_inputs": {},
+                "display_name": "Sender Type (Chat Input)",
+                "dynamic": false,
+                "external_options": {},
+                "info": "Type of sender.",
+                "name": "ChatInput-CSF4n~sender",
+                "options": [
+                  "Machine",
+                  "User"
+                ],
+                "options_metadata": [],
+                "override_skip": false,
+                "placeholder": "",
+                "required": false,
+                "show": true,
+                "title_case": false,
+                "toggle": false,
+                "tool_mode": false,
+                "trace_as_metadata": true,
+                "track_in_telemetry": true,
+                "type": "str",
+                "value": "User",
+                "input_types": [
+                  "Message"
+                ]
+              },
+              "ChatInput-CSF4n~sender_name": {
+                "_input_type": "MessageTextInput",
+                "advanced": true,
+                "api_editable": false,
+                "display_name": "Sender Name (Chat Input)",
+                "dynamic": false,
+                "info": "Name of the sender.",
+                "input_types": [
+                  "Message"
+                ],
+                "list": false,
+                "list_add_label": "Add More",
+                "load_from_db": false,
+                "name": "ChatInput-CSF4n~sender_name",
+                "override_skip": false,
+                "placeholder": "",
+                "required": false,
+                "show": true,
+                "title_case": false,
+                "tool_mode": false,
+                "trace_as_input": true,
+                "trace_as_metadata": true,
+                "track_in_telemetry": false,
+                "type": "str",
+                "value": "User"
+              },
+              "ChatInput-CSF4n~session_id": {
+                "_input_type": "MessageTextInput",
+                "advanced": true,
+                "api_editable": false,
+                "display_name": "Session ID (Chat Input)",
+                "dynamic": false,
+                "info": "The session ID of the chat. If empty, the current session ID parameter will be used.",
+                "input_types": [
+                  "Message"
+                ],
+                "list": false,
+                "list_add_label": "Add More",
+                "load_from_db": false,
+                "name": "ChatInput-CSF4n~session_id",
+                "override_skip": false,
+                "placeholder": "",
+                "required": false,
+                "show": true,
+                "title_case": false,
+                "tool_mode": false,
+                "trace_as_input": true,
+                "trace_as_metadata": true,
+                "track_in_telemetry": false,
+                "type": "str",
+                "value": ""
+              },
+              "ChatInput-CSF4n~context_id": {
+                "_input_type": "MessageTextInput",
+                "advanced": true,
+                "api_editable": false,
+                "display_name": "Context ID (Chat Input)",
+                "dynamic": false,
+                "info": "The context ID of the chat. Adds an extra layer to the local memory.",
+                "input_types": [
+                  "Message"
+                ],
+                "list": false,
+                "list_add_label": "Add More",
+                "load_from_db": false,
+                "name": "ChatInput-CSF4n~context_id",
+                "override_skip": false,
+                "placeholder": "",
+                "required": false,
+                "show": true,
+                "title_case": false,
+                "tool_mode": false,
+                "trace_as_input": true,
+                "trace_as_metadata": true,
+                "track_in_telemetry": false,
+                "type": "str",
+                "value": ""
+              },
+              "ChatInput-CSF4n~files": {
+                "_input_type": "FileInput",
+                "advanced": true,
+                "api_editable": false,
+                "display_name": "Files (Chat Input)",
+                "dynamic": false,
+                "fileTypes": [
+                  "csv",
+                  "json",
+                  "pdf",
+                  "txt",
+                  "md",
+                  "mdx",
+                  "yaml",
+                  "yml",
+                  "xml",
+                  "html",
+                  "htm",
+                  "docx",
+                  "py",
+                  "sh",
+                  "sql",
+                  "js",
+                  "ts",
+                  "tsx",
+                  "jpg",
+                  "jpeg",
+                  "png",
+                  "bmp",
+                  "image"
+                ],
+                "file_path": "",
+                "info": "Files to be sent with the message.",
+                "list": true,
+                "list_add_label": "Add More",
+                "name": "ChatInput-CSF4n~files",
+                "override_skip": false,
+                "placeholder": "",
+                "required": false,
+                "show": true,
+                "temp_file": true,
+                "title_case": false,
+                "tool_mode": false,
+                "trace_as_metadata": true,
+                "track_in_telemetry": false,
+                "type": "file",
+                "value": "",
+                "input_types": []
+              },
+              "tools_metadata": {
+                "tool_mode": false,
+                "trace_as_metadata": true,
+                "is_list": true,
+                "list_add_label": "Add More",
+                "override_skip": false,
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "name": "tools_metadata",
+                "value": [
+                  {
+                    "name": "Math-Tutor-Agent_tool",
+                    "description": "Menyelesaikan soal matematika (aljabar, limit, kalkulus, aritmetika) langkah demi langkah dengan Math Tutor Agent. Kirim soal lengkap sebagai teks.",
+                    "tags": [
+                      "Math-Tutor-Agent_tool"
+                    ],
+                    "status": true,
+                    "approval_actions": [],
+                    "display_name": "_resolve_flow_output__ChatOutput_tCqsp__message",
+                    "display_description": "Executes another flow from within the same project. Can also be used as a tool for agents. \n **Select a Flow to use the tool mode**",
+                    "readonly": false,
+                    "args": {
+                      "flow_tweak_data": {
+                        "$ref": "#/$defs/InnerModel"
+                      }
+                    }
+                  }
+                ],
+                "display_name": "Actions",
+                "advanced": false,
+                "api_editable": false,
+                "dynamic": false,
+                "info": "Modify tool names and descriptions to help agents understand when to use each tool.",
+                "real_time_refresh": true,
+                "title_case": false,
+                "track_in_telemetry": false,
+                "type": "tools",
+                "_input_type": "ToolsInput"
+              }
+            },
+            "description": "Executes another flow from within the same project. Can also be used as a tool for agents. \n **Select a Flow to use the tool mode**",
+            "icon": "Workflow",
+            "base_classes": [],
+            "display_name": "Run Flow",
+            "documentation": "https://docs.langflow.org/run-flow",
+            "minimized": false,
+            "custom_fields": {},
+            "output_types": [],
+            "pinned": false,
+            "conditional_paths": [],
+            "frozen": false,
+            "outputs": [
+              {
+                "types": [
+                  "Tool"
+                ],
+                "selected": "Tool",
+                "name": "component_as_tool",
+                "hidden": null,
+                "display_name": "Toolset",
+                "method": "to_toolkit",
+                "value": "__UNDEFINED__",
+                "cache": true,
+                "required_inputs": null,
+                "allows_loop": false,
+                "loop_types": null,
+                "group_outputs": false,
+                "options": null,
+                "tool_mode": true
+              }
+            ],
+            "field_order": [
+              "flow_name_selected",
+              "flow_id_selected",
+              "session_id",
+              "cache_flow"
+            ],
+            "beta": true,
+            "legacy": false,
+            "edited": false,
+            "metadata": {
+              "module": "custom_components.run_flow",
+              "code_hash": "ea901208037d",
+              "dependencies": {
+                "total_dependencies": 1,
+                "dependencies": [
+                  {
+                    "name": "lfx",
+                    "version": "1.12.4"
+                  }
+                ]
+              }
+            },
+            "tool_mode": true,
+            "add_tool_output": true
+          },
+          "showNode": true,
+          "type": "RunFlow",
+          "id": "RunFlow-m4thT"
+        },
+        "measured": {
+          "width": 320,
+          "height": 323
+        }
       }
     ],
     "edges": [
@@ -4684,8 +5014,8 @@
         "className": ""
       },
       {
-        "source": "CustomComponent-aoG7C",
-        "sourceHandle": "{œdataTypeœ:œMathTutorAPIToolœ,œidœ:œCustomComponent-aoG7Cœ,œnameœ:œcomponent_as_toolœ,œoutput_typesœ:[œToolœ]}",
+        "source": "RunFlow-m4thT",
+        "sourceHandle": "{œdataTypeœ:œRunFlowœ,œidœ:œRunFlow-m4thTœ,œnameœ:œcomponent_as_toolœ,œoutput_typesœ:[œToolœ]}",
         "target": "Agent-puarO",
         "targetHandle": "{œfieldNameœ:œtoolsœ,œidœ:œAgent-puarOœ,œinputTypesœ:[œToolœ],œtypeœ:œotherœ}",
         "data": {
@@ -4698,15 +5028,15 @@
             "type": "other"
           },
           "sourceHandle": {
-            "dataType": "MathTutorAPITool",
-            "id": "CustomComponent-aoG7C",
+            "dataType": "RunFlow",
+            "id": "RunFlow-m4thT",
             "name": "component_as_tool",
             "output_types": [
               "Tool"
             ]
           }
         },
-        "id": "xy-edge__CustomComponent-aoG7C{œdataTypeœ:œMathTutorAPIToolœ,œidœ:œCustomComponent-aoG7Cœ,œnameœ:œcomponent_as_toolœ,œoutput_typesœ:[œToolœ]}-Agent-puarO{œfieldNameœ:œtoolsœ,œidœ:œAgent-puarOœ,œinputTypesœ:[œToolœ],œtypeœ:œotherœ}",
+        "id": "xy-edge__RunFlow-m4thT{œdataTypeœ:œRunFlowœ,œidœ:œRunFlow-m4thTœ,œnameœ:œcomponent_as_toolœ,œoutput_typesœ:[œToolœ]}-Agent-puarO{œfieldNameœ:œtoolsœ,œidœ:œAgent-puarOœ,œinputTypesœ:[œToolœ],œtypeœ:œotherœ}",
         "selected": false,
         "animated": false,
         "className": ""

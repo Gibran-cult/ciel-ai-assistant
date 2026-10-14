@@ -751,7 +751,8 @@ def ask_langflow(message, tweaks=None):
             params={
                 "stream": "false"
             },
-            timeout=120,
+            # Pesan bergambar + beberapa tool bisa > 2 menit di backend CPU.
+            timeout=240,
         )
 
         elapsed = time.perf_counter() - start_time
