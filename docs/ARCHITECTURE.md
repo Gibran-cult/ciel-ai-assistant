@@ -17,7 +17,7 @@ User
  |
  v
 Streamlit app (app.py)
- |   session_id = <user>-<chat id>, tweaks: memory user_id, images
+ |   session_id = <user>-<chat id>, tweaks: memory_owner, images
  v
 Chat Input
  |
@@ -27,8 +27,8 @@ Ciel Vision Router
  v
 Agent
  +-- DeepSeek Model
- +-- Ciel Memory Search   (filtered by user_id)
- +-- Ciel Memory Store    (tagged with user_id)
+ +-- Ciel Memory Search   (filtered by owner)
+ +-- Ciel Memory Store    (tagged with owner)
  +-- Math Tutor Agent     (Run Flow)
  +-- Verified Data Analyst (Run Flow)
  +-- Knowledge Retriever  (Run Flow)
@@ -117,14 +117,14 @@ The local Chroma database is stored under:
 
 ~/.ciel_ai/long_term_memory
 
-### Memory Ownership (v1.3.0)
+### Memory Ownership (v1.4.1)
 
-Both memory components have a `user_id` input that is not a tool argument: the app sets it through `tweaks`, so the Agent cannot read or write another user's memories.
+Both memory components have a `memory_owner` input that is not a tool argument: the app sets it through `tweaks`, so the Agent cannot read or write another user's memories.
 
-- Signed-in user (Google login via `st.login`): `user_id` is a hash of the account.
-- Anonymous visitor: `user_id` is empty and both tools refuse to store or search.
+- Signed-in user (Google login via `st.login`): `memory_owner` is a hash of the account.
+- Anonymous visitor: `memory_owner` is empty and both tools refuse to store or search.
 
-Store writes `user_id` into each memory's metadata; Search filters with `where={"user_id": ...}`. Memories saved by older flows have no owner until `tools/migrate_memory_owner.py` assigns them.
+Store writes the owner into each memory's `user_id` metadata field; Search filters with `where={"user_id": ...}`. Memories saved by older flows have no owner until `tools/migrate_memory_owner.py` assigns them.
 
 ### Ciel Memory Store
 
@@ -311,6 +311,8 @@ v1.0.0 is preserved as the production baseline.
 v1.1.0 contains the long-term memory context optimization while preserving the overall orchestration architecture.
 
 v1.2.0 replaces the always-on vision preprocessor with Ciel Vision Router and runs Math Tutor as a native Run Flow tool.
+
+v1.4.1 renames the memory components' owner input from `user_id` to `memory_owner`. Langflow's `Component` already has a read-only `user_id` (the Langflow account that owns the flow), which shadowed the input in v1.3.0/v1.4.0, so every visitor was stored under that account. Component inputs must not reuse Langflow's own attribute names.
 
 v1.4.0 changes only the Agent system prompt: two persona modes (warm default, "Great Sage" analysis mode), anti-fabrication rules, and study-companion behavior.
 

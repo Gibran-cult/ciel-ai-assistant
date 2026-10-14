@@ -367,7 +367,7 @@ class TestResiliencePolicy(unittest.TestCase):
     def test_session_id_and_tweaks_are_sent(self):
 
         tweaks = {
-            "CielMemorySearch-BC6pl": {"user_id": "abc"},
+            "CielMemorySearch-BC6pl": {"memory_owner": "abc"},
         }
 
         with patch(
