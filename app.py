@@ -836,11 +836,14 @@ def ask_langflow(message, tweaks=None):
         elapsed = time.perf_counter() - start_time
         status = response.status_code
 
+        # Detail error Langflow hanya masuk log server, tidak ditampilkan
+        # ke pengguna. Tanpa ini penyebab HTTP 500 tidak bisa dilacak.
         logger.error(
-            "http_error id=%s status=%s elapsed=%.2fs",
+            "http_error id=%s status=%s elapsed=%.2fs detail=%s",
             request_id,
             status,
             elapsed,
+            (getattr(response, "text", "") or "")[:500],
         )
 
         if status in (401, 403):
