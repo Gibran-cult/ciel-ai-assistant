@@ -60,5 +60,6 @@ jobs:
             tests.test_resilience \
             tests.test_rate_limit \
             tests.test_project_context \
+            tests.test_live_scripts \
             tests.test_performance_snapshot \
             tests.test_pricing

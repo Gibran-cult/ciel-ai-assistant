@@ -59,6 +59,30 @@ def run_script(path):
 # RESPONSE QUALITY PARSER
 # ============================================================
 
+def parse_failed_cases(output):
+    """
+    Read failing case IDs and their reasons from test_response_quality.py
+    output ("❌ <id> FAIL" followed by "└─ <reason>" lines), so a
+    degraded run says which case failed.
+    """
+    failed = []
+
+    for line in (output or "").splitlines():
+
+        match = re.match(r"^\s*❌\s+(\S+)\s+FAIL\s*$", line)
+
+        if match:
+            failed.append({"id": match.group(1), "reasons": []})
+            continue
+
+        reason = re.match(r"^\s*└─\s*(.+)$", line)
+
+        if reason and failed:
+            failed[-1]["reasons"].append(reason.group(1).strip())
+
+    return failed
+
+
 def parse_response_quality(output):
     if not output:
         return {
@@ -332,6 +356,16 @@ def main():
     response_quality = parse_response_quality(
         response_quality_result["output"]
     )
+
+    response_quality["failed_cases"] = parse_failed_cases(
+        response_quality_result["output"]
+    )
+
+    for case in response_quality["failed_cases"]:
+        print(
+            f"[FAILED CASE] {case['id']}: "
+            + ("; ".join(case["reasons"]) or "no reason printed")
+        )
 
     # DEBUG OUTPUT ONLY WHEN PARSER FAILS
     if response_quality["total"] == 0:

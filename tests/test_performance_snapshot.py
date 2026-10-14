@@ -7,6 +7,11 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
+try:
+    from tests.live_session import answer_from, app_tweaks, new_session_id
+except ModuleNotFoundError:  # run as a script: python tests/<file>.py
+    from live_session import answer_from, app_tweaks, new_session_id
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -82,6 +87,8 @@ def ask_once():
         "input_value": QUESTION,
         "input_type": "chat",
         "output_type": "chat",
+        "session_id": new_session_id("perf"),
+        "tweaks": app_tweaks(),
     }
 
     start = time.perf_counter()
@@ -109,12 +116,7 @@ def ask_once():
 
     data = response.json()
 
-    answer = (
-        data["outputs"][0]
-        ["outputs"][0]
-        ["results"]["message"]
-        ["data"]["text"]
-    )
+    answer = answer_from(data)
 
     if not answer.strip():
         raise RuntimeError(

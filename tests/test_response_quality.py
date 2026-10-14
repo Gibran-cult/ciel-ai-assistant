@@ -8,6 +8,11 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
+try:
+    from tests.live_session import answer_from, app_tweaks, new_session_id
+except ModuleNotFoundError:  # run as a script: python tests/<file>.py
+    from live_session import answer_from, app_tweaks, new_session_id
+
 
 # ============================================================
 # CONFIGURATION
@@ -116,6 +121,8 @@ def ask_ciel(
         "input_value": question,
         "input_type": "chat",
         "output_type": "chat",
+        "session_id": new_session_id("quality"),
+        "tweaks": app_tweaks(),
     }
 
     response = requests.post(
@@ -136,12 +143,7 @@ def ask_ciel(
 
     data = response.json()
 
-    return (
-        data["outputs"][0]
-        ["outputs"][0]
-        ["results"]["message"]
-        ["data"]["text"]
-    )
+    return answer_from(data)
 
 
 # ============================================================
@@ -236,13 +238,13 @@ def ask_ciel_with_image(
     payload = {
         "output_type": "chat",
         "input_type": "chat",
-
-        "tweaks": {
+        "session_id": new_session_id("quality-vision"),
+        "tweaks": app_tweaks({
             "ChatInput-X8W7I": {
                 "files": file_path,
                 "input_value": question
             }
-        }
+        })
     }
 
     response = requests.post(
@@ -263,12 +265,7 @@ def ask_ciel_with_image(
 
     data = response.json()
 
-    return (
-        data["outputs"][0]
-        ["outputs"][0]
-        ["results"]["message"]
-        ["data"]["text"]
-    )
+    return answer_from(data)
 
 
 # ============================================================

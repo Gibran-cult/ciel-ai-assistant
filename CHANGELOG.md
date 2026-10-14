@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Live test scripts: one session per request, app tweaks, user-visible answer
+- Problem: `tests/test_response_quality.py`, `tests/test_performance_snapshot.py` and `tests/test_ciel_master.py` sent no `session_id`, so every live test used the production flow's default Langflow session. Its research sub-agent history had grown to ~490k characters (until the sub-agent's `n_messages` was lowered on 2026-10-14), test cases influenced each other, and a 9/9 suite flaked to 8/9. The scripts also judged `data.text`, which in Langflow 1.12 joins every Agent round, so duplicated text was evaluated instead of the answer users see.
+- New `tests/live_session.py`, used by all three scripts: a fresh `session_id` per request (`livetest-<label>-<id>`), the tweaks the app sends for an anonymous visitor (memory off, no tables), and `answer_from()`, which runs `app.final_answer_text` loaded from `app.py`, so tests and app share one implementation.
+- `tests/collect_quality.py` records failing response-quality cases with their reasons (`response_quality.failed_cases`) and prints them, so a degraded run says which case failed.
+- `tests/test_live_scripts.py` (offline, in CI) checks that every run payload in the live scripts has `session_id` and `tweaks`, that none reads `["data"]["text"]` directly, that two cases get two sessions and the vision case keeps its image tweak, and the failed-case parser.
+- Production sub-flow change, made in Langflow on 2026-10-14 (sub-flows are not in this repo; backups in `~/.ciel_ai/flow_backups/subflow_*`): Agent `n_messages` in Web Research Assistant 100 -> 0 and in Math Tutor Agent 100 -> 4. The main Agent already sends sub-agents a complete question. Measured in one chat, the research sub-agent loaded 9,663 and 22,750 characters of unused history on the 2nd and 3rd research question, and 0 after the change. Answers kept their sources, and a math follow-up ("nilai di x = 2") was still answered correctly.
+
 ### Project files are no longer resent with every message
 - Problem: project file text (up to 150k characters) was added to every message in a project chat. Langflow stores each message with that text and the Agent loads the last 10 messages, so from the 3rd turn the same file reached the model several times in one request (up to 6 copies).
 - The app now sends project file text only for a new chat, when the project files change (`project_signature`), or every `PROJECT_CONTEXT_REFRESH_TURNS = 4` turns, before the last copy leaves the Agent's 10-message window. Other turns name the files ("isinya sudah dikirim di pesan sebelumnya") so the Agent uses the copy in its history. The record is kept per chat and updated only after a successful answer.
