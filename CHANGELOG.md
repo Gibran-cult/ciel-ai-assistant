@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Numbers from the user's own CSV/TSV files (flow v1.5.0)
+- Problem: Verified Data Analyst always reads the built-in `200_sales_data` file, and the routing sent every "dataset / CSV" question to it. A question about a user's own CSV could be answered with numbers from the sample dataset, labeled as verified.
+- New component **Ciel Table Analyst** (`flow/components/ciel_table_analyst.py`, tool `analyze_table`): describe, count, sum, mean, median, min, max, unique, top values, optionally per group, computed directly from the file without running model-written code. Number format is decided per column ("1.250.000" and "1.234,5" vs "1,234.5"), using Rupiah values or a ";" delimiter as hints for ambiguous values, and the result states how the column was read. Truncated files carry a warning.
+- The app keeps attached CSV/TSV files (and project CSV/TSV files) per chat, so follow-up questions work without re-uploading, and sends them through tweaks as base64. Plain JSON did not survive: Langflow runs str inputs through `unescape_string`, which turns every backslash-n into a newline; the tool always answered "no file" in the first live test.
+- The prompt now gets only a 20-row preview of each table instead of up to 60k characters, which also cuts tokens.
+- Prompt v14.1 routes by data source: user files to Ciel Table Analyst, the built-in sales dataset to Verified Data Analyst, never mixed. Verified Data Analyst's tool description says the same.
+- Tests: `tests/test_flow_v150_contract.py` covers the flow contract, the app wiring, number-format detection, the base64 path through a copy of Langflow's `unescape_string`, and the tool's answers on Indonesian-format data. The component was also run with Langflow's real `Component` class.
+- Live check on a separate v1.5.0 test flow (production untouched): "total omzet per cabang" on a ";"-separated Rupiah CSV gave Medan 5.205.250 and Makassar 4.130.500, the follow-up "rata-rata unitnya" gave 41,2, both exact; "total Sales_Amount pada dataset" without a file still went to Verified Data Analyst (1.065.600,71).
+- Quality run: response quality 8/9 in the collector run, then 9/9 in two reruns of `tests/test_response_quality.py` (26/27 overall). The collector does not record which case failed; the live test scripts send no `session_id`, so all cases share one Langflow session, which is the likely source of the flake. Median latency 18.9 s (v1.4.0: 16.2 s), P95 43.1 s (20.9 s), first request 50.6 s on a freshly imported flow.
+
 ### Fix: per-user memory isolation did not work (flow v1.4.1)
 - Found in production after switching to v1.4.0: an anonymous visitor's "ingat namaku ..." was stored, and another session could read it.
 - Root cause: the memory components' owner input was named `user_id`, but Langflow's `Component` already has a read-only `user_id` (the Langflow account that owns the flow). `self.user_id` returned that account id instead of the app's tweak, so every visitor shared one owner. The offline test missed it because its Langflow stub had no such attribute.

@@ -1,6 +1,8 @@
+import base64
 import hashlib
 import html
 import io
+import json
 import logging
 import os
 import re
@@ -555,6 +557,10 @@ CHAT_INPUT_ID = get_config("CHAT_INPUT_ID") or "ChatInput-X8W7I"
 # ID komponen memory di flow (v1.3.0); app mengirim pemilik memory lewat tweaks.
 MEMORY_SEARCH_ID = get_config("MEMORY_SEARCH_ID") or "CielMemorySearch-BC6pl"
 MEMORY_STORE_ID = get_config("MEMORY_STORE_ID") or "CielMemoryStore-uBmzx"
+
+# ID komponen Ciel Table Analyst di flow (v1.5.0); app mengirim file CSV/TSV
+# pengguna lewat tweaks agar angkanya dihitung langsung dari file.
+TABLE_ANALYST_ID = get_config("TABLE_ANALYST_ID") or "CielTableAnalyst-t4bL3"
 
 # Batas pesan per jam untuk menjaga biaya model dan beban backend.
 # Batas total anonim mencegah orang melewati batas dengan memuat ulang tab.
@@ -1238,7 +1244,7 @@ CAPABILITIES = (
     ("Riset anti-ngarang", "Jawaban riset disertai sumber. Kalau buktinya tidak ada, Ciel bilang belum tahu."),
     ("Teman belajar", "Menjelaskan bertahap, memberi latihan, dan mengingat progresmu (perlu login)."),
     ("Mode analisis", "Awali dengan &ldquo;analisis&rdquo; untuk jawaban terstruktur lengkap dengan tingkat keyakinan."),
-    ("Hitung &amp; data", "Angka dihitung oleh Math Tutor dan Data Analyst, bukan ditebak."),
+    ("Hitung &amp; data", "Angka dari CSV/TSV-mu dihitung langsung dari file, bukan ditebak."),
 )
 
 THINKING_HTML = (
@@ -1272,6 +1278,12 @@ THUMBNAIL_PX = 360
 MAX_FILES_PER_MESSAGE = 5
 MAX_FILE_CHARS = 60_000
 MAX_CONTEXT_CHARS = 150_000
+
+# CSV/TSV dihitung utuh oleh Ciel Table Analyst; prompt hanya berisi cuplikan.
+TABLE_FILE_TYPES = ("csv", "tsv")
+MAX_TABLE_CHARS = 1_000_000
+TABLE_PREVIEW_ROWS = 20
+MAX_CHAT_TABLES = 5
 HISTORY_LIMIT = 12
 DEFAULT_FILE_QUESTION = "Tolong baca dan rangkum file yang saya lampirkan."
 DEFAULT_IMAGE_QUESTION = "Tolong jelaskan gambar yang saya lampirkan."
@@ -1331,6 +1343,10 @@ def read_text_file(uploaded):
         return None, f"{uploaded.name}: bukan file teks."
 
     text = raw.decode("utf-8", errors="replace")
+
+    if file_extension(uploaded.name) in TABLE_FILE_TYPES:
+        return read_table_text(uploaded.name, text, len(raw)), None
+
     truncated = len(text) > MAX_FILE_CHARS
 
     if truncated:
@@ -1342,6 +1358,28 @@ def read_text_file(uploaded):
         "size": len(raw),
         "truncated": truncated,
     }, None
+
+
+def read_table_text(name, text, size):
+    """
+    CSV/TSV: simpan isi utuh untuk Ciel Table Analyst, dan hanya cuplikan
+    beberapa baris untuk prompt. Model tidak perlu (dan tidak boleh)
+    menghitung dari cuplikan, sehingga token tetap kecil.
+    """
+    lines = text.splitlines()
+    rows = max(len(lines) - 1, 0)
+
+    return {
+        "name": name,
+        "text": "\n".join(lines[: TABLE_PREVIEW_ROWS + 1]),
+        "size": size,
+        "truncated": False,
+        "rows": rows,
+        "table": {
+            "text": text[:MAX_TABLE_CHARS],
+            "truncated": len(text) > MAX_TABLE_CHARS,
+        },
+    }
 
 
 def build_payload(text, files, project_files):
@@ -1361,6 +1399,13 @@ def build_payload(text, files, project_files):
 
         cut = item.get("truncated") or len(body) < len(item["text"])
         note = " (dipotong)" if cut else ""
+
+        if "table" in item:
+            shown = min(item["rows"], TABLE_PREVIEW_ROWS)
+            note = (
+                f" (cuplikan {shown} dari {item['rows']} baris; "
+                "hitung angka dengan Ciel Table Analyst)"
+            )
 
         blocks.append(f"### {label}: {item['name']}{note}\n{body}")
 
@@ -1446,12 +1491,42 @@ def make_thumbnail(image):
     return {**image, "data": out.getvalue(), "mime": "image/jpeg"}
 
 
-def build_tweaks(image_paths=None):
+def chat_tables(chat):
+    """File CSV/TSV yang bisa dihitung di chat ini: file proyek + lampiran chat."""
+
+    tables = {
+        item["name"]: item["table"]
+        for item in project_files_for(chat["project_id"])
+        if "table" in item
+    }
+    tables.update(chat.get("tables", {}))
+
+    return tables
+
+
+def encode_tables(tables):
+    """
+    Base64 dari JSON tabel. Langflow mengubah setiap backslash-n di input
+    teks menjadi baris baru, yang merusak JSON biasa; base64 tidak memuat
+    backslash sehingga isi file sampai utuh ke Ciel Table Analyst.
+    """
+    if not tables:
+        return ""
+
+    raw = json.dumps(tables, ensure_ascii=False).encode("utf-8")
+
+    return base64.b64encode(raw).decode("ascii")
+
+
+def build_tweaks(image_paths=None, tables=None):
     owner = memory_owner_id()
 
     tweaks = {
         MEMORY_SEARCH_ID: {"memory_owner": owner},
         MEMORY_STORE_ID: {"memory_owner": owner},
+        TABLE_ANALYST_ID: {
+            "attached_tables": encode_tables(tables),
+        },
     }
 
     if image_paths:
@@ -1522,6 +1597,7 @@ def make_pending(text, uploaded_files):
         "text": text,
         "files": [f["name"] for f in files],
         "images": images,
+        "tables": {f["name"]: f["table"] for f in files if "table" in f},
         "payload": build_payload(
             text,
             files,
@@ -2196,6 +2272,15 @@ if pending_request:
         # dari konteks kosong dan riwayat Agent tidak tercampur antar pengguna.
         session_id = f"{user_key()}-{chat['id']}"
 
+        # Lampiran CSV/TSV tetap tersedia untuk pertanyaan lanjutan di chat ini.
+        stored_tables = chat.setdefault("tables", {})
+        stored_tables.update(pending_request.get("tables", {}))
+
+        while len(stored_tables) > MAX_CHAT_TABLES:
+            stored_tables.pop(next(iter(stored_tables)))
+
+        tables = chat_tables(chat)
+
         answer = check_rate_limit()
 
         if answer is None and pending_request["images"]:
@@ -2209,7 +2294,7 @@ if pending_request:
             else:
                 answer = ask_langflow(
                     pending_request["payload"],
-                    tweaks=build_tweaks(image_paths),
+                    tweaks=build_tweaks(image_paths, tables),
                     session_id=session_id,
                 )
 
@@ -2217,7 +2302,7 @@ if pending_request:
 
             answer = ask_langflow(
                 pending_request["payload"],
-                tweaks=build_tweaks(),
+                tweaks=build_tweaks(tables=tables),
                 session_id=session_id,
             )
 

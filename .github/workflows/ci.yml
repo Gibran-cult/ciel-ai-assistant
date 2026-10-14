@@ -44,6 +44,7 @@ jobs:
           python -m json.tool flow/v1.3.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
           python -m json.tool flow/v1.4.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
           python -m json.tool flow/v1.4.1/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
+          python -m json.tool flow/v1.5.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
 
       - name: Run offline test suite
         run: |
@@ -53,6 +54,7 @@ jobs:
             tests.test_flow_v130_contract \
             tests.test_flow_v140_contract \
             tests.test_flow_v141_contract \
+            tests.test_flow_v150_contract \
             tests.test_resilience \
             tests.test_rate_limit \
             tests.test_performance_snapshot \

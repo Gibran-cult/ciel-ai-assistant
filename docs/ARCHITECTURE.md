@@ -29,8 +29,9 @@ Agent
  +-- DeepSeek Model
  +-- Ciel Memory Search   (filtered by owner)
  +-- Ciel Memory Store    (tagged with owner)
+ +-- Ciel Table Analyst   (user CSV/TSV, sent by the app via tweaks)
  +-- Math Tutor Agent     (Run Flow)
- +-- Verified Data Analyst (Run Flow)
+ +-- Verified Data Analyst (Run Flow, built-in sales dataset only)
  +-- Knowledge Retriever  (Run Flow)
  +-- Web Research Assistant (Run Flow)
  |
@@ -175,7 +176,10 @@ The Agent uses task-based routing.
 Mathematics
     -> Math Tutor
 
-Dataset / Metrics
+User CSV/TSV file (attached or project file)
+    -> Ciel Table Analyst
+
+Built-in sales dataset (200_sales_data)
     -> Verified Data Analyst
 
 Knowledge Base / Internal Material
@@ -311,6 +315,8 @@ v1.0.0 is preserved as the production baseline.
 v1.1.0 contains the long-term memory context optimization while preserving the overall orchestration architecture.
 
 v1.2.0 replaces the always-on vision preprocessor with Ciel Vision Router and runs Math Tutor as a native Run Flow tool.
+
+v1.5.0 adds Ciel Table Analyst. Verified Data Analyst always reads the built-in `200_sales_data` file, so before v1.5.0 a question about a user's own CSV could be answered with numbers from that sample dataset. Now the app keeps each attached CSV/TSV (and project CSV/TSV files) per chat and sends them to Ciel Table Analyst through tweaks, base64-encoded because Langflow turns every backslash-n in a str input into a newline, which breaks plain JSON. The tool computes count/sum/mean/median/min/max/unique/top values (optionally per group) directly from the file without running model-written code, and decides per column whether "." or "," is the decimal mark. The prompt only gets a 20-row preview of each table, and Verified Data Analyst's tool description and the routing rules restrict it to the built-in dataset.
 
 v1.4.1 renames the memory components' owner input from `user_id` to `memory_owner`. Langflow's `Component` already has a read-only `user_id` (the Langflow account that owns the flow), which shadowed the input in v1.3.0/v1.4.0, so every visitor was stored under that account. Component inputs must not reuse Langflow's own attribute names.
 
