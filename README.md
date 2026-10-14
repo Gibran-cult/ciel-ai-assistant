@@ -86,7 +86,7 @@ FLOW_ID
 
 Do not place real credentials, passwords, API keys, or tokens in this README or source control.
 
-Optional: `CHAT_INPUT_ID` (defaults to the Chat Input component ID in the v1.1.0 flow).
+Optional: `CHAT_INPUT_ID` (defaults to the Chat Input component ID in the v1.1.0 flow) and `CONTACT_URL` (https:// or mailto: link used by the paid-plan buttons on the pricing page).
 
 A template is provided in `.streamlit/secrets.toml.example`. For local runs copy it to `.streamlit/secrets.toml` (git-ignored) or use a `.env` file.
 

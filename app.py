@@ -9,6 +9,8 @@ import requests
 import streamlit as st
 from dotenv import load_dotenv
 
+from pricing import render_pricing
+
 # ============================================================
 # LOGGING
 # ============================================================
@@ -198,6 +200,7 @@ header[data-testid="stHeader"] { background: transparent; }
     font-weight: 600;
 }
 .stApp .stButton > button[kind="primary"]:hover { background: #73cdbd; border-color: #73cdbd; }
+.st-key-nav { margin-top: 0.35rem; }
 .st-key-clearchat .stButton > button {
     border-color: transparent;
     color: var(--c-muted);
@@ -380,6 +383,7 @@ header[data-testid="stHeader"] { background: transparent; }
 /* ---------- Projects, history, files ---------- */
 [data-testid="stSidebar"] .stButton > button,
 [data-testid="stSidebar"] [data-testid="stPopover"] > button { width: 100%; }
+.st-key-nav .stButton > button,
 .st-key-projects .stButton > button,
 .st-key-history .stButton > button {
     justify-content: flex-start;
@@ -388,12 +392,15 @@ header[data-testid="stHeader"] { background: transparent; }
     color: var(--c-muted);
     min-height: 2.2rem;
 }
+.st-key-nav .stButton > button:hover,
 .st-key-projects .stButton > button:hover,
 .st-key-history .stButton > button:hover {
     background: var(--c-raised);
     color: var(--c-text);
     border-color: transparent;
 }
+[class*="st-key-navactive_"] .stButton > button,
+.stButton[class*="st-key-navactive_"] > button,
 [class*="st-key-projactive_"] .stButton > button,
 [class*="st-key-chatactive_"] .stButton > button,
 .stButton[class*="st-key-projactive_"] > button,
@@ -522,6 +529,9 @@ FLOW_ID = get_config("FLOW_ID")
 
 # ID komponen Chat Input di flow Langflow; dipakai untuk mengirim gambar.
 CHAT_INPUT_ID = get_config("CHAT_INPUT_ID") or "ChatInput-X8W7I"
+
+# Opsional: tujuan tombol paket berbayar di halaman harga (https:// atau mailto:).
+CONTACT_URL = get_config("CONTACT_URL")
 
 # Bersihkan URL
 if NGROK_URL:
@@ -1341,17 +1351,33 @@ def unpack_chat_input(value):
     return value["text"], list(value["files"] or [])
 
 
+def current_view():
+    # Disimpan di URL (?page=pricing) agar halaman harga bisa dibagikan.
+    return "pricing" if st.query_params.get("page") == "pricing" else "chat"
+
+
+def show_chat():
+    st.query_params.pop("page", None)
+
+
+def show_pricing():
+    st.query_params["page"] = "pricing"
+
+
 def new_chat():
+    show_chat()
     st.session_state.active_chat = None
     st.session_state.pending = None
 
 
 def select_chat(chat_id):
+    show_chat()
     st.session_state.active_chat = chat_id
     st.session_state.pending = None
 
 
 def select_project(project_id):
+    show_chat()
     st.session_state.active_project = project_id
     st.session_state.active_chat = None
     st.session_state.pending = None
@@ -1543,6 +1569,19 @@ with st.sidebar:
         icon=":material/add:",
         on_click=new_chat,
     )
+
+    with st.container(key="nav"):
+
+        st.button(
+            "Harga & paket",
+            key=(
+                "navactive_pricing"
+                if current_view() == "pricing"
+                else "nav_pricing"
+            ),
+            icon=":material/sell:",
+            on_click=show_pricing,
+        )
 
     # --------------------------------------------------------
     # PROJECTS
@@ -1760,6 +1799,16 @@ with st.container(key="topbar"):
         "</div>",
         unsafe_allow_html=True,
     )
+
+
+# ============================================================
+# PRICING PAGE
+# ============================================================
+# Dirender sebelum chat input supaya composer tidak muncul di halaman harga.
+
+if current_view() == "pricing":
+    render_pricing(contact_url=CONTACT_URL, on_start_chat=show_chat)
+    st.stop()
 
 
 # ============================================================
