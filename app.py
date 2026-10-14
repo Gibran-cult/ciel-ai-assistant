@@ -975,16 +975,21 @@ def ask_langflow(message, tweaks=None, session_id=None):
 
         except (KeyError, IndexError, TypeError):
 
+            # Isi response hanya masuk log server; pengguna publik tidak
+            # boleh melihat JSON mentah Langflow (struktur flow, isi tool).
             logger.error(
-                "response_parse_error id=%s elapsed=%.2fs",
+                "response_parse_error id=%s elapsed=%.2fs detail=%s",
                 request_id,
                 elapsed,
+                str(data)[:500],
             )
 
             return (
                 "⚠️ Response Langflow diterima, "
                 "tetapi format output tidak dikenali.\n\n"
-                f"```json\n{data}\n```"
+                "Silakan coba lagi. Jika terus terjadi, sampaikan kode "
+                "di bagian detail teknis kepada admin.\n\n"
+                f"Request ID: `{request_id}`"
             )
 
     except requests.exceptions.Timeout:
@@ -1070,16 +1075,19 @@ def ask_langflow(message, tweaks=None, session_id=None):
 
         elapsed = time.perf_counter() - start_time
 
+        # Pesan exception bisa memuat URL/host backend (ngrok); cukup di log.
         logger.error(
-            "request_error id=%s elapsed=%.2fs error=%s",
+            "request_error id=%s elapsed=%.2fs type=%s error=%s",
             request_id,
             elapsed,
+            type(error).__name__,
             error,
         )
 
         return (
             "❌ Request gagal.\n\n"
-            f"{error}"
+            "Terjadi gangguan saat menghubungi Ciel. Silakan coba lagi.\n\n"
+            f"Request ID: `{request_id}`"
         )
 
     except ValueError:
@@ -1234,15 +1242,18 @@ def upload_images(images):
 
     except requests.exceptions.RequestException as error:
 
+        # Pesan exception bisa memuat URL/host backend (ngrok); cukup di log.
         logger.error(
-            "image_upload_error id=%s error=%s",
+            "image_upload_error id=%s type=%s error=%s",
             request_id,
+            type(error).__name__,
             error,
         )
 
         return [], (
             "❌ Upload gambar gagal.\n\n"
-            f"{error}"
+            "Terjadi gangguan saat mengunggah gambar. Silakan coba lagi.\n\n"
+            f"Request ID: `{request_id}`"
         )
 
 
