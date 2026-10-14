@@ -54,7 +54,7 @@ The v1.1.0 optimization reduced retrieved context size by approximately 60.7% at
 .
 ├── .github/
 ├── flow/
-│   ├── v1.0.0/ … v1.5.0/
+│   ├── v1.0.0/ … v1.5.1/
 │   └── components/
 ├── tests/
 ├── tools/
@@ -101,7 +101,7 @@ A template is provided in `.streamlit/secrets.toml.example`. For local runs copy
 ## Deployment (Streamlit Community Cloud)
 
 1. Start the backend on the host machine: Langflow (port 7860) with its Ollama and Chroma dependencies, then the ngrok tunnel with Basic Auth pointing at `localhost:7860`.
-2. Import `flow/v1.5.0/Ciel_AI_Long-Term_Memory_Master.json` (latest) into Langflow and set `FLOW_ID` to the imported flow.
+2. Import `flow/v1.5.1/Ciel_AI_Long-Term_Memory_Master.json` (latest) into Langflow and set `FLOW_ID` to the imported flow.
 3. Deploy `app.py` from the `main` branch of this repository.
 4. Paste the variables above into App settings -> Secrets, using the template format. For Google login, create an OAuth client (Web application) in Google Cloud Console with `https://<your-app>.streamlit.app/oauth2callback` as the redirect URI, and keep the `[auth]` block at the end of the secrets.
 5. Open the app and send a test message. If the backend host or tunnel is down, the app shows a connection error card with a retry button.

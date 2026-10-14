@@ -1,0 +1,55 @@
+{
+  "_note": "Trimmed results.message from a real Langflow 1.12.4 run of the production flow (2026-10-14): question 'Berapa rata-rata Quantity_Sold pada dataset?'. data.text joins every text block.",
+  "data": {
+    "text": "Rata-rata `Quantity_Sold` pada dataset adalah **23,685** (atau **23.69** jika dibulatkan dua desimal).Rata-rata Quantity_Sold pada dataset adalah **23,685** — kalau dibulatkan jadi **23,69**."
+  },
+  "content_blocks": [
+    {
+      "title": "Agent Steps",
+      "contents": [
+        {
+          "type": "tool_use",
+          "header": {
+            "title": "Executed **Verified-Data-Analyst_tool**",
+            "icon": "Hammer"
+          },
+          "name": "Verified-Data-Analyst_tool"
+        },
+        {
+          "type": "tool_use",
+          "header": {
+            "title": "Executed **python_repl_ast**",
+            "icon": "Hammer"
+          },
+          "name": "python_repl_ast"
+        },
+        {
+          "type": "text",
+          "text": "Rata-rata `Quantity_Sold` pada dataset adalah **23,685** (atau **23.69** jika dibulatkan dua desimal).",
+          "header": {}
+        },
+        {
+          "type": "text",
+          "text": "Rata-rata Quantity_Sold pada dataset adalah **23,685** — kalau dibulatkan jadi **23,69**.",
+          "header": {}
+        },
+        {
+          "type": "text",
+          "text": "Rata-rata `Quantity_Sold` pada dataset adalah **23,685** (atau **23.69** jika dibulatkan dua desimal).Rata-rata Quantity_Sold pada dataset adalah **23,685** — kalau dibulatkan jadi **23,69**.",
+          "header": {
+            "title": "Output",
+            "icon": "MessageSquare"
+          }
+        },
+        {
+          "type": "text",
+          "text": "Rata-rata `Quantity_Sold` pada dataset adalah **23,685** (atau **23.69** jika dibulatkan dua desimal).Rata-rata Quantity_Sold pada dataset adalah **23,685** — kalau dibulatkan jadi **23,69**.",
+          "header": {
+            "title": "Output",
+            "icon": "MessageSquare"
+          }
+        }
+      ]
+    }
+  ]
+}

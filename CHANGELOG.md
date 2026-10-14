@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fix: duplicated answers and English-format numbers (flow v1.5.1)
+- **Duplicated or glued answers.** In Langflow 1.12.4 `Message.text` (and `data.text`) joins every text block of every Agent round: text written before a tool call, an answer the model wrote twice, and internal narration. Users saw answers twice ("…23,685 … 23,69.Rata-rata Quantity_Sold…"), text glued without a space ("…filenya ya.Ini hasilnya"), and on research questions the agent's narration ("Saya akan mencari… Pertama, mari cek tanggal…"). `ask_langflow` now returns the last text block the model wrote (`final_answer_text`), skipping Langflow's own "Output" blocks, and falls back to `data.text` when there are no content blocks.
+  - Checked on real responses (greeting, math, research, CSV): the new answer is always the end of the old text, so nothing from the final answer is lost. Research 7,600 -> 2,186 chars with the "Sumber:" list intact; math 1,296 -> 519 (the sub-agent's full explanation no longer repeats the final one).
+  - `tests/assets/langflow_agent_message.json` is a trimmed real Langflow message used by `tests/test_resilience.py`.
+- **Number format.** Verified Data Analyst and other tools write English-format numbers ("23.685" = 23,685), which read as thousands in Indonesian. Prompt v14.2 (flow `v1.5.1`, prompt-only change) tells the Agent to write Indonesian format (1.065.600,71; 23,685), convert tool output, not mix formats, and not add a currency the data does not state (it had written "Rp 1.065.600,71" for the unit-less Sales_Amount). Live on the test flow: 4/4 answers in Indonesian format, 3/3 without an invented currency.
+
 ### Numbers from the user's own CSV/TSV files (flow v1.5.0)
 - Problem: Verified Data Analyst always reads the built-in `200_sales_data` file, and the routing sent every "dataset / CSV" question to it. A question about a user's own CSV could be answered with numbers from the sample dataset, labeled as verified.
 - New component **Ciel Table Analyst** (`flow/components/ciel_table_analyst.py`, tool `analyze_table`): describe, count, sum, mean, median, min, max, unique, top values, optionally per group, computed directly from the file without running model-written code. Number format is decided per column ("1.250.000" and "1.234,5" vs "1,234.5"), using Rupiah values or a ";" delimiter as hints for ambiguous values, and the result states how the column was read. Truncated files carry a warning.

@@ -862,6 +862,33 @@ def check_backend_health():
 # LANGFLOW API
 # ============================================================
 
+def final_answer_text(message):
+    """
+    Langflow 1.12 menyusun Message.text dari semua blok teks di semua
+    putaran Agent (teks sebelum memanggil tool, jawaban yang ditulis ulang),
+    sehingga jawaban bisa muncul dua kali atau tersambung tanpa spasi.
+    Jawaban akhir adalah blok teks terakhir yang ditulis model; blok berjudul
+    "Output" adalah gabungan buatan Langflow. Tanpa content_blocks, pakai
+    data.text seperti sebelumnya (KeyError jika struktur tidak dikenal).
+    """
+    if not isinstance(message, dict):
+        raise TypeError("results.message bukan objek")
+
+    texts = [
+        content.get("text")
+        for block in message.get("content_blocks") or []
+        for content in block.get("contents") or []
+        if content.get("type") == "text"
+        and not (content.get("header") or {}).get("title")
+        and str(content.get("text") or "").strip()
+    ]
+
+    if texts:
+        return texts[-1]
+
+    return message["data"]["text"]
+
+
 def ask_langflow(message, tweaks=None, session_id=None):
 
     request_id = uuid.uuid4().hex[:8]
@@ -931,11 +958,10 @@ def ask_langflow(message, tweaks=None, session_id=None):
 
         try:
 
-            answer = (
+            answer = final_answer_text(
                 data["outputs"][0]
                 ["outputs"][0]
                 ["results"]["message"]
-                ["data"]["text"]
             )
 
             logger.info(

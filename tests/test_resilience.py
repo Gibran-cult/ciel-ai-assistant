@@ -1,4 +1,5 @@
 import ast
+import json
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -13,12 +14,12 @@ def load_ask_langflow():
     source = APP_PATH.read_text(encoding="utf-8")
     tree = ast.parse(source)
 
-    function_node = next(
+    function_nodes = [
         node
         for node in tree.body
         if isinstance(node, ast.FunctionDef)
-        and node.name == "ask_langflow"
-    )
+        and node.name in ("ask_langflow", "final_answer_text")
+    ]
 
     namespace = {
         "requests": requests,
@@ -33,7 +34,7 @@ def load_ask_langflow():
     }
 
     module = ast.Module(
-        body=[function_node],
+        body=function_nodes,
         type_ignores=[],
     )
 
@@ -399,6 +400,67 @@ class TestResiliencePolicy(unittest.TestCase):
 
         self.assertNotIn("session_id", payload)
         self.assertNotIn("tweaks", payload)
+
+
+def agent_response(message):
+
+    return DummyResponse(
+        status_code=200,
+        data={"outputs": [{"outputs": [{"results": {"message": message}}]}]},
+    )
+
+
+class TestFinalAnswerExtraction(unittest.TestCase):
+    # Langflow 1.12 joins every Agent text block into message.text, so the
+    # answer came out twice or glued to text written before a tool call.
+
+    def ask(self, message):
+
+        with patch("requests.post", return_value=agent_response(message)):
+            return ask_langflow("test")
+
+    def test_real_langflow_message_returns_only_the_final_answer(self):
+
+        fixture = json.loads(
+            (APP_PATH.parent / "tests" / "assets" / "langflow_agent_message.json")
+            .read_text(encoding="utf-8")
+        )
+
+        result = self.ask(fixture)
+
+        self.assertEqual(
+            result,
+            "Rata-rata Quantity_Sold pada dataset adalah **23,685** — kalau dibulatkan jadi **23,69**.",
+        )
+        self.assertEqual(result.count("Rata-rata"), 1)
+        self.assertGreater(fixture["data"]["text"].count("Rata-rata"), 1)
+
+    def test_text_written_before_a_tool_call_is_dropped(self):
+
+        message = {
+            "data": {"text": "Aku hitung langsung dari filenya ya.Totalnya 9.335.750."},
+            "content_blocks": [{"contents": [
+                {"type": "text", "header": {}, "text": "Aku hitung langsung dari filenya ya."},
+                {"type": "tool_use", "name": "analyze_table"},
+                {"type": "text", "header": {}, "text": "Totalnya 9.335.750."},
+                {"type": "text", "header": {"title": "Output"}, "text": "Aku hitung langsung dari filenya ya.Totalnya 9.335.750."},
+            ]}],
+        }
+
+        self.assertEqual(self.ask(message), "Totalnya 9.335.750.")
+
+    def test_without_content_blocks_uses_data_text(self):
+
+        self.assertEqual(
+            self.ask({"data": {"text": "Jawaban lama"}, "content_blocks": []}),
+            "Jawaban lama",
+        )
+
+    def test_unexpected_message_shape_is_a_parse_error(self):
+
+        for message in (None, "teks", {"content_blocks": []}):
+            with self.subTest(message=message):
+                self.assertIn("format output tidak dikenali", self.ask(message))
 
 
 if __name__ == "__main__":
