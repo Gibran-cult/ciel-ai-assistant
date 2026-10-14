@@ -86,6 +86,19 @@ FLOW_ID
 
 Do not place real credentials, passwords, API keys, or tokens in this README or source control.
 
+Optional: `CHAT_INPUT_ID` (defaults to the Chat Input component ID in the v1.1.0 flow).
+
+A template is provided in `.streamlit/secrets.toml.example`. For local runs copy it to `.streamlit/secrets.toml` (git-ignored) or use a `.env` file.
+
+## Deployment (Streamlit Community Cloud)
+
+1. Start the backend on the host machine: Langflow (port 7860) with its Ollama and Chroma dependencies, then the ngrok tunnel with Basic Auth pointing at `localhost:7860`.
+2. Deploy `app.py` from the `main` branch of this repository.
+3. Paste the variables above into App settings -> Secrets, using the template format.
+4. Open the app and send a test message. If the backend host or tunnel is down, the app shows a connection error card with a retry button.
+
+The deployed app is only available while the host machine, Langflow, and the ngrok tunnel are running.
+
 ## Local Development
 
 Clone the repository:

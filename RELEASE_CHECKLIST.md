@@ -16,14 +16,14 @@
 - [x] Create annotated Git tag
 - [x] Push main branch
 - [x] Push release tag
-- [ ] Verify GitHub Release
+- [x] Verify GitHub Release
 
 ## Post-Release
 
 - [x] Tag points to the intended release commit
 - [x] Working tree clean
 - [x] Release notes match CHANGELOG
-- [ ] Verify the latest GitHub Actions run is green after the final documentation commits
+- [x] Verify the latest GitHub Actions run is green after the final documentation commits
 
 ## Current Baseline
 
@@ -36,5 +36,6 @@
 
 - Git tag `v1.0.0` is preserved as the production baseline.
 - Git tag `v1.1.0` is the current feature release.
-- GitHub Release verification is intentionally left unchecked until the release page is confirmed.
+- GitHub Release page for `v1.1.0` confirmed on 2026-10-14.
+- GitHub Actions confirmed green on `13a5fe2` (2026-10-14).
 - The latest offline regression suite passed 16/16 locally.
