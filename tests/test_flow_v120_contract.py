@@ -45,9 +45,13 @@ class FlowV120ContractTest(unittest.TestCase):
 
     def test_router_code_matches_repository_source(self):
         code = self.nodes[self.router_id()]["data"]["node"]["template"]["code"]["value"]
+        # Bandingkan tanpa beda CRLF/LF (checkout Windows vs JSON flow).
+        def normalize(text):
+            return text.replace("\r\n", "\n").strip()
+
         self.assertEqual(
-            code.strip(),
-            COMPONENT_PATH.read_text(encoding="utf-8").strip(),
+            normalize(code),
+            normalize(COMPONENT_PATH.read_text(encoding="utf-8")),
         )
 
     def test_snapshot_contains_no_hardcoded_api_keys(self):
