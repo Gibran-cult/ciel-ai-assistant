@@ -862,6 +862,33 @@ def check_backend_health():
 # LANGFLOW API
 # ============================================================
 
+def final_answer_text(message):
+    """
+    Langflow 1.12 menyusun Message.text dari semua blok teks di semua
+    putaran Agent (teks sebelum memanggil tool, jawaban yang ditulis ulang),
+    sehingga jawaban bisa muncul dua kali atau tersambung tanpa spasi.
+    Jawaban akhir adalah blok teks terakhir yang ditulis model; blok berjudul
+    "Output" adalah gabungan buatan Langflow. Tanpa content_blocks, pakai
+    data.text seperti sebelumnya (KeyError jika struktur tidak dikenal).
+    """
+    if not isinstance(message, dict):
+        raise TypeError("results.message bukan objek")
+
+    texts = [
+        content.get("text")
+        for block in message.get("content_blocks") or []
+        for content in block.get("contents") or []
+        if content.get("type") == "text"
+        and not (content.get("header") or {}).get("title")
+        and str(content.get("text") or "").strip()
+    ]
+
+    if texts:
+        return texts[-1]
+
+    return message["data"]["text"]
+
+
 def ask_langflow(message, tweaks=None, session_id=None):
 
     request_id = uuid.uuid4().hex[:8]
@@ -931,11 +958,10 @@ def ask_langflow(message, tweaks=None, session_id=None):
 
         try:
 
-            answer = (
+            answer = final_answer_text(
                 data["outputs"][0]
                 ["outputs"][0]
                 ["results"]["message"]
-                ["data"]["text"]
             )
 
             logger.info(
@@ -1276,8 +1302,13 @@ MAX_IMAGES_PER_MESSAGE = 4
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 THUMBNAIL_PX = 360
 MAX_FILES_PER_MESSAGE = 5
-MAX_FILE_CHARS = 60_000
-MAX_CONTEXT_CHARS = 150_000
+MAX_FILE_CHARS = 40_000
+# Satu salinan konteks file per permintaan; Agent juga memuat salinan
+# terakhir dari riwayat, jadi totalnya bisa dua kali lipat angka ini.
+MAX_CONTEXT_CHARS = 80_000
+# Kirim ulang isi file proyek setiap N giliran, sebelum salinan lama keluar
+# dari riwayat Agent (n_messages=10, yaitu 5 giliran tanya-jawab).
+PROJECT_CONTEXT_REFRESH_TURNS = 4
 
 # CSV/TSV dihitung utuh oleh Ciel Table Analyst; prompt hanya berisi cuplikan.
 TABLE_FILE_TYPES = ("csv", "tsv")
@@ -1382,8 +1413,45 @@ def read_table_text(name, text, size):
     }
 
 
-def build_payload(text, files, project_files):
-    """Gabungkan isi file dan pertanyaan menjadi satu teks untuk Langflow."""
+def project_signature(project_files):
+    """Berubah jika file proyek ditambah, dihapus, atau isinya berbeda."""
+
+    digest = hashlib.sha256()
+
+    for item in project_files:
+        digest.update(item["name"].encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(item["text"].encode("utf-8"))
+        digest.update(b"\0")
+
+    return digest.hexdigest()[:16]
+
+
+def project_context_due(chat, project_files, user_turn):
+    """
+    Kirim isi file proyek hanya jika chat baru, file berubah, atau salinan
+    terakhir hampir keluar dari riwayat Agent. Langflow menyimpan setiap
+    pesan beserta isi file, dan Agent memuat 10 pesan terakhir (5 giliran),
+    jadi mengirim ulang di setiap pesan membuat file yang sama terbaca
+    berkali-kali dalam satu permintaan.
+    """
+    if not project_files:
+        return False
+
+    sent = (chat or {}).get("project_context")
+
+    if not sent or sent["signature"] != project_signature(project_files):
+        return True
+
+    return user_turn - sent["turn"] >= PROJECT_CONTEXT_REFRESH_TURNS
+
+
+def build_payload(text, files, project_files, project_note=()):
+    """
+    Gabungkan isi file dan pertanyaan menjadi satu teks untuk Langflow.
+    `project_note` berisi nama file proyek yang isinya sudah dikirim
+    sebelumnya di chat ini (masih ada di riwayat Agent).
+    """
 
     blocks = []
     budget = MAX_CONTEXT_CHARS
@@ -1411,6 +1479,12 @@ def build_payload(text, files, project_files):
 
     for item in project_files:
         add("File proyek", item)
+
+    if project_note:
+        blocks.append(
+            "### File proyek (isinya sudah dikirim di pesan sebelumnya "
+            "dalam percakapan ini): " + ", ".join(project_note)
+        )
 
     for item in files:
         add("File terlampir", item)
@@ -1593,15 +1667,26 @@ def make_pending(text, uploaded_files):
     if not text:
         text = DEFAULT_IMAGE_QUESTION if images else DEFAULT_FILE_QUESTION
 
+    chat = active_chat()
+    project_files = project_files_for(context_project_id())
+    user_turn = sum(1 for m in (chat or {}).get("messages", []) if m["role"] == "user")
+    send_project = project_context_due(chat, project_files, user_turn)
+
     return {
         "text": text,
         "files": [f["name"] for f in files],
         "images": images,
         "tables": {f["name"]: f["table"] for f in files if "table" in f},
+        "project_context": (
+            {"signature": project_signature(project_files), "turn": user_turn}
+            if send_project
+            else None
+        ),
         "payload": build_payload(
             text,
             files,
-            project_files_for(context_project_id()),
+            project_files if send_project else [],
+            project_note=() if send_project else [f["name"] for f in project_files],
         ),
     }
 
@@ -2312,6 +2397,11 @@ if pending_request:
 
     # Lampiran asli hanya perlu disimpan untuk tombol Retry.
     if not failed:
+        # Catat kapan isi file proyek terakhir dikirim; pesan berikutnya
+        # cukup menyebut nama filenya selama salinan ini masih di riwayat.
+        if pending_request.get("project_context"):
+            chat["project_context"] = pending_request["project_context"]
+
         user_message.pop("payload", None)
         user_message["images"] = [
             make_thumbnail(image) for image in user_message["images"]
