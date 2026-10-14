@@ -10,7 +10,7 @@ import requests
 APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
 
 
-def load_ask_langflow():
+def load_app_functions():
     source = APP_PATH.read_text(encoding="utf-8")
     tree = ast.parse(source)
 
@@ -18,7 +18,7 @@ def load_ask_langflow():
         node
         for node in tree.body
         if isinstance(node, ast.FunctionDef)
-        and node.name in ("ask_langflow", "final_answer_text")
+        and node.name in ("ask_langflow", "final_answer_text", "upload_images")
     ]
 
     namespace = {
@@ -46,10 +46,12 @@ def load_ask_langflow():
 
     exec(code, namespace)
 
-    return namespace["ask_langflow"]
+    return namespace
 
 
-ask_langflow = load_ask_langflow()
+APP_FUNCTIONS = load_app_functions()
+ask_langflow = APP_FUNCTIONS["ask_langflow"]
+upload_images = APP_FUNCTIONS["upload_images"]
 
 
 class DummyResponse:
@@ -461,6 +463,85 @@ class TestFinalAnswerExtraction(unittest.TestCase):
         for message in (None, "teks", {"content_blocks": []}):
             with self.subTest(message=message):
                 self.assertIn("format output tidak dikenali", self.ask(message))
+
+
+class TestNoInternalDetailsShownToUsers(unittest.TestCase):
+    # Public users used to see Langflow's raw JSON on an unknown response
+    # shape, and raw exception text (which can name the ngrok host) on other
+    # request errors. Details now go to the server log; users get a Request ID.
+
+    HOST = "secret-host.ngrok-free.dev"
+
+    def test_unknown_response_shape_hides_raw_json(self):
+
+        response = DummyResponse(
+            status_code=200,
+            data={"outputs": [{"internal": "INTERNAL_NODE_DETAIL"}]},
+        )
+
+        with self.assertLogs("test_resilience", level="ERROR") as logs, \
+                patch("requests.post", return_value=response):
+            result = ask_langflow("test")
+
+        self.assertIn("format output tidak dikenali", result)
+        self.assertIn("Request ID:", result)
+        # The advice must stay visible: paragraphs mentioning "Request ID"
+        # are moved into the error card's technical details.
+        advice = next(p for p in result.split("\n\n") if "Silakan coba lagi" in p)
+        self.assertNotIn("Request ID", advice)
+        self.assertNotIn("INTERNAL_NODE_DETAIL", result)
+        self.assertNotIn("```json", result)
+        self.assertIn("INTERNAL_NODE_DETAIL", "\n".join(logs.output))
+
+    def test_request_errors_do_not_reveal_the_backend_url(self):
+
+        errors = (
+            requests.exceptions.InvalidURL(f"Invalid URL 'https://{self.HOST}/api/v1/run/x'"),
+            requests.exceptions.TooManyRedirects(f"Exceeded redirects for https://{self.HOST}/"),
+            requests.exceptions.ChunkedEncodingError(f"Connection broken: {self.HOST}"),
+        )
+
+        for error in errors:
+            with self.subTest(error=type(error).__name__):
+
+                with self.assertLogs("test_resilience", level="ERROR") as logs, \
+                        patch("requests.post", side_effect=error):
+                    result = ask_langflow("test")
+
+                self.assertTrue(result.startswith("❌ Request gagal."))
+                self.assertIn("Request ID:", result)
+                self.assertNotIn(self.HOST, result)
+                self.assertIn(self.HOST, "\n".join(logs.output))
+
+    def test_image_upload_errors_do_not_reveal_the_backend_url(self):
+
+        images = [{"name": "soal.png", "data": b"png", "mime": "image/png"}]
+        errors = (
+            requests.exceptions.TooManyRedirects(f"Exceeded redirects for https://{self.HOST}/"),
+            requests.exceptions.ChunkedEncodingError(f"Connection broken: {self.HOST}"),
+        )
+
+        for error in errors:
+            with self.subTest(error=type(error).__name__):
+
+                with self.assertLogs("test_resilience", level="ERROR"), \
+                        patch("requests.post", side_effect=error):
+                    paths, message = upload_images(images)
+
+                self.assertEqual(paths, [])
+                self.assertTrue(message.startswith("❌ Upload gambar gagal."))
+                self.assertIn("Request ID:", message)
+                self.assertNotIn(self.HOST, message)
+
+        # InvalidURL is also a ValueError, so it takes the parse-error branch,
+        # which shows no exception text either.
+        invalid = requests.exceptions.InvalidURL(f"Invalid URL 'https://{self.HOST}/upload'")
+
+        with self.assertLogs("test_resilience", level="ERROR"), \
+                patch("requests.post", side_effect=invalid):
+            _, message = upload_images(images)
+
+        self.assertNotIn(self.HOST, message)
 
 
 if __name__ == "__main__":

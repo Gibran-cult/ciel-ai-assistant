@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Error messages no longer show internal details to users
+- Three error paths showed raw technical text to public users: an unknown Langflow response shape printed the whole response JSON (flow structure, tool content), and other request errors and image-upload errors printed the raw exception, which can contain the ngrok host and URL.
+- Users now get a short explanation and a Request ID (shown under "Technical details" in the existing error card). The response JSON (first 500 characters) and the exception type and text go to the server log under the same Request ID. The title lines are unchanged, so the error card and Retry work as before.
+- Checked in the browser against a mock Langflow that returned an unexpected shape with a marker string: the card showed the explanation and Request ID, the marker was not on the page, and the server log had it under that Request ID.
+- `tests/test_resilience.py`: unknown response shape, `InvalidURL` / `TooManyRedirects` / `ChunkedEncodingError` on requests, and upload errors must not show the host or raw JSON, must show a Request ID, and must log the detail.
+
 ### Quality run with isolated sessions, and two test fixes
 - First full collector run with the session-isolated scripts (production flow v1.5.1 with the sub-agent `n_messages` change, through local Langflow): first request 50.6 -> 16.8 s, median 18.9 -> 15.5 s, P95 43.1 -> 29.8 s compared with the previous v1.5.0 run that used the shared default session. Response quality 8/9; the collector named the failing case for the first time: `research_machine_learning_01`, "Tidak menemukan: 'machine'". Two reruns of that question answered about machine learning with dates and sources and contained the term. `tests/results/quality_latest.json` holds this run, labeled v1.5.1.
 - `research_machine_learning_01` now accepts "machine" or "pembelajaran mesin" (`expected_any`): an Indonesian answer may use the Indonesian term. A test checks that an unrelated answer still fails.
