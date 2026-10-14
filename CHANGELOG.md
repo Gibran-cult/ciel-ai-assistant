@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+Nothing yet.
+
+## v1.5.2 — 2026-10-14
+
+App hardening, tests, documentation and Langflow operations. The main flow is unchanged since v1.5.1 (`flow/v1.5.1`).
+
+### Langflow configuration changes (made in Langflow; sub-flows are not in this repo)
+- Sub-agent history: Agent `n_messages` in the Web Research Assistant sub-flow 100 -> 0, in Math Tutor Agent 100 -> 4. The main Agent already sends sub-agents a complete question. Measured in one chat, the research sub-agent loaded 9,663 and 22,750 characters of unused history on the 2nd and 3rd research question, and 0 after the change; answers kept their sources and a math follow-up was still answered correctly. The production flow's default session had accumulated ~490k characters of research history, which every live test run loaded.
+- API keys: the literal DeepSeek `api_key` in the production sub-flows Verified Data Analyst (2 nodes) and Math Tutor Agent (1 node) now points at the global variable `DEEPSEEK_API_KEY`, the one the main flow and Web Research already use. No production flow stores a literal key anymore. Verified through ngrok.
+- Old flows: the 22 flows not used by production (experiments, earlier versions, backups, test flows) moved to a new Langflow project "Arsip"; nothing was deleted. "Starter Project" holds only the 5 production flows. Archived flows still contain one DeepSeek key copied into 10 flows and one Google key; clean them before exporting or sharing an archived flow.
+- Langflow API keys: deleted the 5 never-used "MCP Project Starter Project - langflow" keys; only the app's key remains. The key exposed in the public v1.0.0/v1.1.0 snapshots was already rejected (HTTP 403). No local MCP client referenced Langflow.
+- DeepSeek temperature: not changed. `deepseek-flash` ignores it: at temperature 0 four runs gave four different answers, while an out-of-range value was rejected by DeepSeek itself, so the value is sent. This matches DeepSeek's documentation (temperature has no effect in thinking mode).
+- Every in-place change has a backup in `~/.ciel_ai/flow_backups/` on the Langflow host.
+
+### Documentation and release tags
+- README, RELEASE_CHECKLIST, docs/OBSERVABILITY, docs/BACKUP_AND_DISASTER_RECOVERY, docs/ARCHITECTURE and docs/PRODUCTION_READINESS_REVIEW describe the current state instead of v1.1.0. BACKUP_AND_DISASTER_RECOVERY now covers the parts that are not in Git: sub-flows, Langflow global variables, the ngrok traffic policy, and the Chroma memory database.
+- Release tags v1.2.0 to v1.5.2 point at the commits listed in RELEASE_CHECKLIST.md.
+
 ### Remove unused code
 - Removed `check_backend_health` from `app.py` (117 lines). It was left behind when the backend status panel was removed and was never called. The `/health_check` endpoint itself is unchanged and is still used by `tests/test_ciel_master.py` and the recovery checks in `docs/`.
 - `tests/test_app_hygiene.py` (in CI) fails when a top-level function or constant in `app.py` is never referenced; run against the previous `main` it flags exactly `check_backend_health`.
@@ -24,7 +42,8 @@
 - New `tests/live_session.py`, used by all three scripts: a fresh `session_id` per request (`livetest-<label>-<id>`), the tweaks the app sends for an anonymous visitor (memory off, no tables), and `answer_from()`, which runs `app.final_answer_text` loaded from `app.py`, so tests and app share one implementation.
 - `tests/collect_quality.py` records failing response-quality cases with their reasons (`response_quality.failed_cases`) and prints them, so a degraded run says which case failed.
 - `tests/test_live_scripts.py` (offline, in CI) checks that every run payload in the live scripts has `session_id` and `tweaks`, that none reads `["data"]["text"]` directly, that two cases get two sessions and the vision case keeps its image tweak, and the failed-case parser.
-- Production sub-flow change, made in Langflow on 2026-10-14 (sub-flows are not in this repo; backups in `~/.ciel_ai/flow_backups/subflow_*`): Agent `n_messages` in Web Research Assistant 100 -> 0 and in Math Tutor Agent 100 -> 4. The main Agent already sends sub-agents a complete question. Measured in one chat, the research sub-agent loaded 9,663 and 22,750 characters of unused history on the 2nd and 3rd research question, and 0 after the change. Answers kept their sources, and a math follow-up ("nilai di x = 2") was still answered correctly.
+
+## v1.5.1 — 2026-10-14
 
 ### Project files are no longer resent with every message
 - Problem: project file text (up to 150k characters) was added to every message in a project chat. Langflow stores each message with that text and the Agent loads the last 10 messages, so from the 3rd turn the same file reached the model several times in one request (up to 6 copies).
@@ -39,6 +58,8 @@
   - `tests/assets/langflow_agent_message.json` is a trimmed real Langflow message used by `tests/test_resilience.py`.
 - **Number format.** Verified Data Analyst and other tools write English-format numbers ("23.685" = 23,685), which read as thousands in Indonesian. Prompt v14.2 (flow `v1.5.1`, prompt-only change) tells the Agent to write Indonesian format (1.065.600,71; 23,685), convert tool output, not mix formats, and not add a currency the data does not state (it had written "Rp 1.065.600,71" for the unit-less Sales_Amount). Live on the test flow: 4/4 answers in Indonesian format, 3/3 without an invented currency.
 
+## v1.5.0 — 2026-10-14
+
 ### Numbers from the user's own CSV/TSV files (flow v1.5.0)
 - Problem: Verified Data Analyst always reads the built-in `200_sales_data` file, and the routing sent every "dataset / CSV" question to it. A question about a user's own CSV could be answered with numbers from the sample dataset, labeled as verified.
 - New component **Ciel Table Analyst** (`flow/components/ciel_table_analyst.py`, tool `analyze_table`): describe, count, sum, mean, median, min, max, unique, top values, optionally per group, computed directly from the file without running model-written code. Number format is decided per column ("1.250.000" and "1.234,5" vs "1,234.5"), using Rupiah values or a ";" delimiter as hints for ambiguous values, and the result states how the column was read. Truncated files carry a warning.
@@ -49,6 +70,8 @@
 - Live check on a separate v1.5.0 test flow (production untouched): "total omzet per cabang" on a ";"-separated Rupiah CSV gave Medan 5.205.250 and Makassar 4.130.500, the follow-up "rata-rata unitnya" gave 41,2, both exact; "total Sales_Amount pada dataset" without a file still went to Verified Data Analyst (1.065.600,71).
 - Quality run: response quality 8/9 in the collector run, then 9/9 in two reruns of `tests/test_response_quality.py` (26/27 overall). The collector does not record which case failed; the live test scripts send no `session_id`, so all cases share one Langflow session, which is the likely source of the flake. Median latency 18.9 s (v1.4.0: 16.2 s), P95 43.1 s (20.9 s), first request 50.6 s on a freshly imported flow.
 
+## v1.4.1 — 2026-10-14
+
 ### Fix: per-user memory isolation did not work (flow v1.4.1)
 - Found in production after switching to v1.4.0: an anonymous visitor's "ingat namaku ..." was stored, and another session could read it.
 - Root cause: the memory components' owner input was named `user_id`, but Langflow's `Component` already has a read-only `user_id` (the Langflow account that owns the flow). `self.user_id` returned that account id instead of the app's tweak, so every visitor shared one owner. The offline test missed it because its Langflow stub had no such attribute.
@@ -56,6 +79,8 @@
 - `tests/test_flow_v141_contract.py`: the Langflow stub now keeps a read-only `user_id`, a regression test shows the v1.4.0 code storing under the Langflow account, and a check rejects component inputs that reuse Langflow attribute names. The behavior tests moved here from `tests/test_flow_v130_contract.py`, which now only checks the historical snapshot.
 - Production flow updated in place to v1.4.1 (same `FLOW_ID`; backups in `~/.ciel_ai/flow_backups/`). Verified on the production flow: anonymous store and search are refused with the memory count unchanged; a test owner without memories gets "belum ada memory".
 - Deploy this app version with the v1.4.1 flow. With v1.4.1 and an older app (which sends `user_id`), memory is off for everyone; nothing leaks.
+
+## v1.4.0 — 2026-10-14
 
 ### Ciel identity: anti-fabrication research + study companion (flow v1.4.0)
 - New flow snapshot `flow/v1.4.0`: identical to v1.3.0 except the Agent system prompt (v14.0, 8.7k -> 13.4k chars; DeepSeek caches the unchanged prefix).
@@ -69,6 +94,8 @@
   - Style check: "halo" -> casual mode; "analisis kelebihan RAG" -> Great Sage structure with every point labeled [Dugaan] because no sources were fetched; "ajari aku turunan" -> step-by-step explanation ending with a comprehension question.
   - The first analysis answer had 9 points and a casual closing offer, so the prompt now limits Dasar to 5 points and ends at Batasan. Re-run: 5 points, 52 s -> 37 s.
 
+## v1.3.0 — 2026-10-14
+
 ### Public-ready isolation and cost control (flow v1.3.0)
 - **Conversation isolation.** `ask_langflow` now sends a `session_id` (`<user>-<chat id>`). Before, every request used Langflow's default session, so the Agent's last 10 messages (`n_messages`) were shared by all visitors and "New chat" did not reset the Agent's context. Each chat now has its own history, which also keeps prompts shorter.
 - **Per-user long-term memory.** New flow snapshot `flow/v1.3.0`: Ciel Memory Search/Store (sources in `flow/components/ciel_memory_search.py` and `ciel_memory_store.py`) take a `user_id` input that the app sets through `tweaks`. It is not a tool argument, so the Agent cannot choose it. Store tags each memory with `user_id`; Search filters on it and skips the embedding call when the user has no memories. Empty `user_id` (anonymous visitor) disables memory: nothing is stored or read.
@@ -80,6 +107,8 @@
 - New offline tests: `tests/test_flow_v130_contract.py` (contract plus a real Chroma isolation test with Langflow stubbed) and `tests/test_rate_limit.py`; `tests/test_resilience.py` checks `session_id`/`tweaks` in the payload. CI runs them.
 - Upgrade: import `flow/v1.3.0` into Langflow, update `FLOW_ID` if the import created a new flow, then deploy the app. The app's tweaks need the v1.3.0 memory components; with an older flow, memory stays shared.
 - Not changed: DeepSeek temperature (still 1). Lowering it for more consistent tool routing should be decided with `tests/collect_quality.py` against the live backend.
+
+## v1.2.0 — 2026-10-14
 
 ### Pricing page
 - Added a pricing page (`?page=pricing`, sidebar item "Harga & paket") with Gratis, Pro, and Tim plans, a monthly/yearly toggle (yearly = 10 months), and an FAQ.

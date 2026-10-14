@@ -2,186 +2,112 @@
 
 ## Purpose
 
-This document describes the monitoring and observability mechanisms currently available for Ciel AI Master.
-
-The goal is to make production behavior measurable across availability, quality, resilience, memory retrieval, and latency without changing the production flow architecture.
+This document describes how Ciel AI Master's behavior can be measured and diagnosed: availability, request logs, response quality, latency, memory retrieval, and resilience.
 
 ## Monitoring Layers
 
-Ciel AI Master monitoring is organized into these layers:
-
 1. Availability and health
-2. Request and runtime logging
+2. Request logging and Request IDs
 3. Response quality
 4. Performance and latency
 5. Memory retrieval quality
 6. Resilience and recovery
-7. Production quality dashboard
+7. Quality dashboard
 
 ## Availability and Health
 
-The production setup includes a health-check path used to detect backend availability.
+Langflow exposes `/health_check` (status of the chat and database services). It is used by `tests/test_ciel_master.py` and in recovery verification. The Streamlit app does not poll it; when the backend or tunnel is down, a request fails and the app shows an error card with a Request ID and a Retry button.
 
-Health monitoring is intended to distinguish a healthy backend from a failed or unavailable runtime and support recovery verification.
+The ngrok tunnel's traffic policy adds Basic Auth and a per-IP rate limit on `/api/v1/run/`.
 
-The health check is part of the production hardening work completed before the final production-readiness review.
+## Request Logging and Request IDs
 
-## Logging and Observability
+`app.py` logs one line per step with a short Request ID (`id=`):
 
-The production setup includes logging and observability so runtime behavior can be inspected during failures, performance investigation, and recovery testing.
+```text
+request_start / request_response / request_success      normal requests
+http_error (status, first 500 chars of the body)         HTTP errors from Langflow or ngrok
+response_parse_error (first 500 chars of the response)   unexpected response shape
+request_timeout / connection_error / request_error       network errors (type and message)
+image_upload_* (same pattern)                            photo uploads
+rate_limited                                             message refused by the hourly limit
+```
 
-Logs should be treated as operational diagnostics rather than as a substitute for automated tests.
+Users never see response bodies or exception text; they see a short explanation and the Request ID under "Technical details". To investigate a user's report, search the Streamlit Cloud logs for that Request ID.
 
-Sensitive values such as API keys, passwords, tokens, and other credentials must not be written to logs.
+Logs must not contain API keys, passwords, tokens, or other credentials.
 
 ## Response Quality
 
-The production quality collector records response-quality test results in:
+`tests/collect_quality.py` runs the live checks and writes `tests/results/quality_latest.json`. Each live request uses its own Langflow session and the same tweaks as the app (`tests/live_session.py`), and the answer that is judged is the one users see (`app.final_answer_text`).
 
-`tests/results/quality_latest.json`
+Latest recorded run (2026-10-14, production flow v1.5.1 through local Langflow):
 
-The latest recorded snapshot reports:
+- Response quality: 9/9 passed
+- Automated checks: 5/5 passed
+- Overall status: healthy, score 1.0
 
-- Passed: 9
-- Failed: 0
-- Total: 9
-- Pass rate: 100%
-- Status: healthy
-
-This snapshot represents the recorded quality evaluation for version `v1.1.0`.
+When a case fails, the result file lists it under `response_quality.failed_cases` with its reasons and a preview of the answer (up to 1,200 characters).
 
 ## Performance Metrics
 
-The quality snapshot records these performance metrics:
+Latest recorded run:
 
-- First request: 26.675 seconds
-- Warm median: 38.581 seconds
-- Overall median: 36.157 seconds
-- P95: 51.143 seconds
+- First request: 17.4 s
+- Warm median: 14.6 s
+- Overall median: 14.6 s
+- P95: 16.7 s
 
-These values are diagnostic measurements and should be interpreted as observed benchmark results rather than hard service-level guarantees.
-
-Performance profiling separates model execution, agent execution, memory operations, direct research execution, and nested research execution so that latency bottlenecks can be isolated.
+For comparison, the v1.1.0 baseline recorded a median of 36.2 s and a P95 of 51.1 s. The main contributors to the drop: v1.2.0 stopped sending every message through the local vision model, and v1.5.2 removed the shared test session and shortened sub-agent history. Runs through local Langflow skip ngrok, so public latency is slightly higher. These are observed benchmarks, not service-level guarantees.
 
 ## Memory Quality
-
-The quality snapshot records long-term memory retrieval metrics.
-
-Current values:
 
 - Recall at K=1: 83.33%
 - Recall at K=3: 83.33%
 - Recall at K=5: 100%
 - Context reduction at K=5: 60.7%
 
-The current memory configuration keeps Top K at 5 and uses compact agent-facing memory output.
+The memory components keep Top K at 5 with compact agent-facing output, and only return the signed-in user's memories.
 
 ## Resilience
 
-The quality snapshot records resilience test results.
-
-Current recorded result:
-
-- Passed: 1
-- Failed: 0
-- Total: 1
-- Pass rate: 100%
-
-Resilience testing is intended to verify that backend failures can be detected and that the application can recover to normal operation.
-
-## Automated Checks
-
-The latest quality snapshot records:
-
-- Automated checks passed: 5
-- Automated checks failed: 0
-- Total automated checks: 5
-
-The GitHub Actions workflow is intentionally scoped to deterministic offline tests and does not require production credentials.
+The resilience check passes (1/1). Offline tests in `tests/test_resilience.py` cover authentication failures, gateway errors, timeouts, invalid JSON, unexpected response shapes, rate limiting, and that errors do not reveal internal details.
 
 ## Quality Dashboard
 
-`quality_dashboard.py` provides a production quality summary from the collected results.
-
-The dashboard surfaces:
-
-- overall status,
-- automated check count,
-- response-quality results,
-- memory recall,
-- context reduction,
-- first-request latency,
-- warm median latency,
-- overall median latency,
-- P95 latency.
-
-The dashboard consumes the collected result file rather than calling production services directly.
+`quality_dashboard.py` summarizes `tests/results/quality_latest.json`: overall status, automated checks, response quality, memory recall, context reduction, and latency. It reads the result file and does not call production services.
 
 ## Operational Workflow
 
-A practical monitoring workflow is:
-
 ```text
-Run quality / regression collection
+Run python tests/collect_quality.py
         |
         v
-tests/results/quality_latest.json
-        |
-        v
-quality_dashboard.py
-        |
-        +-- Overall status
-        +-- Quality
-        +-- Memory
-        +-- Performance
-        +-- Automated checks
+tests/results/quality_latest.json  -->  quality_dashboard.py
 ```
 
 For an operational issue:
 
 ```text
-Issue detected
+User reports an error (Request ID)
     |
     v
-Check health / availability
+Search the Streamlit Cloud logs for the Request ID
     |
     v
-Inspect logs
+Check Langflow /health_check and the ngrok tunnel
     |
     v
-Check latency and quality snapshot
+Run the live quality collection or a targeted check
     |
     v
-Run targeted regression or resilience checks
-    |
-    v
-Verify recovery
+Verify recovery with a real request through ngrok
 ```
-
-## Production Baseline
-
-The current feature release is `v1.1.0`.
-
-The latest recorded quality snapshot reports an overall status of `healthy` with score `1.0`.
-
-This monitoring document describes the current observability layer; it does not change the production flow itself.
 
 ## Security Notes
 
-Monitoring data must not expose:
-
-- API keys
-- passwords
-- authentication tokens
-- private credentials
-- secret configuration values
-
-Operational logs and quality artifacts should remain safe to store in the repository only when they contain no sensitive information.
+Monitoring data must not expose API keys, passwords, authentication tokens, private credentials, or secret configuration values. Quality artifacts committed to the repository contain only scores, timings, case IDs, failure reasons and answer previews.
 
 ## Known Limitations
 
-The current monitoring is primarily snapshot-based rather than a full time-series monitoring platform.
-
-The quality dashboard summarizes collected benchmark results but does not provide continuous alerting, historical trend storage, or a dedicated metrics backend.
-
-These are future improvements rather than requirements for the current v1.1.0 production baseline.
+Monitoring is snapshot-based: there is no continuous time-series storage, alerting, or dedicated metrics backend. Live quality runs are started manually.

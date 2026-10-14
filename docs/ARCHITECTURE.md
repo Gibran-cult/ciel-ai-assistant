@@ -154,6 +154,14 @@ Secrets and credentials are not intended to be stored in long-term memory.
 
 Mathematical requests are delegated to the Math Tutor Agent flow through a native Run Flow tool (no API key in the flow).
 
+### Verified Data Analyst
+
+Questions about the built-in sales dataset (`200_sales_data`, 200 rows) go to the Verified Data Analyst flow, which computes verified metrics with a CSV agent. Its tool description and the routing rules limit it to that dataset.
+
+### Ciel Table Analyst
+
+Numbers from the user's own CSV/TSV files (attached in the chat or stored as project files) come from Ciel Table Analyst (`flow/components/ciel_table_analyst.py`). The app sends the files through tweaks; the tool computes count, sum, mean, median, min, max, unique and top values, optionally per group, without running model-written code.
+
 ### Knowledge Retriever
 
 Knowledge-related requests can be delegated through the Knowledge Retriever Run Flow component.
@@ -235,6 +243,8 @@ DeepSeek Model
 
 The model acts as the reasoning engine while the Agent remains responsible for orchestration and tool usage.
 
+The model is `deepseek-flash`, which runs in thinking mode. In this mode DeepSeek ignores `temperature`: at temperature 0 the same prompt gave four different answers, while an out-of-range value was rejected by DeepSeek, so the setting is sent but has no effect. Tuning temperature therefore does not change tool-routing consistency.
+
 ## Request Lifecycle
 
 ```text
@@ -293,42 +303,45 @@ Performance profiling therefore treats direct model execution, Agent execution, 
 
 ## Versioned Flow Architecture
 
-Flow snapshots are versioned under:
+Main flow snapshots and component sources:
 
 ```text
 flow/
-+-- v1.0.0/
-|   +-- Ciel_AI_Long-Term_Memory_Master.json
-|
-+-- v1.1.0/
-+-- v1.2.0/
-+-- v1.3.0/
++-- v1.0.0/ … v1.5.1/
 |   +-- Ciel_AI_Long-Term_Memory_Master.json
 +-- components/
     +-- ciel_vision_router.py
     +-- ciel_memory_search.py
     +-- ciel_memory_store.py
+    +-- ciel_table_analyst.py
 ```
 
-v1.0.0 is preserved as the production baseline.
+Contract tests check that each snapshot embeds the same component code as `flow/components/`.
 
-v1.1.0 contains the long-term memory context optimization while preserving the overall orchestration architecture.
+- **v1.0.0:** production baseline.
+- **v1.1.0:** long-term memory context optimization.
+- **v1.2.0:** Ciel Vision Router replaces the always-on vision preprocessor; Math Tutor runs as a native Run Flow tool.
+- **v1.3.0:** long-term memory scoped to the signed-in user; the unconnected Research Agent API Tool node is removed.
+- **v1.4.0:** Agent system prompt only: two persona modes (warm default, "Great Sage" analysis mode), anti-fabrication rules, study-companion behavior.
+- **v1.4.1:** the memory owner input is renamed from `user_id` to `memory_owner`. Langflow's `Component` already has a read-only `user_id` (the Langflow account that owns the flow), which shadowed the input in v1.3.0/v1.4.0, so every visitor was stored under that account. Component inputs must not reuse Langflow's own attribute names.
+- **v1.5.0:** adds Ciel Table Analyst. Before, a question about a user's own CSV could be answered with numbers from the built-in sample dataset. The app keeps attached and project CSV/TSV files per chat and sends them base64-encoded (Langflow turns every backslash-n in a str input into a newline, which breaks plain JSON). The prompt gets only a 20-row preview of each table, and the routing restricts Verified Data Analyst to the built-in dataset.
+- **v1.5.1:** prompt-only: Indonesian number format, conversion of tool output, no invented currency. The app also returns only the final model text block, because Langflow 1.12 joins every Agent round into `Message.text`.
 
-v1.2.0 replaces the always-on vision preprocessor with Ciel Vision Router and runs Math Tutor as a native Run Flow tool.
+## Langflow Configuration Outside the Repository
 
-v1.5.0 adds Ciel Table Analyst. Verified Data Analyst always reads the built-in `200_sales_data` file, so before v1.5.0 a question about a user's own CSV could be answered with numbers from that sample dataset. Now the app keeps each attached CSV/TSV (and project CSV/TSV files) per chat and sends them to Ciel Table Analyst through tweaks, base64-encoded because Langflow turns every backslash-n in a str input into a newline, which breaks plain JSON. The tool computes count/sum/mean/median/min/max/unique/top values (optionally per group) directly from the file without running model-written code, and decides per column whether "." or "," is the decimal mark. The prompt only gets a 20-row preview of each table, and Verified Data Analyst's tool description and the routing rules restrict it to the built-in dataset.
+Parts of production are configured in Langflow and are not versioned here. Changes to them are recorded in `CHANGELOG.md`, backed up to `~/.ciel_ai/flow_backups/` on the Langflow host, and listed in `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
 
-v1.4.1 renames the memory components' owner input from `user_id` to `memory_owner`. Langflow's `Component` already has a read-only `user_id` (the Langflow account that owns the flow), which shadowed the input in v1.3.0/v1.4.0, so every visitor was stored under that account. Component inputs must not reuse Langflow's own attribute names.
-
-v1.4.0 changes only the Agent system prompt: two persona modes (warm default, "Great Sage" analysis mode), anti-fabrication rules, and study-companion behavior.
-
-v1.3.0 scopes long-term memory to the signed-in user and removes the unconnected Research Agent API Tool node. Custom component sources live in `flow/components/`, and contract tests check that the flow JSON embeds the same code.
+- **Sub-flows:** Math Tutor Agent (Agent `n_messages` = 4), Web Research Assistant (Agent `n_messages` = 0, Exa search), Verified Data Analyst, and Knowledge Retriever (knowledge base `TITANIC_DATA_SCIENCE_SOLUTIONS`). Sub-agents get a complete question from the main Agent, so they keep little or no history; their history is scoped by session and flow.
+- **API keys:** every production flow reads model and search keys from Langflow global variables (`DEEPSEEK_API_KEY`, `EXA_API_KEY`); no production flow stores a literal key.
+- **Projects:** "Starter Project" holds only the five production flows. Earlier experiments and versions are in the project "Arsip" (some of them still contain literal keys).
 
 ## Public Deployment Safeguards
 
 - One Langflow session per chat (no shared Agent history).
 - Long-term memory per signed-in user; disabled for anonymous visitors.
 - Hourly message limits per user plus a shared anonymous budget, checked in the app before any backend call (`RATE_LIMIT_*` settings).
+- Error messages show a Request ID instead of response bodies or exception text; details go to the server log.
+- The ngrok traffic policy adds Basic Auth and a per-IP rate limit on `/api/v1/run/`.
 
 ## Architecture Principles
 
