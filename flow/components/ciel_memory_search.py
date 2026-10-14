@@ -36,11 +36,12 @@ class CielMemorySearch(Component):
             info="Jumlah memory paling relevan yang dikembalikan.",
             value=5,
         ),
-        # Diisi oleh app lewat tweaks, bukan oleh Agent (tool_mode=False),
-        # sehingga model tidak bisa membaca memory pengguna lain.
+        # Diisi oleh app lewat tweaks, bukan oleh Agent (tool_mode=False).
+        # Jangan dinamai `user_id`: Component Langflow sudah punya atribut
+        # bawaan `user_id` (akun Langflow pemilik flow) yang menimpa input ini.
         MessageTextInput(
-            name="user_id",
-            display_name="User ID",
+            name="memory_owner",
+            display_name="Memory Owner",
             info=(
                 "ID pemilik memory, dikirim app lewat tweaks. "
                 "Kosong = pengguna anonim, memory dinonaktifkan."
@@ -70,7 +71,7 @@ class CielMemorySearch(Component):
         if not query:
             raise ValueError("Search Query tidak boleh kosong.")
 
-        user_id = str(self.user_id or "").strip()
+        user_id = str(self.memory_owner or "").strip()
 
         if not user_id:
             return LOGIN_REQUIRED

@@ -1450,8 +1450,8 @@ def build_tweaks(image_paths=None):
     owner = memory_owner_id()
 
     tweaks = {
-        MEMORY_SEARCH_ID: {"user_id": owner},
-        MEMORY_STORE_ID: {"user_id": owner},
+        MEMORY_SEARCH_ID: {"memory_owner": owner},
+        MEMORY_STORE_ID: {"memory_owner": owner},
     }
 
     if image_paths:
