@@ -1061,7 +1061,7 @@ def upload_images(images):
 
 AVATARS = {
     "user": ":material/person:",
-    "assistant": "C",
+    "assistant": ":material/cloud:",
 }
 
 # ask_langflow() reports failures as friendly text that starts with one of
