@@ -2,7 +2,12 @@
 
 Data paket dipisah dari tampilan supaya harga dan fitur bisa diubah
 tanpa menyentuh layout, dan bisa dites tanpa menjalankan app.py.
-Belum ada sistem pembayaran: paket berbayar diarahkan ke CONTACT_URL.
+
+Belum ada sistem pembayaran dan pembatasan per paket, jadi semua fitur
+yang ada saat ini gratis. Paket berbayar tampil sebagai rencana
+("Segera hadir") dan tidak bisa dibeli, supaya halaman ini tidak menjual
+fitur yang sebenarnya gratis. Batas pesan dan status memory dikirim oleh
+app.py agar halaman selalu sesuai konfigurasi.
 """
 
 import html
@@ -21,36 +26,41 @@ PLANS = (
         "id": "free",
         "name": "Gratis",
         "monthly": 0,
-        "blurb": "Untuk mencoba Ciel dan kebutuhan riset ringan.",
+        "available": True,
+        "tag": "Tersedia sekarang",
+        "blurb": "Semua fitur Ciel yang ada saat ini, dengan batas pesan per jam.",
         "features": (
-            "Chat dengan Ciel",
-            "Riset web dan perhitungan",
-            "Lampiran file teks",
+            "Chat, riset web dengan sumber, dan matematika",
+            "Analisis angka dari file CSV/TSV",
+            "Lampiran foto dan file teks",
+            "Projects dengan file konteks bersama",
             "Riwayat chat selama sesi",
         ),
         "cta": "Mulai chat",
-        "highlight": False,
+        "highlight": True,
     },
     {
         "id": "pro",
         "name": "Pro",
         "monthly": 79_000,
-        "blurb": "Untuk pelajar, peneliti, dan profesional yang riset tiap hari.",
+        "available": False,
+        "tag": "Segera hadir",
+        "blurb": "Rencana untuk pelajar, peneliti, dan profesional yang riset tiap hari.",
         "features": (
             "Semua di paket Gratis",
-            "Long-term memory lintas percakapan",
-            "Lampiran foto dan analisis gambar",
-            "Projects dengan file konteks bersama",
+            "Batas pesan per jam lebih tinggi",
         ),
         "cta": "Pilih Pro",
-        "highlight": True,
+        "highlight": False,
     },
     {
         "id": "team",
         "name": "Tim",
         "monthly": 149_000,
+        "available": False,
+        "tag": "Segera hadir",
         "unit": "per pengguna",
-        "blurb": "Untuk tim kecil yang butuh asisten riset bersama.",
+        "blurb": "Rencana untuk tim kecil yang butuh asisten riset bersama.",
         "features": (
             "Semua di paket Pro",
             "Minimal 3 pengguna",
@@ -62,24 +72,46 @@ PLANS = (
     },
 )
 
-FAQ = (
-    (
-        "Bagaimana cara membayar?",
-        "Pembayaran online belum tersedia. Pilih paket lalu hubungi kami, "
-        "dan kami kirimkan instruksi pembayaran secara manual.",
-    ),
-    (
-        "Apa bedanya riwayat chat dan long-term memory?",
+
+def free_plan_extras(rate_limits, memory_enabled):
+    """Baris fitur Gratis yang bergantung pada konfigurasi app."""
+    anonymous, signed_in = rate_limits
+    extras = []
+
+    if memory_enabled:
+        extras.append("Long-term memory pribadi (perlu login)")
+        extras.append(f"{anonymous} pesan/jam tanpa login, {signed_in} pesan/jam setelah login")
+    else:
+        extras.append(f"{anonymous} pesan/jam")
+
+    return tuple(extras)
+
+
+def faq_items(memory_enabled):
+    memory_answer = (
         "Riwayat chat di sidebar hanya bertahan selama sesi browser. "
         "Long-term memory menyimpan konteks penting di backend Ciel sehingga "
-        "bisa dipakai lagi di percakapan berikutnya.",
-    ),
-    (
-        "Bisa berhenti kapan saja?",
-        "Bisa. Paket bulanan tidak diperpanjang otomatis, dan paket tahunan "
-        "berlaku sampai akhir periode yang sudah dibayar.",
-    ),
-)
+        "bisa dipakai lagi di percakapan berikutnya. Memory hanya aktif "
+        "setelah login dan hanya bisa dibaca oleh akunmu sendiri."
+        if memory_enabled
+        else "Riwayat chat di sidebar hanya bertahan selama sesi browser. "
+        "Long-term memory (mengingat konteks lintas percakapan) belum aktif "
+        "di deployment ini."
+    )
+
+    return (
+        (
+            "Apakah Ciel gratis?",
+            "Ya. Semua fitur yang ada saat ini gratis, dengan batas pesan per "
+            "jam. Paket berbayar masih disiapkan dan belum bisa dibeli.",
+        ),
+        ("Apa bedanya riwayat chat dan long-term memory?", memory_answer),
+        (
+            "Kenapa ada batas pesan per jam?",
+            "Ciel memakai model AI berbayar dan server sendiri. Batas per jam "
+            "menjaga biaya tetap terkendali dan Ciel tetap cepat untuk semua orang.",
+        ),
+    )
 
 
 # ============================================================
@@ -149,6 +181,12 @@ PRICING_CSS = """
     font-size: 0.68rem;
     font-weight: 500;
 }
+.ciel-plan-tag.is-soon {
+    background: transparent;
+    border: 1px solid var(--c-line-strong);
+    color: var(--c-muted);
+}
+.stApp .ciel-pricenote a { color: var(--c-accent); }
 .ciel-plan-price { margin: 0.9rem 0 0.15rem; display: flex; align-items: baseline; gap: 0.35rem; flex-wrap: wrap; }
 .ciel-plan-price strong {
     font-size: 1.85rem;
@@ -200,7 +238,7 @@ PRICING_CSS = """
 # RENDER
 # ============================================================
 
-def _plan_html(plan, billing):
+def _plan_html(plan, billing, extras=()):
     shown, total, period = plan_price(plan, billing)
     unit = plan.get("unit", "")
 
@@ -210,15 +248,16 @@ def _plan_html(plan, billing):
     else:
         price_html = f"<strong>{format_idr(shown)}</strong><span>/ bulan</span>"
         bill_html = (
-            f"Ditagih {format_idr(total)} per tahun"
+            f"Rencana: {format_idr(total)} per tahun"
             if billing == "yearly"
-            else "Ditagih bulanan"
+            else "Rencana harga bulanan"
         )
         if unit:
             bill_html += f", {html.escape(unit)}"
 
-    tag = '<span class="ciel-plan-tag">Paling populer</span>' if plan["highlight"] else ""
-    features = "".join(f"<li>{html.escape(item)}</li>" for item in plan["features"])
+    tag_class = "ciel-plan-tag" if plan["available"] else "ciel-plan-tag is-soon"
+    tag = f'<span class="{tag_class}">{html.escape(plan["tag"])}</span>' if plan.get("tag") else ""
+    features = "".join(f"<li>{html.escape(item)}</li>" for item in plan["features"] + tuple(extras))
 
     return (
         f'<div class="ciel-plan-top"><span class="ciel-plan-name">{html.escape(plan["name"])}</span>{tag}</div>'
@@ -229,19 +268,22 @@ def _plan_html(plan, billing):
     )
 
 
-def render_pricing(contact_url=None, on_start_chat=None):
+def render_pricing(contact_url=None, on_start_chat=None, rate_limits=(20, 60), memory_enabled=False):
     """Render halaman harga.
 
-    contact_url: tautan https/mailto tujuan tombol paket berbayar.
+    contact_url: tautan https/mailto untuk yang tertarik dengan paket berbayar.
     on_start_chat: callback tombol paket Gratis (kembali ke chat).
+    rate_limits: (batas pesan/jam tanpa login, batas setelah login) dari app.py.
+    memory_enabled: True jika login (dan long-term memory) aktif.
     """
+
     st.markdown(PRICING_CSS, unsafe_allow_html=True)
 
     st.markdown(
         '<div class="ciel-pricehead">'
-        "<h1>Harga yang sederhana.</h1>"
-        "<p>Mulai gratis. Upgrade saat Ciel sudah jadi bagian dari "
-        "cara kamu riset.</p>"
+        "<h1>Semua fitur Ciel saat ini gratis.</h1>"
+        "<p>Paket berbayar sedang disiapkan. Untuk sementara, pemakaian "
+        "dibatasi per jam agar Ciel tetap lancar untuk semua orang.</p>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -257,8 +299,9 @@ def render_pricing(contact_url=None, on_start_chat=None):
         label_visibility="collapsed",
     )
     billing = choice or "monthly"
-
     contact = safe_contact_url(contact_url)
+    extras = free_plan_extras(rate_limits, memory_enabled)
+
     columns = st.columns(len(PLANS), gap="small")
 
     for column, plan in zip(columns, PLANS):
@@ -266,36 +309,39 @@ def render_pricing(contact_url=None, on_start_chat=None):
         key = f"plan_{plan['id']}" + ("-hl" if plan["highlight"] else "")
 
         with column, st.container(key=key):
+            st.markdown(
+                _plan_html(plan, billing, extras if plan["id"] == "free" else ()),
+                unsafe_allow_html=True,
+            )
 
-            st.markdown(_plan_html(plan, billing), unsafe_allow_html=True)
-
-            button_type = "primary" if plan["highlight"] else "secondary"
-
-            if plan["monthly"] == 0:
+            if plan["available"]:
                 st.button(
                     plan["cta"],
                     key=f"cta_{plan['id']}",
-                    type=button_type,
+                    type="primary" if plan["highlight"] else "secondary",
                     on_click=on_start_chat,
                 )
-            elif contact:
-                st.link_button(plan["cta"], contact, type=button_type)
             else:
                 st.button(
                     "Segera hadir",
                     key=f"cta_{plan['id']}",
                     disabled=True,
-                    help="Kontak penjualan belum dikonfigurasi (CONTACT_URL).",
+                    help="Paket berbayar belum dibuka dan belum bisa dibeli.",
                 )
 
-    st.markdown(
-        '<p class="ciel-pricenote">Harga dalam Rupiah. Pembayaran diproses manual untuk sementara.</p>',
-        unsafe_allow_html=True,
-    )
+    note = "Harga paket berbayar masih rencana dan bisa berubah sebelum dibuka."
+
+    if contact:
+        note += (
+            ' Tertarik atau punya pertanyaan? '
+            f'<a href="{html.escape(contact, quote=True)}">Hubungi kami</a>.'
+        )
+
+    st.markdown(f'<p class="ciel-pricenote">{note}</p>', unsafe_allow_html=True)
 
     faq_html = "".join(
         f"<div><strong>{html.escape(q)}</strong><span>{html.escape(a)}</span></div>"
-        for q, a in FAQ
+        for q, a in faq_items(memory_enabled)
     )
 
     st.markdown(
