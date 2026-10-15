@@ -59,6 +59,14 @@ class WatchdogScriptTest(unittest.TestCase):
         self.assertIn("not starting an unprotected tunnel", self.script)
         self.assertIn("-eq 401", self.script)
 
+    def test_unstoppable_agent_is_reported_instead_of_starting_a_second_one(self):
+        # An ngrok started as administrator cannot be stopped by the task, and a
+        # second agent cannot bind the same static domain.
+        block = self.script.split("foreach ($agent in $stale)", 1)[1].split("Start-Process -FilePath 'ngrok'", 1)[0]
+        self.assertIn("-ErrorAction Stop", block)
+        self.assertIn("return $false", block)
+        self.assertNotIn("SilentlyContinue", block.split("Start-Sleep", 1)[0])
+
     def test_no_tunnel_url_or_credentials_in_the_script(self):
         self.assertNotRegex(self.script, r"https://[a-z0-9-]+\.ngrok")
         self.assertNotRegex(self.script, r"credentials:")

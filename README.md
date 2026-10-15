@@ -142,7 +142,7 @@ powershell -ExecutionPolicy Bypass -File tools\ciel_watchdog.ps1 -DryRun
 powershell -ExecutionPolicy Bypass -File tools\ciel_watchdog.ps1 -Install
 ```
 
-`-Install` registers the Task Scheduler task "Ciel backend watchdog" (at logon and every 5 minutes, also on battery); `-Uninstall` removes it. Langflow Desktop is a windowed app, so the task runs in the signed-in user's session: after a reboot the backend comes back once the user signs in.
+`-Install` registers the Task Scheduler task "Ciel backend watchdog" (at logon and every 5 minutes, also on battery); `-Uninstall` removes it. Langflow Desktop is a windowed app, so the task runs in the signed-in user's session: after a reboot the backend comes back once the user signs in. Let the watchdog start ngrok, or start it from a normal window: the task has no administrator rights and cannot restart an ngrok started as administrator (the log says so).
 
 **Host.** Keep the laptop plugged in; set "Sleep" to Never on power (already the case) and "When I close the lid" to Do nothing (Control Panel -> Power Options -> Choose what closing the lid does); set Windows Update active hours so restarts happen at night. These are system settings and are not changed by the scripts.
 

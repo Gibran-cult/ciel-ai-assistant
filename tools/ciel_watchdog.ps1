@@ -191,7 +191,15 @@ function Repair-Ngrok {
     if ($stale.Count -gt 0) {
         # An agent without our tunnel still holds the session; ngrok refuses a second one.
         Write-Log "ngrok: $($stale.Count) agent(s) running without the tunnel, stopping them"
-        $stale | Stop-Process -Force -ErrorAction SilentlyContinue
+        foreach ($agent in $stale) {
+            try {
+                Stop-Process -Id $agent.Id -Force -ErrorAction Stop
+            } catch {
+                # Started from an administrator window; this task runs without admin rights.
+                Write-Log "ngrok: cannot stop agent $($agent.Id) (started as administrator?); close it or start ngrok from a normal window"
+                return $false
+            }
+        }
         Start-Sleep -Seconds 3
     }
 
