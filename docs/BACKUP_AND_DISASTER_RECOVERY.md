@@ -22,6 +22,8 @@ The following parts of production are **not in Git** and need their own protecte
 | Ollama models | Ollama on the Langflow host | `qwen2.5vl:3b` (images), `nomic-embed-text-v2-moe:latest` (memory embeddings); re-pull with `ollama pull` |
 | Flow backups | `~/.ciel_ai/flow_backups/` on the Langflow host | Copies taken before each in-place flow change (see below) |
 | Retention task | Windows Task Scheduler on the Langflow host | Runs `tools/prune_chat_history.py` daily; recreate it after restoring the host (see `README.md`) |
+| Watchdog task | Windows Task Scheduler on the Langflow host | "Ciel backend watchdog" runs `tools/ciel_watchdog.ps1` at logon and every 5 minutes; recreate it with `-Install` after restoring the host |
+| Keep-awake variable | GitHub repository variable `STREAMLIT_APP_URL` | Used by `.github/workflows/keep-awake.yml` |
 
 Do not place real secret values in the repository, documentation, issue tracker, or any public backup. Exported flows can contain keys if a node stores one literally; production flows use global variables, but archived flows in the Langflow project "Arsip" still contain literal keys.
 
@@ -53,7 +55,7 @@ python -m pip install -r requirements.txt
 5. Import `flow/v1.5.1/Ciel_AI_Long-Term_Memory_Master.json`. If the sub-flows got new IDs on import, re-select them in the main flow's four Run Flow nodes.
 6. Import `flow/memory_admin/Ciel_Memory_Admin.json` (the "Data saya" flow) and note its ID for `MEMORY_ADMIN_FLOW_ID`.
 7. Create a Langflow API key for the app.
-8. Start ngrok with the restored traffic policy, pointing at `localhost:7860`.
+8. Start ngrok with the restored traffic policy, pointing at `localhost:7860`, or set `NGROK_URL` in `.env` and run `tools/ciel_watchdog.ps1`, which does it; then reinstall the watchdog task with `-Install`.
 
 ### 3. Restore the app configuration
 

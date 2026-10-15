@@ -197,9 +197,9 @@ Evidence:
 
 Open risks:
 
-- **Single backend host:** Langflow, Ollama and the memory database run on one home PC behind one ngrok tunnel. When the PC or tunnel is down, the public app cannot answer.
+- **Single backend host:** Langflow, Ollama and the memory database run on one home PC behind one ngrok tunnel. When the PC or tunnel is down, the public app cannot answer. `tools/ciel_watchdog.ps1` restarts Ollama, Langflow and the tunnel after a crash or sign-in, but not a powered-off or sleeping PC.
 - **Parts of production outside Git:** sub-flows, global variables, the knowledge base, and the Chroma database need the separate backups described in `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
 - **Free-tier limits:** ngrok's free plan caps requests and outbound data per month; DeepSeek and Exa usage is paid per call.
 - **Privacy:** signed-in users cannot yet view or delete their stored memories, and the app has no privacy notice.
-- **Monitoring:** quality runs are started manually; there is no alerting.
+- **Monitoring:** quality runs are started manually. The only alerting is the keep-awake workflow's failure email when the frontend does not render; a backend outage is visible only in `~/.ciel_ai/logs/watchdog.log`.
 

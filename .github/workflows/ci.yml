@@ -66,4 +66,5 @@ jobs:
             tests.test_performance_snapshot \
             tests.test_pricing \
             tests.test_privacy \
-            tests.test_login
+            tests.test_login \
+            tests.test_keep_alive
