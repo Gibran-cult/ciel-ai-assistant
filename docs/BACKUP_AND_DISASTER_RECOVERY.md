@@ -51,12 +51,13 @@ python -m pip install -r requirements.txt
 3. Restore `~/.ciel_ai/long_term_memory` and `~/.langflow/knowledge_bases` from their backups.
 4. Import the four sub-flows from their exports or from `~/.ciel_ai/flow_backups/`, and upload the Verified Data Analyst dataset.
 5. Import `flow/v1.5.1/Ciel_AI_Long-Term_Memory_Master.json`. If the sub-flows got new IDs on import, re-select them in the main flow's four Run Flow nodes.
-6. Create a Langflow API key for the app.
-7. Start ngrok with the restored traffic policy, pointing at `localhost:7860`.
+6. Import `flow/memory_admin/Ciel_Memory_Admin.json` (the "Data saya" flow) and note its ID for `MEMORY_ADMIN_FLOW_ID`.
+7. Create a Langflow API key for the app.
+8. Start ngrok with the restored traffic policy, pointing at `localhost:7860`.
 
 ### 3. Restore the app configuration
 
-Set the app secrets in Streamlit Cloud (and locally if needed): the ngrok URL and Basic Auth credentials, the new Langflow API key, and `FLOW_ID` of the imported main flow. Do not commit them.
+Set the app secrets in Streamlit Cloud (and locally if needed): the ngrok URL and Basic Auth credentials, the new Langflow API key, `FLOW_ID` of the imported main flow, and `MEMORY_ADMIN_FLOW_ID` of the imported admin flow. Do not commit them.
 
 If the memory database could not be restored but older memories without an owner exist, assign them with `tools/migrate_memory_owner.py` (see `README.md`).
 

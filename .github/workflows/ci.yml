@@ -46,6 +46,7 @@ jobs:
           python -m json.tool flow/v1.4.1/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
           python -m json.tool flow/v1.5.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
           python -m json.tool flow/v1.5.1/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
+          python -m json.tool flow/memory_admin/Ciel_Memory_Admin.json > /dev/null
 
       - name: Run offline test suite
         run: |

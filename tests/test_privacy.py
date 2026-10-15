@@ -21,6 +21,7 @@ from tests.test_flow_v141_contract import (
 ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = ROOT / "app.py"
 COMPONENT = ROOT / "flow" / "components" / "ciel_memory_admin.py"
+ADMIN_FLOW = ROOT / "flow" / "memory_admin" / "Ciel_Memory_Admin.json"
 ALICE = "aaaa1111aaaa1111"
 BOB = "bbbb2222bbbb2222"
 
@@ -115,6 +116,40 @@ class MemoryAdminComponentTest(unittest.TestCase):
         names = input_names(COMPONENT.read_text(encoding="utf-8"))
         self.assertEqual(sorted(names), ["memory_action", "memory_id", "memory_owner"])
         self.assertFalse(RESERVED_COMPONENT_ATTRIBUTES & set(names))
+
+
+class MemoryAdminFlowContractTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.flow = json.loads(ADMIN_FLOW.read_text(encoding="utf-8"))
+        cls.nodes = {n["id"]: n for n in cls.flow["data"]["nodes"]}
+
+    def test_flow_is_only_admin_to_chat_output(self):
+        self.assertEqual(sorted(self.nodes), ["ChatOutput-adm1n", "CielMemoryAdmin-adm1n"])
+        [edge] = self.flow["data"]["edges"]
+        self.assertEqual((edge["source"], edge["data"]["sourceHandle"]["name"]), ("CielMemoryAdmin-adm1n", "result"))
+        self.assertEqual((edge["target"], edge["data"]["targetHandle"]["fieldName"]), ("ChatOutput-adm1n", "input_value"))
+
+    def test_node_runs_the_component_source(self):
+        template = self.nodes["CielMemoryAdmin-adm1n"]["data"]["node"]["template"]
+        normalize = lambda code: code.replace("\r\n", "\n").strip()
+        self.assertEqual(normalize(template["code"]["value"]), normalize(COMPONENT.read_text(encoding="utf-8")))
+        for name in ("memory_owner", "memory_action", "memory_id"):
+            self.assertFalse(template[name].get("tool_mode"), name)
+
+    def test_results_are_not_stored_as_chat_messages(self):
+        template = self.nodes["ChatOutput-adm1n"]["data"]["node"]["template"]
+        self.assertIs(template["should_store_message"]["value"], False)
+
+    def test_app_default_node_id_matches_the_flow(self):
+        self.assertIn('get_config("MEMORY_ADMIN_NODE_ID") or "CielMemoryAdmin-adm1n"', APP_PATH.read_text(encoding="utf-8"))
+
+    def test_snapshot_holds_no_install_specific_values(self):
+        raw = ADMIN_FLOW.read_text(encoding="utf-8")
+        self.assertNotIn('"id": "', raw.split('"nodes"')[0])
+        self.assertNotIn('"user_id"', raw)
+        self.assertNotRegex(raw, r"sk-[A-Za-z0-9]{10,}")
 
 
 # ------------------------------------------------------------
