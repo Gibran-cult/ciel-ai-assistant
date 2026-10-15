@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Privacy page, "Data saya" and chat retention
+- Problem: users were not told what Ciel stores or sends to third parties, could not see or delete their long-term memories ("Memory belum dapat dilihat atau dihapus dari aplikasi"), and Langflow kept every message of every session indefinitely.
+- New "Privasi" page (`privacy.py`, sidebar): what happens to a message (DeepSeek, Exa, local models), what is stored and for how long, how to control it, and what not to send. The content follows the configuration: retention days, whether login/memory is active, whether data controls are available, and `CONTACT_URL`.
+- New "Data saya" panel for signed-in users: list memories, delete one, delete all (with a confirmation checkbox), and delete their own chat history on the Langflow server (with a confirmation checkbox). Chat history is deleted by Langflow session and only for sessions starting with the user's own key.
+- Memory actions go to a separate flow with the new Ciel Memory Admin component (`flow/components/ciel_memory_admin.py`), set up with `MEMORY_ADMIN_FLOW_ID`. It is not an Agent tool, takes the owner only from the app's tweak, and only touches that owner's memories. Without `MEMORY_ADMIN_FLOW_ID` the panel says data controls are not active and the privacy page does not promise them.
+- The admin flow is in `flow/memory_admin/Ciel_Memory_Admin.json` (Ciel Memory Admin -> Chat Output with "store messages" off). Created in Langflow as a new flow next to production. Live check through ngrok with throwaway owners: anonymous and unknown actions refused; list shows only the owner's memories; another owner's ID returns `not_found`; delete one and delete all remove only the owner's memories (collection size unchanged afterwards); the flow stores no messages; deleting chat history removed the user's two test sessions and kept another user's session.
+- Retention: `tools/prune_chat_history.py` deletes Langflow messages older than `CHAT_RETENTION_DAYS` (default 30), with `--dry-run`; meant to run daily on the Langflow host (Task Scheduler example in README). Long-term memory is not affected.
+- `tests/test_privacy.py` (in CI): the admin component against a real Chroma database (owner isolation for list, delete and delete all; anonymous and unknown actions refused; no reserved input names), the app's admin request and session filtering/batching, the privacy page content and rendering, and the retention script's timestamp parsing, paging, deletion and dry run.
+
 ### Pricing page matches what the app offers
 - Problem: the pricing page sold Pro (Rp79.000/month) for long-term memory, photo attachments and projects, which every visitor already gets for free, and the free plan listed less than the app provides. Plans are not enforced and there is no payment system.
 - The free plan now lists everything available (research with sources, math, CSV/TSV analysis, photos and text files, projects, session history), plus long-term memory "perlu login" when Google login is configured and the hourly message limits. Limits and login state come from `app.py` (`RATE_LIMIT_*`, `[auth]`), so the page follows the configuration.

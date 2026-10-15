@@ -335,6 +335,23 @@ Parts of production are configured in Langflow and are not versioned here. Chang
 - **API keys:** every production flow reads model and search keys from Langflow global variables (`DEEPSEEK_API_KEY`, `EXA_API_KEY`); no production flow stores a literal key.
 - **Projects:** "Starter Project" holds only the five production flows. Earlier experiments and versions are in the project "Arsip" (some of them still contain literal keys).
 
+## Privacy and Data Controls
+
+```text
+"Data saya" panel (signed-in only)
+ |
+ +-- memories      -> POST /api/v1/run/<MEMORY_ADMIN_FLOW_ID>
+ |                    tweaks: memory_owner, memory_action (list | delete | delete_all), memory_id
+ |                    Ciel Memory Admin -> Chat Output (message not stored)
+ |
+ +-- chat history  -> GET  /api/v1/monitor/messages/sessions
+                      DELETE /api/v1/monitor/messages/sessions  (only "<user key>-..." sessions)
+```
+
+- **Ciel Memory Admin** (`flow/components/ciel_memory_admin.py`) runs in its own small flow, not in the main flow, so it is never an Agent tool: the model cannot list or delete memories. Like the memory tools, the owner comes only from the app's tweak, and every action is limited to memories whose `user_id` metadata equals that owner; deleting another owner's ID returns `not_found`. Anonymous calls are refused.
+- **Chat history** is stored by Langflow per session. Signed-in users' sessions start with their user key (`<user key>-<chat id>`), so the app deletes exactly those. Anonymous sessions use a random per-browser key that cannot be tied to a person; they are removed by retention.
+- **Retention:** `tools/prune_chat_history.py`, scheduled on the Langflow host, deletes messages older than `CHAT_RETENTION_DAYS` (default 30) across all flows of the account, including sub-flows. The privacy page (`privacy.py`) shows the same number.
+
 ## Public Deployment Safeguards
 
 - One Langflow session per chat (no shared Agent history).
@@ -342,6 +359,7 @@ Parts of production are configured in Langflow and are not versioned here. Chang
 - Hourly message limits per user plus a shared anonymous budget, checked in the app before any backend call (`RATE_LIMIT_*` settings).
 - Error messages show a Request ID instead of response bodies or exception text; details go to the server log.
 - The ngrok traffic policy adds Basic Auth and a per-IP rate limit on `/api/v1/run/`.
+- A privacy page, self-service deletion of memories and server chat history for signed-in users, and a retention period for server-side messages (see Privacy and Data Controls).
 
 ## Architecture Principles
 

@@ -15,7 +15,8 @@ import streamlit as st
 from dotenv import load_dotenv
 from PIL import Image
 
-from pricing import render_pricing
+from pricing import render_pricing, safe_contact_url
+from privacy import render_privacy
 
 # ============================================================
 # LOGGING
@@ -572,6 +573,15 @@ AUTH_ENABLED = auth_configured()
 
 # Opsional: tujuan tombol paket berbayar di halaman harga (https:// atau mailto:).
 CONTACT_URL = get_config("CONTACT_URL")
+
+# Opsional: flow "Ciel Memory Admin" untuk panel "Data saya" (lihat dan hapus
+# memory). Tanpa ini panel menyatakan bahwa fitur belum aktif.
+MEMORY_ADMIN_FLOW_ID = get_config("MEMORY_ADMIN_FLOW_ID")
+MEMORY_ADMIN_NODE_ID = get_config("MEMORY_ADMIN_NODE_ID") or "CielMemoryAdmin-adm1n"
+
+# Lama riwayat pesan disimpan di Langflow (dibersihkan oleh
+# tools/prune_chat_history.py); dipakai untuk teks halaman Privasi.
+CHAT_RETENTION_DAYS = get_int_config("CHAT_RETENTION_DAYS", 30)
 
 # Bersihkan URL
 if NGROK_URL:
@@ -1141,6 +1151,169 @@ def upload_images(images):
 
 
 # ============================================================
+# DATA SAYA (MEMORY DAN RIWAYAT CHAT DI SERVER)
+# ============================================================
+
+def memory_admin(action, memory_id=""):
+    """
+    Panggil flow "Ciel Memory Admin" untuk akun yang sedang login.
+
+    Pemilik selalu memory_owner_id() dari app, bukan input pengguna atau
+    model. Kembalikan dict hasil flow; kegagalan dicatat di log dengan
+    Request ID dan dikembalikan sebagai {"ok": False, ...}.
+    """
+
+    owner = memory_owner_id()
+    request_id = uuid.uuid4().hex[:8]
+
+    if not owner or not MEMORY_ADMIN_FLOW_ID:
+        return {"ok": False, "error": "unavailable"}
+
+    try:
+        response = requests.post(
+            f"{NGROK_URL}/api/v1/run/{MEMORY_ADMIN_FLOW_ID}",
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "x-api-key": LANGFLOW_API_KEY,
+            },
+            auth=(NGROK_USER, NGROK_PASSWORD),
+            params={"stream": "false"},
+            json={
+                "input_value": "",
+                "input_type": "chat",
+                "output_type": "chat",
+                "session_id": f"{owner}-memory-admin",
+                "tweaks": {
+                    MEMORY_ADMIN_NODE_ID: {
+                        "memory_owner": owner,
+                        "memory_action": action,
+                        "memory_id": memory_id,
+                    },
+                },
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+
+        text = (
+            response.json()["outputs"][0]["outputs"][0]
+            ["results"]["message"]["data"]["text"]
+        )
+        result = json.loads(text)
+
+    except (requests.exceptions.RequestException, ValueError, KeyError, IndexError, TypeError) as error:
+        logger.error(
+            "memory_admin_error id=%s action=%s type=%s error=%s",
+            request_id,
+            action,
+            type(error).__name__,
+            error,
+        )
+        return {"ok": False, "error": "request_failed", "request_id": request_id}
+
+    logger.info("memory_admin id=%s action=%s ok=%s", request_id, action, result.get("ok"))
+
+    return result
+
+
+def own_session_ids(session_ids, owner):
+    """Session milik pemilik ini; app memakai session_id "<owner>-<chat id>"."""
+
+    if not owner:
+        return []
+
+    prefix = f"{owner}-"
+
+    return [s for s in session_ids if str(s).startswith(prefix)]
+
+
+def delete_server_chat_history():
+    """Hapus semua pesan Langflow dari session milik akun yang sedang login."""
+
+    owner = memory_owner_id()
+    request_id = uuid.uuid4().hex[:8]
+
+    if not owner:
+        return {"ok": False, "error": "login_required"}
+
+    headers = {"Accept": "application/json", "x-api-key": LANGFLOW_API_KEY}
+    auth = (NGROK_USER, NGROK_PASSWORD)
+
+    try:
+        listing = requests.get(
+            f"{NGROK_URL}/api/v1/monitor/messages/sessions",
+            headers=headers,
+            auth=auth,
+            timeout=60,
+        )
+        listing.raise_for_status()
+        mine = own_session_ids(listing.json(), owner)
+
+        # Langflow menerima paling banyak 500 session per permintaan.
+        for start in range(0, len(mine), 500):
+            deleted = requests.delete(
+                f"{NGROK_URL}/api/v1/monitor/messages/sessions",
+                headers=headers,
+                auth=auth,
+                json=mine[start:start + 500],
+                timeout=60,
+            )
+            deleted.raise_for_status()
+
+    except (requests.exceptions.RequestException, ValueError, TypeError) as error:
+        logger.error(
+            "chat_history_delete_error id=%s type=%s error=%s",
+            request_id,
+            type(error).__name__,
+            error,
+        )
+        return {"ok": False, "error": "request_failed", "request_id": request_id}
+
+    logger.info("chat_history_deleted id=%s sessions=%d", request_id, len(mine))
+
+    return {"ok": True, "deleted_sessions": len(mine)}
+
+
+def set_data_notice(result, success_text):
+    if result.get("ok"):
+        st.session_state.data_notice = ("success", success_text)
+        return
+
+    request_id = result.get("request_id")
+    st.session_state.data_notice = (
+        "error",
+        "Permintaan gagal diproses. Silakan coba lagi."
+        + (f" Request ID: {request_id}" if request_id else ""),
+    )
+
+
+def load_my_memories():
+    st.session_state.my_memories = memory_admin("list")
+
+
+def delete_my_memory(memory_id):
+    set_data_notice(memory_admin("delete", memory_id), "Memory dihapus.")
+    load_my_memories()
+
+
+def delete_all_my_memories():
+    result = memory_admin("delete_all")
+    set_data_notice(result, f"{result.get('deleted', 0)} memory dihapus.")
+    st.session_state.confirm_delete_memories = False
+    load_my_memories()
+
+
+def delete_my_chat_history():
+    result = delete_server_chat_history()
+    set_data_notice(
+        result,
+        f"Riwayat chat-mu di server dihapus ({result.get('deleted_sessions', 0)} percakapan).",
+    )
+    st.session_state.confirm_delete_history = False
+
+
+# ============================================================
 # UI HELPERS
 # ============================================================
 
@@ -1593,8 +1766,9 @@ def unpack_chat_input(value):
 
 
 def current_view():
-    # Disimpan di URL (?page=pricing) agar halaman harga bisa dibagikan.
-    return "pricing" if st.query_params.get("page") == "pricing" else "chat"
+    # Disimpan di URL (?page=pricing, ?page=privacy) agar halaman bisa dibagikan.
+    page = st.query_params.get("page")
+    return page if page in ("pricing", "privacy") else "chat"
 
 
 def show_chat():
@@ -1603,6 +1777,10 @@ def show_chat():
 
 def show_pricing():
     st.query_params["page"] = "pricing"
+
+
+def show_privacy():
+    st.query_params["page"] = "privacy"
 
 
 def new_chat():
@@ -1824,6 +2002,17 @@ with st.sidebar:
             on_click=show_pricing,
         )
 
+        st.button(
+            "Privasi",
+            key=(
+                "navactive_privacy"
+                if current_view() == "privacy"
+                else "nav_privacy"
+            ),
+            icon=":material/shield:",
+            on_click=show_privacy,
+        )
+
     # --------------------------------------------------------
     # PROJECTS
     # --------------------------------------------------------
@@ -2030,10 +2219,91 @@ with st.sidebar:
             f"{memory_status}"
             "<p>Ini berbeda dari riwayat chat di sidebar, yang hanya "
             "tersimpan selama sesi browser ini.</p>"
-            "<p>Memory belum dapat dilihat atau diubah dari sini.</p>"
-            "</div>",
+            + (
+                "<p>Lihat dan hapus memory-mu di bagian Data saya.</p>"
+                if logged_in() and MEMORY_ADMIN_FLOW_ID
+                else ""
+            )
+            + "</div>",
             unsafe_allow_html=True,
         )
+
+    if logged_in():
+
+        with st.expander("Data saya"):
+
+            if not MEMORY_ADMIN_FLOW_ID:
+
+                st.caption("Pengelolaan data belum aktif di deployment ini.")
+
+            else:
+
+                notice = st.session_state.pop("data_notice", None)
+
+                if notice:
+                    (st.success if notice[0] == "success" else st.error)(notice[1])
+
+                st.button(
+                    "Tampilkan memoriku",
+                    key="load_memories",
+                    icon=":material/visibility:",
+                    on_click=load_my_memories,
+                )
+
+                listing = st.session_state.get("my_memories")
+
+                if listing is not None and not listing.get("ok"):
+                    st.caption("Memory belum bisa dimuat. Silakan coba lagi.")
+
+                elif listing is not None and not listing.get("memories"):
+                    st.caption("Belum ada memory yang tersimpan.")
+
+                elif listing is not None:
+
+                    st.caption(f"{listing.get('total', 0)} memory tersimpan")
+
+                    for item in listing["memories"]:
+
+                        st.markdown(
+                            '<div class="ciel-projfile">'
+                            f"<span>{html.escape(short(item['text'], 90))}</span>"
+                            "</div>",
+                            unsafe_allow_html=True,
+                        )
+
+                        st.button(
+                            "Hapus",
+                            key=f"delmem_{item['id']}",
+                            icon=":material/close:",
+                            on_click=delete_my_memory,
+                            args=(item["id"],),
+                        )
+
+                st.checkbox(
+                    "Saya yakin ingin menghapus semua memoriku",
+                    key="confirm_delete_memories",
+                )
+
+                st.button(
+                    "Hapus semua memoriku",
+                    key="delete_all_memories",
+                    icon=":material/delete:",
+                    disabled=not st.session_state.get("confirm_delete_memories"),
+                    on_click=delete_all_my_memories,
+                )
+
+                st.checkbox(
+                    "Saya yakin ingin menghapus riwayat chat-ku di server",
+                    key="confirm_delete_history",
+                )
+
+                st.button(
+                    "Hapus riwayat chat-ku di server",
+                    key="delete_history",
+                    icon=":material/history:",
+                    disabled=not st.session_state.get("confirm_delete_history"),
+                    on_click=delete_my_chat_history,
+                )
 
     # --------------------------------------------------------
     # CLEAR CHAT (AKSI SEKUNDER)
@@ -2093,6 +2363,15 @@ if current_view() == "pricing":
         on_start_chat=show_chat,
         rate_limits=(RATE_LIMIT_PER_HOUR, RATE_LIMIT_PER_HOUR_LOGIN),
         memory_enabled=AUTH_ENABLED,
+    )
+    st.stop()
+
+if current_view() == "privacy":
+    render_privacy(
+        retention_days=CHAT_RETENTION_DAYS,
+        memory_enabled=AUTH_ENABLED,
+        data_controls=bool(MEMORY_ADMIN_FLOW_ID),
+        contact_url=safe_contact_url(CONTACT_URL),
     )
     st.stop()
 
