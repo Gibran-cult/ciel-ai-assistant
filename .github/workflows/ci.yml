@@ -65,4 +65,5 @@ jobs:
             tests.test_app_hygiene \
             tests.test_performance_snapshot \
             tests.test_pricing \
-            tests.test_privacy
+            tests.test_privacy \
+            tests.test_login

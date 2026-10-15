@@ -14,16 +14,17 @@ PRIVACY_CSS = """
 <style>
 .ciel-privacy h1 {
     margin: 0 0 0.7rem;
-    font-size: clamp(1.8rem, 3.6vw, 2.5rem);
-    font-weight: 560;
-    letter-spacing: -0.045em;
+    font-family: var(--font-serif);
+    font-size: clamp(1.9rem, 3.8vw, 2.6rem);
+    font-weight: 400;
+    letter-spacing: -0.025em;
     line-height: 1.08;
     color: var(--c-text);
 }
 .ciel-privacy h2 {
     margin: 2rem 0 0.6rem;
     font-size: 1.05rem;
-    font-weight: 560;
+    font-weight: 600;
     letter-spacing: -0.01em;
     color: var(--c-text);
 }
@@ -31,7 +32,7 @@ PRIVACY_CSS = """
 .stApp .ciel-privacy li { font-size: 0.92rem; line-height: 1.65; color: var(--c-muted); }
 .stApp .ciel-privacy ul { padding-left: 1.1rem; margin: 0; }
 .stApp .ciel-privacy li { margin: 0 0 0.45rem; }
-.stApp .ciel-privacy strong { color: var(--c-text); font-weight: 560; }
+.stApp .ciel-privacy strong { color: var(--c-text); font-weight: 600; }
 .stApp .ciel-privacy a { color: var(--c-accent); }
 </style>
 """
@@ -43,11 +44,7 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
     days = int(retention_days)
 
     processing = [
-        "Pesan dan file yang kamu lampirkan dikirim ke server Ciel (Langflow "
-        "yang berjalan di komputer pengelola) untuk dijawab.",
-        "Untuk menyusun jawaban, isi pesan diproses oleh penyedia model AI "
-        "pihak ketiga (<strong>DeepSeek</strong>). Pertanyaan riset web dikirim "
-        "ke layanan pencarian (<strong>Exa</strong>).",
+        "Pesan dan file yang kamu lampirkan dikirim ke server Ciel untuk dijawab.",
         "Foto dan embedding memory diproses oleh model yang berjalan di server "
         "Ciel sendiri.",
     ]
@@ -87,7 +84,7 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
 
     if memory_enabled and data_controls:
         controls.append(
-            "Setelah login, buka <strong>Data saya</strong> di sidebar untuk "
+            "Setelah login, buka menu akun di kanan atas lalu <strong>Data saya</strong> untuk "
             "melihat dan menghapus memory-mu, serta menghapus riwayat chat-mu "
             "di server."
         )

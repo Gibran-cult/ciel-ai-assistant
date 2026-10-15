@@ -4,10 +4,11 @@ Data paket dipisah dari tampilan supaya harga dan fitur bisa diubah
 tanpa menyentuh layout, dan bisa dites tanpa menjalankan app.py.
 
 Belum ada sistem pembayaran dan pembatasan per paket, jadi semua fitur
-yang ada saat ini gratis. Paket berbayar tampil sebagai rencana
-("Segera hadir") dan tidak bisa dibeli, supaya halaman ini tidak menjual
-fitur yang sebenarnya gratis. Batas pesan dan status memory dikirim oleh
-app.py agar halaman selalu sesuai konfigurasi.
+yang ada saat ini gratis. Halaman hanya menampilkan satu paket yang
+benar-benar bisa dipakai (Gratis); paket berbayar tampil sebagai daftar
+rencana tanpa tombol beli, toggle tagihan, atau kartu tiruan. Batas pesan
+dan status memory dikirim oleh app.py agar halaman selalu sesuai
+konfigurasi.
 """
 
 import html
@@ -18,8 +19,6 @@ import streamlit as st
 # ============================================================
 # DATA
 # ============================================================
-
-YEARLY_MONTHS_CHARGED = 10  # Bayar tahunan = 2 bulan gratis
 
 PLANS = (
     {
@@ -33,42 +32,35 @@ PLANS = (
             "Chat, riset web dengan sumber, dan matematika",
             "Analisis angka dari file CSV/TSV",
             "Lampiran foto dan file teks",
-            "Projects dengan file konteks bersama",
+            "Proyek dengan file konteks bersama",
             "Riwayat chat selama sesi",
         ),
         "cta": "Mulai chat",
-        "highlight": True,
     },
     {
         "id": "pro",
         "name": "Pro",
         "monthly": 79_000,
         "available": False,
-        "tag": "Segera hadir",
-        "blurb": "Rencana untuk pelajar, peneliti, dan profesional yang riset tiap hari.",
+        "blurb": "Untuk pelajar, peneliti, dan profesional yang riset tiap hari.",
         "features": (
             "Semua di paket Gratis",
             "Batas pesan per jam lebih tinggi",
         ),
-        "cta": "Pilih Pro",
-        "highlight": False,
     },
     {
         "id": "team",
         "name": "Tim",
         "monthly": 149_000,
         "available": False,
-        "tag": "Segera hadir",
         "unit": "per pengguna",
-        "blurb": "Rencana untuk tim kecil yang butuh asisten riset bersama.",
+        "blurb": "Untuk tim kecil yang butuh asisten riset bersama.",
         "features": (
             "Semua di paket Pro",
             "Minimal 3 pengguna",
             "Onboarding dan bantuan setup flow",
             "Dukungan via email",
         ),
-        "cta": "Hubungi kami",
-        "highlight": False,
     },
 )
 
@@ -123,15 +115,12 @@ def format_idr(amount):
     return "Rp" + f"{int(round(amount)):,}".replace(",", ".")
 
 
-def plan_price(plan, billing):
-    """Kembalikan (harga per bulan yang ditampilkan, total tagihan, periode)."""
-    monthly = plan["monthly"]
-
-    if billing == "yearly":
-        total = monthly * YEARLY_MONTHS_CHARGED
-        return total / 12, total, "tahun"
-
-    return monthly, monthly, "bulan"
+def planned_price(plan):
+    """Teks harga rencana untuk paket yang belum dibuka."""
+    text = f"Rencana {format_idr(plan['monthly'])}/bulan"
+    if plan.get("unit"):
+        text += f" {plan['unit']}"
+    return text
 
 
 def safe_contact_url(url):
@@ -150,85 +139,91 @@ PRICING_CSS = """
 <style>
 .ciel-pricehead h1 {
     margin: 0 0 0.7rem;
-    font-size: clamp(1.8rem, 3.6vw, 2.5rem);
-    font-weight: 560;
-    letter-spacing: -0.045em;
+    font-family: var(--font-serif);
+    font-size: clamp(1.9rem, 3.8vw, 2.6rem);
+    font-weight: 400;
+    letter-spacing: -0.025em;
     line-height: 1.08;
     text-wrap: balance;
     color: var(--c-text);
 }
-.stApp .ciel-pricehead p { margin: 0 0 1.4rem; max-width: 34rem; color: var(--c-muted); line-height: 1.65; }
+.stApp .ciel-pricehead p { margin: 0 0 1.6rem; max-width: 34rem; color: var(--c-muted); line-height: 1.65; }
 
-[class*="st-key-plan_"] {
-    height: 100%;
-    padding: 1.2rem 1.15rem 1.1rem;
-    border: 1px solid var(--c-line-strong);
+.st-key-plan_free {
+    padding: 1.3rem 1.3rem 1.2rem;
+    border: 1px solid var(--c-line);
     border-radius: var(--r-lg);
     background: var(--c-surface);
-}
-[class*="st-key-plan_"][class*="-hl"] {
-    border-color: var(--c-accent);
-    box-shadow: inset 0 2px 0 var(--c-accent);
+    box-shadow: var(--shadow-sm);
 }
 .ciel-plan-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.ciel-plan-name { font-size: 1rem; font-weight: 560; letter-spacing: -0.01em; color: var(--c-text); }
+.ciel-plan-name { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; color: var(--c-text); }
 .ciel-plan-tag {
-    padding: 0.1rem 0.45rem;
-    border-radius: 3px;
-    background: var(--c-accent);
-    color: var(--c-accent-ink);
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
+    padding: 0.1rem 0.55rem;
+    border-radius: 999px;
+    background: var(--c-gold);
+    color: var(--c-gold-ink);
+    font-size: 0.74rem;
     font-weight: 500;
 }
-.ciel-plan-tag.is-soon {
-    background: transparent;
-    border: 1px solid var(--c-line-strong);
-    color: var(--c-muted);
-}
-.stApp .ciel-pricenote a { color: var(--c-accent); }
-.ciel-plan-price { margin: 0.9rem 0 0.15rem; display: flex; align-items: baseline; gap: 0.35rem; flex-wrap: wrap; }
+.ciel-plan-price { margin: 0.8rem 0 0.2rem; display: flex; align-items: baseline; gap: 0.35rem; }
 .ciel-plan-price strong {
     font-size: 1.85rem;
-    font-weight: 560;
+    font-weight: 600;
     letter-spacing: -0.04em;
     font-variant-numeric: tabular-nums;
     color: var(--c-text);
 }
 .ciel-plan-price span { font-size: 0.82rem; color: var(--c-muted); }
-.stApp .ciel-plan-bill { min-height: 1.2rem; margin: 0; font-family: var(--font-mono); font-size: 0.72rem; color: var(--c-faint); }
-.stApp .ciel-plan-blurb { margin: 0.75rem 0 0.9rem; font-size: 0.86rem; line-height: 1.55; color: var(--c-muted); }
-.stApp .ciel-plan-feats { list-style: none; margin: 0 0 1rem; padding: 0.85rem 0 0; width: 100%; border-top: 1px solid var(--c-line); }
+.stApp .ciel-plan-blurb { margin: 0.4rem 0 0.9rem; font-size: 0.9rem; line-height: 1.55; color: var(--c-muted); }
+.stApp .ciel-plan-feats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem 1.5rem;
+    width: 100%;
+    list-style: none;
+    margin: 0 0 1.1rem;
+    padding: 0.9rem 0 0;
+    border-top: 1px solid var(--c-line);
+}
 .stApp .ciel-plan-feats li {
     position: relative;
-    margin: 0 0 0.5rem;
-    padding-left: 1.3rem;
-    font-size: 0.86rem;
+    margin: 0;
+    padding-left: 1.2rem;
+    font-size: 0.88rem;
     line-height: 1.5;
     color: var(--c-text);
 }
 .ciel-plan-feats li::before {
-    content: "\\2713";
+    content: "";
     position: absolute;
-    left: 0;
-    color: var(--c-accent);
-    font-family: var(--font-mono);
+    left: 0.15rem;
+    top: 0.6em;
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 50%;
+    background: var(--c-accent);
 }
-[class*="st-key-plan_"] [data-testid="stElementContainer"]:has(.stButton, .stLinkButton),
-[class*="st-key-plan_"] .stButton,
-[class*="st-key-plan_"] .stLinkButton,
-.stApp [class*="st-key-plan_"] .stButton > button,
-.stApp [class*="st-key-plan_"] .stLinkButton > a { width: 100%; }
 
-.stApp .ciel-pricenote { margin: 1.1rem 0 0; font-size: 0.8rem; color: var(--c-faint); }
-.ciel-faq-title { margin: 2.6rem 0 0.4rem; font-size: 1.05rem; font-weight: 560; letter-spacing: -0.01em; }
+.ciel-planned-title { margin: 2.4rem 0 0.4rem; font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
+.stApp .ciel-planned-note { margin: 0 0 0.6rem; font-size: 0.86rem; color: var(--c-muted); }
+.ciel-planned { border-top: 1px solid var(--c-line); }
+.ciel-planned-row { display: grid; grid-template-columns: 11rem 1fr; gap: 1rem; padding: 0.95rem 0; border-bottom: 1px solid var(--c-line); }
+.ciel-planned-row strong { display: block; font-size: 0.95rem; font-weight: 600; }
+.ciel-planned-row em { display: block; margin-top: 0.15rem; font-style: normal; font-size: 0.82rem; color: var(--c-faint); font-variant-numeric: tabular-nums; }
+.stApp .ciel-planned-row p { margin: 0; font-size: 0.88rem; line-height: 1.6; color: var(--c-muted); }
+.stApp .ciel-pricenote { margin: 0.9rem 0 0; font-size: 0.82rem; color: var(--c-faint); }
+.stApp .ciel-pricenote a { color: var(--c-accent); }
+
+.ciel-faq-title { margin: 2.6rem 0 0.4rem; font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
 .ciel-faq { border-top: 1px solid var(--c-line); }
 .ciel-faq div { display: grid; grid-template-columns: 15rem 1fr; gap: 1rem; padding: 0.95rem 0; border-bottom: 1px solid var(--c-line); }
-.ciel-faq strong { font-size: 0.9rem; font-weight: 560; }
+.ciel-faq strong { font-size: 0.9rem; font-weight: 600; }
 .stApp .ciel-faq span { font-size: 0.88rem; line-height: 1.6; color: var(--c-muted); }
 
 @media (max-width: 640px) {
-    .ciel-faq div { grid-template-columns: 1fr; gap: 0.25rem; }
+    .stApp .ciel-plan-feats { grid-template-columns: 1fr; }
+    .ciel-planned-row, .ciel-faq div { grid-template-columns: 1fr; gap: 0.25rem; }
 }
 </style>
 """
@@ -238,33 +233,37 @@ PRICING_CSS = """
 # RENDER
 # ============================================================
 
-def _plan_html(plan, billing, extras=()):
-    shown, total, period = plan_price(plan, billing)
-    unit = plan.get("unit", "")
-
-    if plan["monthly"] == 0:
-        price_html = "<strong>Rp0</strong><span>selamanya</span>"
-        bill_html = ""
-    else:
-        price_html = f"<strong>{format_idr(shown)}</strong><span>/ bulan</span>"
-        bill_html = (
-            f"Rencana: {format_idr(total)} per tahun"
-            if billing == "yearly"
-            else "Rencana harga bulanan"
-        )
-        if unit:
-            bill_html += f", {html.escape(unit)}"
-
-    tag_class = "ciel-plan-tag" if plan["available"] else "ciel-plan-tag is-soon"
-    tag = f'<span class="{tag_class}">{html.escape(plan["tag"])}</span>' if plan.get("tag") else ""
+def _free_plan_html(plan, extras):
     features = "".join(f"<li>{html.escape(item)}</li>" for item in plan["features"] + tuple(extras))
 
     return (
-        f'<div class="ciel-plan-top"><span class="ciel-plan-name">{html.escape(plan["name"])}</span>{tag}</div>'
-        f'<div class="ciel-plan-price">{price_html}</div>'
-        f'<p class="ciel-plan-bill">{bill_html}</p>'
+        f'<div class="ciel-plan-top"><span class="ciel-plan-name">{html.escape(plan["name"])}</span>'
+        f'<span class="ciel-plan-tag">{html.escape(plan["tag"])}</span></div>'
+        '<div class="ciel-plan-price"><strong>Rp0</strong><span>selamanya</span></div>'
         f'<p class="ciel-plan-blurb">{html.escape(plan["blurb"])}</p>'
         f'<ul class="ciel-plan-feats">{features}</ul>'
+    )
+
+
+def _as_sentence(items):
+    """("Semua di paket Pro", "Minimal 3 pengguna") -> "Semua di paket Pro, minimal 3 pengguna."."""
+    first, *rest = items
+    return ", ".join([first] + [item[:1].lower() + item[1:] for item in rest]) + "."
+
+
+def _planned_html(plans):
+    rows = "".join(
+        '<div class="ciel-planned-row">'
+        f'<div><strong>{html.escape(plan["name"])}</strong><em>{html.escape(planned_price(plan))}</em></div>'
+        f'<p>{html.escape(plan["blurb"])} {html.escape(_as_sentence(plan["features"]))}</p>'
+        "</div>"
+        for plan in plans
+    )
+
+    return (
+        '<div class="ciel-planned-title">Sedang disiapkan</div>'
+        '<p class="ciel-planned-note">Belum bisa dibeli. Harga masih rencana dan bisa berubah sebelum dibuka.</p>'
+        f'<div class="ciel-planned">{rows}</div>'
     )
 
 
@@ -282,62 +281,35 @@ def render_pricing(contact_url=None, on_start_chat=None, rate_limits=(20, 60), m
     st.markdown(
         '<div class="ciel-pricehead">'
         "<h1>Semua fitur Ciel saat ini gratis.</h1>"
-        "<p>Paket berbayar sedang disiapkan. Untuk sementara, pemakaian "
-        "dibatasi per jam agar Ciel tetap lancar untuk semua orang.</p>"
+        "<p>Pemakaian dibatasi per jam agar Ciel tetap lancar untuk semua "
+        "orang. Paket berbayar baru akan dibuka setelah siap.</p>"
         "</div>",
         unsafe_allow_html=True,
     )
 
-    choice = st.segmented_control(
-        "Periode tagihan",
-        options=("monthly", "yearly"),
-        format_func=lambda value: (
-            "Bulanan" if value == "monthly" else "Tahunan (hemat 2 bulan)"
-        ),
-        default="monthly",
-        key="pricing_billing",
-        label_visibility="collapsed",
-    )
-    billing = choice or "monthly"
-    contact = safe_contact_url(contact_url)
-    extras = free_plan_extras(rate_limits, memory_enabled)
+    free = next(plan for plan in PLANS if plan["available"])
 
-    columns = st.columns(len(PLANS), gap="small")
-
-    for column, plan in zip(columns, PLANS):
-
-        key = f"plan_{plan['id']}" + ("-hl" if plan["highlight"] else "")
-
-        with column, st.container(key=key):
-            st.markdown(
-                _plan_html(plan, billing, extras if plan["id"] == "free" else ()),
-                unsafe_allow_html=True,
-            )
-
-            if plan["available"]:
-                st.button(
-                    plan["cta"],
-                    key=f"cta_{plan['id']}",
-                    type="primary" if plan["highlight"] else "secondary",
-                    on_click=on_start_chat,
-                )
-            else:
-                st.button(
-                    "Segera hadir",
-                    key=f"cta_{plan['id']}",
-                    disabled=True,
-                    help="Paket berbayar belum dibuka dan belum bisa dibeli.",
-                )
-
-    note = "Harga paket berbayar masih rencana dan bisa berubah sebelum dibuka."
-
-    if contact:
-        note += (
-            ' Tertarik atau punya pertanyaan? '
-            f'<a href="{html.escape(contact, quote=True)}">Hubungi kami</a>.'
+    with st.container(key="plan_free"):
+        st.markdown(
+            _free_plan_html(free, free_plan_extras(rate_limits, memory_enabled)),
+            unsafe_allow_html=True,
         )
+        st.button(free["cta"], key="cta_free", type="primary", on_click=on_start_chat)
 
-    st.markdown(f'<p class="ciel-pricenote">{note}</p>', unsafe_allow_html=True)
+    planned = [plan for plan in PLANS if not plan["available"]]
+    contact = safe_contact_url(contact_url)
+    note = (
+        'Tertarik atau punya pertanyaan? '
+        f'<a href="{html.escape(contact, quote=True)}">Hubungi kami</a>.'
+        if contact
+        else ""
+    )
+
+    st.markdown(
+        _planned_html(planned)
+        + (f'<p class="ciel-pricenote">{note}</p>' if note else ""),
+        unsafe_allow_html=True,
+    )
 
     faq_html = "".join(
         f"<div><strong>{html.escape(q)}</strong><span>{html.escape(a)}</span></div>"

@@ -24,23 +24,18 @@ class PricingLogicTest(unittest.TestCase):
         self.assertEqual(pricing.format_idr(1_490_000), "Rp1.490.000")
         self.assertEqual(pricing.format_idr(65_833.33), "Rp65.833")
 
-    def test_monthly_price_is_unchanged(self):
+    def test_planned_price_names_the_plan_as_a_plan(self):
         pro = next(p for p in pricing.PLANS if p["id"] == "pro")
-        self.assertEqual(pricing.plan_price(pro, "monthly"), (79_000, 79_000, "bulan"))
+        team = next(p for p in pricing.PLANS if p["id"] == "team")
+        self.assertEqual(pricing.planned_price(pro), "Rencana Rp79.000/bulan")
+        self.assertEqual(pricing.planned_price(team), "Rencana Rp149.000/bulan per pengguna")
 
-    def test_yearly_price_charges_ten_months(self):
-        pro = next(p for p in pricing.PLANS if p["id"] == "pro")
-        shown, total, period = pricing.plan_price(pro, "yearly")
-        self.assertEqual(total, 790_000)
-        self.assertEqual(period, "tahun")
-        self.assertAlmostEqual(shown, 790_000 / 12)
-        self.assertLess(shown, pro["monthly"])
-
-    def test_plans_have_unique_ids_and_one_highlight(self):
+    def test_plans_have_unique_ids_and_one_available_free_plan(self):
         ids = [p["id"] for p in pricing.PLANS]
         self.assertEqual(len(ids), len(set(ids)))
-        self.assertEqual(sum(p["highlight"] for p in pricing.PLANS), 1)
-        self.assertEqual(pricing.PLANS[0]["monthly"], 0)
+        available = [p for p in pricing.PLANS if p["available"]]
+        self.assertEqual([p["id"] for p in available], ["free"])
+        self.assertEqual(available[0]["monthly"], 0)
 
     def test_contact_url_only_allows_https_and_mailto(self):
         self.assertEqual(pricing.safe_contact_url(" https://ciel.ai/kontak "), "https://ciel.ai/kontak")
@@ -55,11 +50,7 @@ class PricingHonestyTest(unittest.TestCase):
     # projects, which every visitor already gets for free. Until plans are
     # enforced, paid plans are "Segera hadir" and must not claim free features.
 
-    FREE_FEATURE_WORDS = ("memory", "foto", "projects", "csv", "riset", "lampiran")
-
-    def test_only_available_plans_can_be_highlighted(self):
-        highlighted = [p for p in pricing.PLANS if p["highlight"]]
-        self.assertTrue(all(p["available"] for p in highlighted))
+    FREE_FEATURE_WORDS = ("memory", "foto", "proyek", "csv", "riset", "lampiran")
 
     def test_unavailable_plans_do_not_claim_free_features(self):
         for plan in pricing.PLANS:
@@ -74,7 +65,7 @@ class PricingHonestyTest(unittest.TestCase):
 
     def test_free_plan_lists_what_the_app_offers(self):
         free = " ".join(pricing.PLANS[0]["features"]).lower()
-        for word in ("riset", "csv", "foto", "projects"):
+        for word in ("riset", "csv", "foto", "proyek"):
             self.assertIn(word, free)
 
     def test_free_plan_extras_follow_the_app_config(self):
@@ -102,17 +93,20 @@ class PricingRenderTest(unittest.TestCase):
         self.assertIn("Rp79.000", html)
         self.assertIn("Semua fitur Ciel saat ini gratis.", html)
 
-        disabled = [b for b in at.button if b.label == "Segera hadir"]
-        self.assertEqual(len(disabled), 2)
-        self.assertTrue(all(b.disabled for b in disabled))
-        self.assertFalse(next(b for b in at.button if b.label == "Mulai chat").disabled)
+        self.assertIn("Rencana Rp149.000/bulan per pengguna", html)
+        self.assertIn("Belum bisa dibeli", html)
+
+        # Only the free plan has a button; paid plans are listed, not sold.
+        self.assertEqual([b.label for b in at.button], ["Mulai chat"])
+        self.assertFalse(at.button[0].disabled)
+        self.assertEqual(len(at.button_group), 0)
         self.assertNotIn("Hubungi kami", html)
 
-    def test_paid_plans_stay_disabled_even_with_contact_url(self):
+    def test_contact_url_adds_a_link_but_no_purchase_button(self):
         at = AppTest.from_function(render_page, kwargs={"contact_url": "mailto:halo@ciel.ai"}).run()
 
         self.assertFalse(at.exception)
-        self.assertEqual(len([b for b in at.button if b.label == "Segera hadir" and b.disabled]), 2)
+        self.assertEqual([b.label for b in at.button], ["Mulai chat"])
         self.assertIn('<a href="mailto:halo@ciel.ai">Hubungi kami</a>', page_text(at))
 
     def test_free_plan_and_faq_follow_memory_state(self):
@@ -127,15 +121,6 @@ class PricingRenderTest(unittest.TestCase):
         self.assertNotIn("Long-term memory pribadi", without_login)
         self.assertIn("5 pesan/jam", without_login)
         self.assertIn("belum aktif di deployment ini", without_login)
-
-    def test_yearly_toggle_updates_prices(self):
-        at = AppTest.from_function(render_page).run()
-        at.button_group(key="pricing_billing").set_value("yearly").run()
-
-        self.assertFalse(at.exception)
-        html = page_text(at)
-        self.assertIn("Rencana: Rp790.000 per tahun", html)
-        self.assertIn("Rp65.833", html)
 
 
 if __name__ == "__main__":
