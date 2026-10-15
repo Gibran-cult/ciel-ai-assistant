@@ -2088,7 +2088,12 @@ with st.container(key="topbar"):
 # Dirender sebelum chat input supaya composer tidak muncul di halaman harga.
 
 if current_view() == "pricing":
-    render_pricing(contact_url=CONTACT_URL, on_start_chat=show_chat)
+    render_pricing(
+        contact_url=CONTACT_URL,
+        on_start_chat=show_chat,
+        rate_limits=(RATE_LIMIT_PER_HOUR, RATE_LIMIT_PER_HOUR_LOGIN),
+        memory_enabled=AUTH_ENABLED,
+    )
     st.stop()
 
 

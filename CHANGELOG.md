@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-Nothing yet.
+### Pricing page matches what the app offers
+- Problem: the pricing page sold Pro (Rp79.000/month) for long-term memory, photo attachments and projects, which every visitor already gets for free, and the free plan listed less than the app provides. Plans are not enforced and there is no payment system.
+- The free plan now lists everything available (research with sources, math, CSV/TSV analysis, photos and text files, projects, session history), plus long-term memory "perlu login" when Google login is configured and the hourly message limits. Limits and login state come from `app.py` (`RATE_LIMIT_*`, `[auth]`), so the page follows the configuration.
+- Pro and Tim are shown as plans: tag "Segera hadir", prices labeled "Rencana", buttons always disabled (also when `CONTACT_URL` is set). Pro no longer claims features the free plan has; it plans higher message limits. `CONTACT_URL` now adds a "Hubungi kami" link for people interested in paid plans.
+- Header and FAQ describe the current state: Ciel is free with hourly limits; paid plans are not open; memory needs login (or is not active when login is not configured); why limits exist.
+- `tests/test_pricing.py` checks that unavailable plans claim no free feature, only available plans are highlighted, paid buttons stay disabled with a contact URL, and the free plan and FAQ follow the limits and login state passed by the app. Checked in the browser.
 
 ## v1.5.2 — 2026-10-14
 
