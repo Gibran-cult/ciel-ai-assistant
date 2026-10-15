@@ -63,4 +63,5 @@ jobs:
             tests.test_live_scripts \
             tests.test_app_hygiene \
             tests.test_performance_snapshot \
-            tests.test_pricing
+            tests.test_pricing \
+            tests.test_privacy

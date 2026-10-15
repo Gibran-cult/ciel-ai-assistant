@@ -14,6 +14,7 @@ The Streamlit app (`app.py`) is a thin public frontend; the Langflow flow, the l
 - **Numbers from the user's own files:** attached CSV/TSV files are computed by Ciel Table Analyst (sum, mean, median, min, max, counts, per group) directly from the file.
 - **Per-user long-term memory** with optional Google login; anonymous visitors get no memory.
 - **Public-deployment safeguards:** one Langflow session per chat, hourly rate limits, no internal details in error messages (a Request ID instead).
+- **Privacy:** a privacy page that follows the deployment's configuration, a "Data saya" panel where signed-in users view and delete their memories and delete their server-side chat history, and a 30-day retention script for server-side messages.
 - **Photos** read by a local vision model, and **projects** with shared context files.
 - **Testing:** offline CI suite, flow contract tests, and live quality collection with per-case session isolation.
 
@@ -36,6 +37,25 @@ See `docs/ARCHITECTURE.md` for details, including the Langflow configuration tha
 
 Memories are stored in a local Chroma database on the Langflow host (`~/.ciel_ai/long_term_memory`) and are private to each signed-in account: the app sends a hashed account ID through tweaks, and the memory components only read and write that owner's memories. Memory search uses Top K = 5 and a compact agent-facing output (about 60.7% less context than v1.0.0).
 
+## Privacy and Data Retention
+
+The "Privasi" page (`privacy.py`) states what is processed and stored; its content follows `CHAT_RETENTION_DAYS`, Google login and `MEMORY_ADMIN_FLOW_ID`, so it only promises what the deployment does.
+
+**Data saya** (signed-in users, needs `MEMORY_ADMIN_FLOW_ID`): list and delete one or all of their memories, and delete their chat history on the Langflow server. Memory actions run in a separate Ciel Memory Admin flow (`flow/components/ciel_memory_admin.py`), called only by the app and never available to the Agent; it acts only on the owner hash the app sends. Chat history is deleted by Langflow session, limited to sessions that start with the user's own key.
+
+**Retention:** Langflow keeps every message until it is deleted. Run `tools/prune_chat_history.py` on the Langflow host to delete messages older than `CHAT_RETENTION_DAYS` (default 30). It reads `LANGFLOW_API_KEY` from the environment or `.env`; long-term memory is not touched.
+
+```powershell
+python tools/prune_chat_history.py --days 30 --dry-run
+python tools/prune_chat_history.py --days 30
+```
+
+To run it daily with Windows Task Scheduler (adjust the paths to your checkout and Python):
+
+```powershell
+schtasks /Create /TN "Ciel prune chat history" /SC DAILY /ST 03:00 /TR "cmd /c cd /d C:\path\to\ciel-ai-assistant && python tools\prune_chat_history.py --days 30"
+```
+
 ## Project Structure
 
 ```text
@@ -46,9 +66,12 @@ Memories are stored in a local Chroma database on the Langflow host (`~/.ciel_ai
 │   ├── v1.0.0/ … v1.5.1/        main flow snapshots (latest: v1.5.1)
 │   └── components/              custom component sources embedded in the flow
 ├── tests/                       offline tests, live quality scripts, results
-├── tools/migrate_memory_owner.py
+├── tools/
+│   ├── migrate_memory_owner.py  give pre-v1.3.0 memories an owner
+│   └── prune_chat_history.py    delete server-side messages after the retention period
 ├── app.py                       Streamlit app
 ├── pricing.py                   pricing page
+├── privacy.py                   privacy page
 ├── quality_dashboard.py
 ├── langflow_client.py           minimal command-line client
 ├── requirements.txt
@@ -81,6 +104,8 @@ Optional:
 - `RATE_LIMIT_PER_HOUR` (default 20), `RATE_LIMIT_PER_HOUR_LOGIN` (default 60), `RATE_LIMIT_ANON_TOTAL_PER_HOUR` (default 150): hourly message limits, checked before any backend call.
 - `[auth]` block (Google OAuth client): enables "Masuk dengan Google". Long-term memory is only available to signed-in users and is private to each account; without `[auth]` memory is disabled.
 - `MEMORY_SEARCH_ID`, `MEMORY_STORE_ID` (defaults match `flow/v1.3.0` and later) and `TABLE_ANALYST_ID` (default matches `flow/v1.5.0` and later): component IDs the app sends tweaks to.
+- `MEMORY_ADMIN_FLOW_ID` (and `MEMORY_ADMIN_NODE_ID`, default `CielMemoryAdmin-adm1n`): the Ciel Memory Admin flow behind the "Data saya" panel. Without it, signed-in users cannot view or delete their data from the app, and the privacy page says so.
+- `CHAT_RETENTION_DAYS` (default 30): how long server-side chat history is kept, as stated on the privacy page. Use the same value for `tools/prune_chat_history.py`.
 
 A template is provided in `.streamlit/secrets.toml.example`. For local runs copy it to `.streamlit/secrets.toml` (git-ignored) or use a `.env` file.
 
@@ -119,7 +144,7 @@ Configure the variables above in `.streamlit/secrets.toml` or `.env` first.
 **Offline suite** (deterministic, no credentials; this is what CI runs):
 
 ```powershell
-python -m unittest tests.test_memory_v110_contract tests.test_flow_v120_contract tests.test_flow_v130_contract tests.test_flow_v140_contract tests.test_flow_v141_contract tests.test_flow_v150_contract tests.test_flow_v151_contract tests.test_resilience tests.test_rate_limit tests.test_project_context tests.test_live_scripts tests.test_app_hygiene tests.test_performance_snapshot tests.test_pricing
+python -m unittest tests.test_memory_v110_contract tests.test_flow_v120_contract tests.test_flow_v130_contract tests.test_flow_v140_contract tests.test_flow_v141_contract tests.test_flow_v150_contract tests.test_flow_v151_contract tests.test_resilience tests.test_rate_limit tests.test_project_context tests.test_live_scripts tests.test_app_hygiene tests.test_performance_snapshot tests.test_pricing tests.test_privacy
 ```
 
 It covers the flow snapshots (contract tests per version, including running the custom components against a real Chroma database with Langflow stubbed), the app's request and error handling, rate limiting, project context, table encoding, and code hygiene.

@@ -21,6 +21,7 @@ The following parts of production are **not in Git** and need their own protecte
 | ngrok traffic policy | A policy file passed to the ngrok agent (for example `~/ngrok-ciel-policy.yml`) | Contains the Basic Auth credentials and the per-IP rate limit |
 | Ollama models | Ollama on the Langflow host | `qwen2.5vl:3b` (images), `nomic-embed-text-v2-moe:latest` (memory embeddings); re-pull with `ollama pull` |
 | Flow backups | `~/.ciel_ai/flow_backups/` on the Langflow host | Copies taken before each in-place flow change (see below) |
+| Retention task | Windows Task Scheduler on the Langflow host | Runs `tools/prune_chat_history.py` daily; recreate it after restoring the host (see `README.md`) |
 
 Do not place real secret values in the repository, documentation, issue tracker, or any public backup. Exported flows can contain keys if a node stores one literally; production flows use global variables, but archived flows in the Langflow project "Arsip" still contain literal keys.
 
