@@ -1,5 +1,7 @@
 # Ciel AI Master - Production Readiness Review
 
+> This review was written for v1.1.0. The project has since been opened to the public, and "Status Update: v1.5.2" at the end of this document describes the current state. The sections in between are kept as the v1.1.0 record.
+
 ## Review Scope
 
 This review evaluates the current Ciel AI Master project against the Level 12 production-readiness milestones.
@@ -175,3 +177,29 @@ with the following administrative closeout items still pending:
 2. Verify that the latest GitHub Actions run remains green after the final documentation commits.
 
 No production flow change is required for this closeout.
+
+## Status Update: v1.5.2 (2026-10-14)
+
+**Status: in production for public use, with the open risks listed below.**
+
+Changes since v1.1.0 that matter for readiness (details in `CHANGELOG.md`):
+
+- **Isolation:** one Langflow session per chat; long-term memory private to each signed-in account and off for anonymous visitors. The first version of the memory isolation did not work in Langflow (`user_id` was shadowed by a built-in attribute) and was fixed in v1.4.1 after a production check found it.
+- **Cost and abuse control:** hourly message limits in the app; Basic Auth and a per-IP rate limit in the ngrok traffic policy; sub-agent history trimmed; project files no longer resent with every message.
+- **Correctness:** numbers from a user's own CSV come from Ciel Table Analyst instead of the built-in sample dataset; users see only the final answer.
+- **Security:** no literal API keys in production flows (global variables); unused Langflow API keys deleted, and the key exposed in old public snapshots was already rejected; error messages no longer show response bodies or the backend URL.
+- **Release administration:** the two pending items above are closed (the v1.1.0 GitHub Release page and a green Actions run were confirmed on 2026-10-14). Releases v1.2.0 to v1.5.2 are tagged; see `RELEASE_CHECKLIST.md`.
+
+Evidence:
+
+- Offline suite: 108 tests passing in CI, including flow contract tests and a real-Chroma memory isolation test.
+- Latest live quality run (production flow v1.5.1 through local Langflow): response quality 9/9, automated checks 5/5, healthy; median 14.6 s, P95 16.7 s (v1.1.0: 36.2 s and 51.1 s).
+
+Open risks:
+
+- **Single backend host:** Langflow, Ollama and the memory database run on one home PC behind one ngrok tunnel. When the PC or tunnel is down, the public app cannot answer.
+- **Parts of production outside Git:** sub-flows, global variables, the knowledge base, and the Chroma database need the separate backups described in `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
+- **Free-tier limits:** ngrok's free plan caps requests and outbound data per month; DeepSeek and Exa usage is paid per call.
+- **Privacy:** signed-in users cannot yet view or delete their stored memories, and the app has no privacy notice.
+- **Monitoring:** quality runs are started manually; there is no alerting.
+

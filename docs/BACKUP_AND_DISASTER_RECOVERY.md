@@ -2,236 +2,93 @@
 
 ## Purpose
 
-This document defines the backup and recovery procedure for Ciel AI Master.
+This document defines what must be backed up and how to restore Ciel AI Master after file loss, a broken environment, a bad deployment, or loss of the backend host.
 
-The goal is to make the project recoverable after accidental file loss, local environment failure, repository corruption, or loss of the development machine.
+## What Git Restores, and What It Does Not
 
-## Recovery Sources
+The GitHub repository restores the **software state**: the Streamlit app, tests, documentation, CI, the main flow snapshots (`flow/v1.0.0/` … `flow/v1.5.1/`), and the custom component sources (`flow/components/`). Release tags `v1.0.0` … `v1.5.2` mark known-good states (see `RELEASE_CHECKLIST.md`).
 
-The primary recovery source is the GitHub repository.
+The following parts of production are **not in Git** and need their own protected backup:
 
-The repository currently contains:
+| Part | Where it lives | Notes |
+|---|---|---|
+| App secrets | Streamlit Cloud Secrets, local `.streamlit/secrets.toml` / `.env` | `NGROK_URL`, `NGROK_USER`, `NGROK_PASSWORD`, `LANGFLOW_API_KEY`, `FLOW_ID`, optional `[auth]` and rate limits |
+| Langflow global variables | Langflow database | At least `DEEPSEEK_API_KEY` (main Agent and the DeepSeek sub-flows) and `EXA_API_KEY` (Web Research). Flows store only the variable names. |
+| Sub-flows | Langflow database | Math Tutor Agent, Verified Data Analyst, Knowledge Retriever, Web Research Assistant. The main flow calls them by Run Flow. |
+| Verified Data Analyst dataset | Langflow file storage (`200_sales_data`) | Read by the analyst's Read File and CSV Agent nodes |
+| Knowledge base | `~/.langflow/knowledge_bases` on the Langflow host | Knowledge base `TITANIC_DATA_SCIENCE_SOLUTIONS`, used by Knowledge Retriever |
+| Long-term memory | `~/.ciel_ai/long_term_memory` (Chroma) on the Langflow host | Per-user memories; cannot be rebuilt from Git |
+| ngrok traffic policy | A policy file passed to the ngrok agent (for example `~/ngrok-ciel-policy.yml`) | Contains the Basic Auth credentials and the per-IP rate limit |
+| Ollama models | Ollama on the Langflow host | `qwen2.5vl:3b` (images), `nomic-embed-text-v2-moe:latest` (memory embeddings); re-pull with `ollama pull` |
+| Flow backups | `~/.ciel_ai/flow_backups/` on the Langflow host | Copies taken before each in-place flow change (see below) |
 
-- Main branch: `main`
-- Production baseline tag: `v1.0.0`
-- Feature release tag: `v1.1.0`
-- Versioned Langflow flow snapshots under `flow/`
+Do not place real secret values in the repository, documentation, issue tracker, or any public backup. Exported flows can contain keys if a node stores one literally; production flows use global variables, but archived flows in the Langflow project "Arsip" still contain literal keys.
 
-The `v1.0.0` tag is preserved as the production baseline.
+## Flow Backups and Rollback
 
-The `v1.1.0` tag represents the memory context optimization release.
+Before every in-place change to a production flow or sub-flow, the live flow is saved to `~/.ciel_ai/flow_backups/` (for example `prod_v1.5.0_before_v1.5.1_<timestamp>.json`, `subflow_Math_Tutor_Agent_before_global_key_<timestamp>.json`).
 
-## What Must Be Backed Up
+To roll back, replace the flow's `data` with the backup's `data` through `PATCH /api/v1/flows/<id>` (or import the backup in the Langflow UI), then verify with a real request through ngrok.
 
-### Source Repository
-
-The GitHub repository is the authoritative source for tracked application code, tests, documentation, CI configuration, and versioned flow snapshots.
-
-### Flow Snapshots
-
-The versioned flow snapshots are stored under:
-
-```text
-flow/
-+-- v1.0.0/
-|   +-- Ciel_AI_Long-Term_Memory_Master.json
-|
-+-- v1.1.0/
-    +-- Ciel_AI_Long-Term_Memory_Master.json
-```
-
-These snapshots should be preserved as release artifacts.
-
-### Runtime Secrets
-
-Production secrets are intentionally not stored in Git.
-
-Recovery therefore requires restoring runtime configuration separately.
-
-Examples of sensitive runtime configuration include:
-
-- `NGROK_URL`
-- `NGROK_USER`
-- `NGROK_PASSWORD`
-- `LANGFLOW_API_KEY`
-- `FLOW_ID`
-
-Do not place the real values in the repository, documentation, issue tracker, or public backup.
+Because the sub-flows are not versioned in Git, export all four regularly (Langflow UI: Export, or `GET /api/v1/flows/<id>`) to a protected location.
 
 ## Recovery Procedure
 
-### 1. Clone the Repository
-
-From a new or repaired machine:
+### 1. Restore the repository
 
 ```powershell
 git clone https://github.com/Gibran-cult/ciel-ai-assistant
 cd ciel-ai-assistant
-```
-
-### 2. Verify Repository State
-
-```powershell
-git status
-git branch
-git tag -n
-```
-
-Confirm that the expected branch and release tags are available.
-
-### 3. Select the Required Release
-
-For recovery to the production baseline:
-
-```powershell
-git checkout v1.0.0
-```
-
-For the current feature release:
-
-```powershell
-git checkout v1.1.0
-```
-
-For continued development on the latest main branch:
-
-```powershell
-git checkout main
-git pull origin main
-```
-
-### 4. Restore Python Dependencies
-
-Install the dependencies defined by the repository:
-
-```powershell
+git checkout v1.5.2        # or main, or another release tag
 python -m pip install -r requirements.txt
 ```
 
-The runtime environment must also provide the external services required by the flow.
+### 2. Restore the backend host
 
-### 5. Restore Runtime Configuration
+1. Install Langflow 1.12.4 and Ollama; pull `qwen2.5vl:3b` and `nomic-embed-text-v2-moe:latest`.
+2. Recreate the Langflow global variables (`DEEPSEEK_API_KEY`, `EXA_API_KEY`) from the protected secret store.
+3. Restore `~/.ciel_ai/long_term_memory` and `~/.langflow/knowledge_bases` from their backups.
+4. Import the four sub-flows from their exports or from `~/.ciel_ai/flow_backups/`, and upload the Verified Data Analyst dataset.
+5. Import `flow/v1.5.1/Ciel_AI_Long-Term_Memory_Master.json`. If the sub-flows got new IDs on import, re-select them in the main flow's four Run Flow nodes.
+6. Create a Langflow API key for the app.
+7. Start ngrok with the restored traffic policy, pointing at `localhost:7860`.
 
-Recreate the required environment configuration from a secure secret store or other protected backup.
+### 3. Restore the app configuration
 
-Do not recover secrets by copying them into Git-tracked files.
+Set the app secrets in Streamlit Cloud (and locally if needed): the ngrok URL and Basic Auth credentials, the new Langflow API key, and `FLOW_ID` of the imported main flow. Do not commit them.
 
-### 6. Restore Langflow Flow
-
-Import or restore the appropriate versioned Langflow flow snapshot from:
-
-```text
-flow/v1.0.0/Ciel_AI_Long-Term_Memory_Master.json
-```
-
-or:
-
-```text
-flow/v1.1.0/Ciel_AI_Long-Term_Memory_Master.json
-```
-
-Use the release that matches the intended recovery target.
-
-### 7. Restore Supporting Runtime Services
-
-The production flow depends on runtime services such as Langflow and Ollama.
-
-Long-term memory also uses a local Chroma database and the configured Ollama embedding service.
-
-These runtime services and their required local data must be restored separately from Git.
+If the memory database could not be restored but older memories without an owner exist, assign them with `tools/migrate_memory_owner.py` (see `README.md`).
 
 ## Post-Recovery Verification
 
-Run basic repository checks:
+1. Offline suite (command in `README.md`) passes.
+2. Langflow `/health_check` answers through the tunnel with Basic Auth.
+3. A live quality run (`python tests/collect_quality.py`) is healthy.
+4. Through ngrok, check by hand: a greeting, a math question (Math Tutor), "total Sales_Amount pada dataset" (Verified Data Analyst), a research question with sources (Web Research), a CSV question with an attached file (Ciel Table Analyst), and an anonymous "ingat namaku …" that is refused without changing the memory count.
+5. The public app answers a test message.
 
-```powershell
-git status
-git log --oneline --decorate -8
-git tag -n
-```
-
-Run the deterministic offline CI-equivalent tests:
-
-```powershell
-python -m unittest -v tests.test_memory_v110_contract tests.test_resilience tests.test_performance_snapshot
-```
-
-Verify that the application can start with the restored runtime configuration.
-
-Verify the health-check path.
-
-Verify normal assistant behavior.
-
-Verify long-term memory search and store behavior.
-
-Verify specialist routing for the supported task categories.
-
-## Recovery Validation
-
-A recovery should not be considered complete until:
-
-- the intended Git release or branch is restored,
-- dependencies are installed,
-- runtime secrets are restored securely,
-- the Langflow flow snapshot is restored,
-- required runtime services are available,
-- deterministic tests pass,
-- health checks pass,
-- normal application behavior is verified.
-
-## Backup Policy
-
-GitHub provides the primary repository-level recovery path.
-
-Release tags provide immutable version references for released flow states.
-
-Important runtime data that is not tracked by Git must have a separate protected backup strategy.
-
-This includes runtime secrets and local long-term memory data when that data is required for continuity.
+A recovery is complete only when all of these pass.
 
 ## Disaster Scenarios
 
-### Local Working Copy Lost
+### Local working copy lost
+Clone the repository, check out the release tag, reinstall dependencies, restore secrets, run the offline suite.
 
-Recovery:
+### Bad change on `main`
+Find the last good release tag in `RELEASE_CHECKLIST.md`, branch from it, fix, and redeploy through a pull request.
 
-1. Clone the GitHub repository.
-2. Select the required branch or release tag.
-3. Reinstall dependencies.
-4. Restore runtime configuration.
-5. Restore required services and local data.
-6. Run verification tests.
+### Bad flow deployment
+Restore the flow from `~/.ciel_ai/flow_backups/` (see Flow Backups and Rollback) and verify through ngrok.
 
-### Main Branch Accidentally Modified
+### Production configuration lost
+Recreate app secrets and Langflow global variables from the protected secret source, then run the verification steps. Do not commit recovered values.
 
-Recovery:
+### Backend host lost
+Follow the full recovery procedure. Everything listed in "What Git Restores, and What It Does Not" must come from backups.
 
-1. Inspect the Git history.
-2. Identify the intended release tag.
-3. Restore or branch from the known-good tag.
-4. Re-run validation before deployment.
-
-### Production Configuration Lost
-
-Recovery:
-
-1. Obtain credentials from the protected secret source.
-2. Recreate environment configuration.
-3. Do not commit the recovered values.
-4. Run health and integration checks.
-
-### Local Long-Term Memory Data Lost
-
-Recovery depends on whether the Chroma data has been backed up separately.
-
-Git does not contain the local memory database.
-
-If no separate backup exists, the application can still be restored from the repository, but previously stored local memory cannot be reconstructed from Git alone.
+### Long-term memory lost
+Without a separate backup of `~/.ciel_ai/long_term_memory`, the app still works but previously stored memories cannot be reconstructed.
 
 ## Recovery Principle
 
-The repository and release tags restore the software state.
-
-Protected runtime backups restore the environment state.
-
-Both are required for a complete production recovery.
+The repository and release tags restore the software state. Protected backups restore the environment state: secrets, Langflow global variables, sub-flows, data, and the tunnel policy. Both are required for a complete production recovery.
