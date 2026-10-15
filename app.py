@@ -15,6 +15,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from PIL import Image
 
+from login import render_login
 from pricing import render_pricing, safe_contact_url
 from privacy import render_privacy
 
@@ -51,35 +52,45 @@ st.set_page_config(
 # ============================================================
 # VISUAL SYSTEM
 # ============================================================
-# Dark workspace, single teal accent, off-black surfaces.
+# Warm, minimal workspace (palette "Kertas & Tinta"): neutral paper canvas,
+# off-white cards, warm ink-black text and warm greys, so the ink-navy accent
+# is the only cool colour on screen (actions, the current page, verified
+# claims). Soft highlighter gold marks guesses.
 # Styling is scoped through container keys (st-key-*) and stable
 # data-testid hooks so it survives Streamlit upgrades as far as possible.
+# Keep .streamlit/config.toml in step with these tokens.
 
 CIEL_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,400;9..144,500&display=swap');
 
 :root {
-    --c-bg: #0f1112;
-    --c-surface: #151819;
-    --c-raised: #1c2021;
-    --c-line: rgba(233, 236, 236, 0.09);
-    --c-line-strong: rgba(233, 236, 236, 0.18);
-    --c-control: #727c7e;
-    --c-text: #e9ecec;
-    --c-muted: #a3abad;
-    --c-faint: #8a9395;
-    --c-accent: #5bbfae;
-    --c-accent-ink: #06201c;
-    --c-ok: #5cb98a;
-    --c-warn: #d9a74a;
-    --c-err: #ee8479;
+    --c-bg: #f3f2ee;
+    --c-surface: #fcfbf9;
+    --c-raised: #e9e7e1;
+    --c-line: rgba(28, 27, 25, 0.10);
+    --c-line-strong: rgba(28, 27, 25, 0.18);
+    --c-control: #86817a;
+    --c-text: #1c1b19;
+    --c-muted: #55514b;
+    --c-faint: #6b665f;
+    --c-accent: #203a72;
+    --c-accent-hover: #2d4a8a;
+    --c-accent-ink: #ffffff;
+    --c-gold: #f4dc6e;
+    --c-gold-ink: #3a2e00;
+    --c-ok: #2e6a4c;
+    --c-warn: #855a00;
+    --c-err: #a33b2c;
     --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-serif: "Fraunces", Georgia, "Times New Roman", serif;
     --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     --ease: cubic-bezier(0.32, 0.72, 0, 1);
+    --shadow-sm: 0 1px 2px rgba(28, 27, 25, 0.05), 0 1px 1px rgba(28, 27, 25, 0.03);
+    --shadow-md: 0 4px 14px rgba(28, 27, 25, 0.06), 0 1px 3px rgba(28, 27, 25, 0.05);
     --r-sm: 6px;
-    --r-md: 8px;
-    --r-lg: 12px;
+    --r-md: 10px;
+    --r-lg: 16px;
 }
 
 /* ---------- Base ---------- */
@@ -92,13 +103,19 @@ CIEL_CSS = """
 .stApp, .stApp p, .stApp li, .stApp label, .stApp button, .stApp textarea, .stApp input {
     font-family: var(--font-sans);
 }
-header[data-testid="stHeader"] { background: transparent; }
+/* Streamlit puts its theme font (Source Sans) on every markdown container,
+   so div/span/strong inside our HTML inherited it. Classes that want the
+   serif or mono face set it on the element itself and still win. */
+.stApp [data-testid="stMarkdownContainer"] { font-family: var(--font-sans); }
+/* Solid so content scrolling under the sticky top bar doesn't show through. */
+header[data-testid="stHeader"] { background: var(--c-bg); }
 #MainMenu, footer { visibility: hidden; }
 
 [data-testid="stMain"] .block-container,
 .stMain .block-container {
     max-width: 50rem;
-    padding: 2.25rem 1.5rem 9rem;
+    /* Top padding clears Streamlit's fixed header toolbar (3.75rem). */
+    padding: 4rem 1.5rem 9rem;
 }
 
 .stApp { overflow-x: hidden; }
@@ -123,7 +140,25 @@ header[data-testid="stHeader"] { background: transparent; }
 }
 
 /* ---------- Top bar ---------- */
+/* Sticky on Streamlit's wrapper (the scroll container is section.stMain);
+   the bar itself is only as tall as its wrapper and could not stick.
+   top matches the header height so the bar sits right under it. */
+/* NAV_SCROLL_JS drives --ciel-nav-offset: while scrolling the bar follows
+   the scroll pixel for pixel (no transition), and when scrolling stops it
+   glides fully in or out. It slides up behind the solid header. */
+[data-testid="stLayoutWrapper"]:has(> .st-key-topbar) {
+    position: sticky;
+    top: 3.75rem;
+    z-index: 20;
+    transform: translate3d(0, calc(var(--ciel-nav-offset, 0px) * -1), 0);
+    transition: transform 0.5s var(--ease);
+    will-change: transform;
+}
+body[data-ciel-nav-moving] [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) { transition: none; }
+body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) { pointer-events: none; }
+[data-testid="stLayoutWrapper"]:has(> .st-key-navjs) { display: none; }
 .st-key-topbar {
+    background: var(--c-bg);
     padding-bottom: 1rem;
     margin-bottom: 1.6rem;
     border-bottom: 1px solid var(--c-line);
@@ -137,12 +172,59 @@ header[data-testid="stHeader"] { background: transparent; }
 }
 .ciel-brand { display: flex; align-items: baseline; gap: 0.8rem; min-width: 0; }
 .ciel-wordmark {
-    font-size: 1.3rem;
-    font-weight: 600;
-    letter-spacing: -0.03em;
+    font-family: var(--font-serif);
+    font-size: 1.45rem;
+    font-weight: 500;
+    letter-spacing: -0.02em;
     color: var(--c-text);
 }
-.ciel-tagline { font-size: 0.82rem; color: var(--c-muted); }
+
+/* Top bar nav: text links for pages, one outline button for the account.
+   Selectors start with .stApp so they outrank the generic button rules
+   further down (same specificity otherwise, and those come later). */
+.st-key-topnav { gap: 0.25rem; }
+/* Underline is a background line so it can grow from the centre on hover. */
+.stApp .st-key-topnav .stButton > button[kind="tertiary"],
+.stApp .st-key-topnav .stButton > button[kind="tertiary"]:hover {
+    min-height: 2.2rem;
+    padding: 0 0.6rem;
+    border-color: transparent;
+    background-color: transparent;
+    background-image: linear-gradient(var(--c-line-strong), var(--c-line-strong));
+    background-repeat: no-repeat;
+    background-position: center calc(100% - 0.2rem);
+    background-size: 0 2px;
+    color: var(--c-muted);
+    font-weight: 500;
+    transition: color 0.3s var(--ease), background-size 0.4s var(--ease);
+}
+.stApp .st-key-topnav .stButton > button[kind="tertiary"]:hover {
+    color: var(--c-text);
+    background-size: calc(100% - 1.2rem) 2px;
+}
+.stApp .st-key-topnav [class*="st-key-navactive_"] button[kind="tertiary"],
+.stApp .st-key-topnav [class*="st-key-navactive_"] button[kind="tertiary"]:hover {
+    color: var(--c-text);
+    background-image: linear-gradient(var(--c-accent), var(--c-accent));
+    background-size: calc(100% - 1.2rem) 2px;
+}
+.stApp .st-key-topnav .stButton > button[kind="secondary"],
+.stApp .st-key-topnav [data-testid="stPopover"] button {
+    min-height: 2.2rem;
+    margin-left: 0.4rem;
+    padding: 0 0.9rem;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--r-md);
+    background: transparent;
+    color: var(--c-text);
+    font-weight: 500;
+    transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease), transform 0.3s var(--ease);
+}
+.stApp .st-key-topnav .stButton > button[kind="secondary"]:hover,
+.stApp .st-key-topnav [data-testid="stPopover"] button:hover { background: var(--c-surface); border-color: var(--c-control); }
+.stApp .st-key-topnav [class*="st-key-navactive_"] button[kind="secondary"] { border-color: var(--c-accent); }
+.stApp .st-key-topbar { flex-wrap: nowrap; }
+.stApp .st-key-topbar > [data-testid="stElementContainer"]:first-child { flex: 1 1 0; min-width: 0; }
 
 .ciel-status {
     display: inline-flex;
@@ -151,8 +233,7 @@ header[data-testid="stHeader"] { background: transparent; }
     padding: 0.2rem 0.6rem;
     border: 1px solid var(--c-line-strong);
     border-radius: var(--r-sm);
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
+    font-size: 0.78rem;
     color: var(--c-muted);
     white-space: nowrap;
 }
@@ -167,7 +248,6 @@ header[data-testid="stHeader"] { background: transparent; }
 [data-testid="stSidebarContent"] { padding-top: 1.4rem; }
 .ciel-sidehead { margin-bottom: 1.1rem; }
 .ciel-sidehead .ciel-wordmark { display: block; }
-.ciel-sidehead .ciel-tagline { display: block; margin-top: 0.15rem; }
 .ciel-eyebrow {
     margin: 1.4rem 0 0.4rem;
     font-size: 0.78rem;
@@ -199,6 +279,8 @@ header[data-testid="stHeader"] { background: transparent; }
     background: var(--c-raised);
     border-color: var(--c-faint);
 }
+[data-testid="stSidebar"] [data-testid="stPopover"] button { background: transparent; }
+[data-testid="stSidebar"] [data-testid="stPopover"] button:hover { background: var(--c-raised); }
 .stApp .stButton > button:active { transform: translateY(1px); }
 .stApp .stButton > button[kind="primary"] {
     background: var(--c-accent);
@@ -206,15 +288,14 @@ header[data-testid="stHeader"] { background: transparent; }
     color: var(--c-accent-ink);
     font-weight: 600;
 }
-.stApp .stButton > button[kind="primary"]:hover { background: #73cdbd; border-color: #73cdbd; }
-.st-key-nav { margin-top: 0.35rem; }
+.stApp .stButton > button[kind="primary"]:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); }
 .st-key-clearchat .stButton > button {
     border-color: transparent;
     color: var(--c-muted);
 }
 .st-key-clearchat .stButton > button:hover {
     color: var(--c-err);
-    border-color: rgba(238, 132, 121, 0.45);
+    border-color: rgba(163, 59, 44, 0.4);
     background: transparent;
 }
 
@@ -223,10 +304,11 @@ header[data-testid="stHeader"] { background: transparent; }
 .ciel-hero h1 {
     margin: 0 0 0.9rem;
     padding: 0;
-    font-size: clamp(1.9rem, 3.8vw, 2.7rem);
-    font-weight: 560;
-    letter-spacing: -0.045em;
-    line-height: 1.05;
+    font-family: var(--font-serif);
+    font-size: clamp(2rem, 4vw, 2.9rem);
+    font-weight: 400;
+    letter-spacing: -0.025em;
+    line-height: 1.08;
     text-wrap: balance;
     color: var(--c-text);
 }
@@ -238,16 +320,39 @@ header[data-testid="stHeader"] { background: transparent; }
     color: var(--c-muted);
     text-wrap: pretty;
 }
-.ciel-caps { margin: 2.2rem 0 1.8rem; border-top: 1px solid var(--c-line); }
-.ciel-cap {
-    display: grid;
-    grid-template-columns: 11rem 1fr;
-    gap: 1rem;
-    padding: 0.95rem 0;
-    border-bottom: 1px solid var(--c-line);
+/* Sample answer: shows the [Terverifikasi]/[Dugaan] labels instead of
+   listing features. */
+.ciel-sample {
+    margin: 2rem 0 0.9rem;
+    padding: 1.1rem 1.25rem 1rem;
+    border: 1px solid var(--c-line);
+    border-radius: var(--r-lg);
+    background: var(--c-surface);
+    box-shadow: var(--shadow-sm);
 }
-.ciel-cap strong { font-size: 0.92rem; font-weight: 560; letter-spacing: -0.01em; }
-.ciel-cap span { font-size: 0.88rem; line-height: 1.55; color: var(--c-muted); }
+.ciel-sample figcaption { margin-bottom: 0.75rem; font-size: 0.78rem; color: var(--c-faint); }
+.stApp .ciel-sample-q {
+    margin: 0 0 0.85rem;
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid var(--c-line);
+    font-size: 0.92rem;
+    color: var(--c-text);
+}
+.stApp .ciel-sample-a p, .stApp .ciel-sample-a li { margin: 0 0 0.35rem; font-size: 0.9rem; line-height: 1.6; color: var(--c-text); }
+.stApp .ciel-sample-a ol { margin: 0 0 0.35rem; padding-left: 1.2rem; }
+.ciel-sample-a b { font-weight: 600; }
+.ciel-label {
+    display: inline-block;
+    margin-left: 0.15rem;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.ciel-label.is-ok { background: rgba(32, 58, 114, 0.10); color: var(--c-accent); }
+.ciel-label.is-guess { background: var(--c-gold); color: var(--c-gold-ink); }
+.stApp .ciel-hint { margin: 0 0 1.6rem; font-size: 0.84rem; line-height: 1.6; color: var(--c-muted); }
 .st-key-starters .stButton > button {
     width: 100%;
     justify-content: flex-start;
@@ -260,15 +365,8 @@ header[data-testid="stHeader"] { background: transparent; }
     color: var(--c-text);
     font-weight: 400;
 }
-.st-key-starters .stButton > button::before {
-    content: "\\2192";
-    font-family: var(--font-mono);
-    color: var(--c-accent);
-    margin-right: 0.85rem;
-    transition: transform 0.4s var(--ease);
-}
-.st-key-starters .stButton > button:hover { background: transparent; }
-.st-key-starters .stButton > button:hover::before { transform: translateX(3px); }
+.st-key-starters .stButton > button { transition: color 0.3s var(--ease); }
+.st-key-starters .stButton > button:hover { background: transparent; color: var(--c-accent); }
 .st-key-starters .stButton > button p { white-space: normal; text-align: left; }
 
 /* ---------- Messages ---------- */
@@ -287,6 +385,7 @@ header[data-testid="stHeader"] { background: transparent; }
     background: var(--c-surface);
     border: 1px solid var(--c-line);
     border-radius: var(--r-lg);
+    box-shadow: var(--shadow-sm);
     padding: 0.85rem 1.05rem;
     margin: 0.6rem 0;
 }
@@ -329,7 +428,7 @@ header[data-testid="stHeader"] { background: transparent; }
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(90deg, transparent, rgba(233, 236, 236, 0.07), transparent);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
     transform: translateX(-100%);
     animation: ciel-shimmer 1.7s var(--ease) infinite;
 }
@@ -338,20 +437,19 @@ header[data-testid="stHeader"] { background: transparent; }
 /* ---------- Error card ---------- */
 [class*="st-key-errcard"] {
     padding: 0.95rem 1.05rem;
-    border: 1px solid rgba(238, 132, 121, 0.3);
+    border: 1px solid rgba(163, 59, 44, 0.25);
     border-left: 3px solid var(--c-err);
     border-radius: var(--r-md);
-    background: rgba(238, 132, 121, 0.05);
+    background: rgba(163, 59, 44, 0.05);
     max-width: 44rem;
 }
 .ciel-errhead { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem; }
-.ciel-errhead strong { font-size: 0.98rem; font-weight: 560; }
+.ciel-errhead strong { font-size: 0.98rem; font-weight: 600; }
 .ciel-badge {
     padding: 0.1rem 0.45rem;
     border-radius: 3px;
-    background: rgba(238, 132, 121, 0.16);
+    background: rgba(163, 59, 44, 0.12);
     color: var(--c-err);
-    font-family: var(--font-mono);
     font-size: 0.7rem;
     font-weight: 500;
 }
@@ -372,9 +470,11 @@ header[data-testid="stHeader"] { background: transparent; }
     border: 1px solid var(--c-control);
     border-radius: var(--r-lg);
     background: var(--c-surface);
+    box-shadow: var(--shadow-md);
     transition: border-color 0.4s var(--ease);
 }
 [data-testid="stChatInput"] > div { background: transparent; border: 0; }
+[data-testid="stChatInput"] div:has(textarea) { background: transparent; }
 [data-testid="stChatInput"]:focus-within { border-color: var(--c-accent); }
 [data-testid="stChatInput"] textarea { color: var(--c-text); font-size: 0.98rem; }
 [data-testid="stChatInput"] textarea::placeholder { color: var(--c-faint); }
@@ -390,7 +490,6 @@ header[data-testid="stHeader"] { background: transparent; }
 /* ---------- Projects, history, files ---------- */
 [data-testid="stSidebar"] .stButton > button,
 [data-testid="stSidebar"] [data-testid="stPopover"] > button { width: 100%; }
-.st-key-nav .stButton > button,
 .st-key-projects .stButton > button,
 .st-key-history .stButton > button {
     justify-content: flex-start;
@@ -399,15 +498,12 @@ header[data-testid="stHeader"] { background: transparent; }
     color: var(--c-muted);
     min-height: 2.2rem;
 }
-.st-key-nav .stButton > button:hover,
 .st-key-projects .stButton > button:hover,
 .st-key-history .stButton > button:hover {
     background: var(--c-raised);
     color: var(--c-text);
     border-color: transparent;
 }
-[class*="st-key-navactive_"] .stButton > button,
-.stButton[class*="st-key-navactive_"] > button,
 [class*="st-key-projactive_"] .stButton > button,
 [class*="st-key-chatactive_"] .stButton > button,
 .stButton[class*="st-key-projactive_"] > button,
@@ -471,13 +567,11 @@ header[data-testid="stHeader"] { background: transparent; }
 /* ---------- Tablet / phone ---------- */
 @media (max-width: 900px) {
     [data-testid="stMain"] .block-container,
-    .stMain .block-container { padding: 1.5rem 1.1rem 8.5rem; }
+    .stMain .block-container { padding: 4rem 1.1rem 8.5rem; }
 }
 @media (max-width: 640px) {
     [data-testid="stMain"] .block-container,
-    .stMain .block-container { padding: 1rem 0.9rem 8rem; }
-    .ciel-cap { grid-template-columns: 1fr; gap: 0.2rem; }
-    .ciel-tagline { display: none; }
+    .stMain .block-container { padding: 3.75rem 0.9rem 8rem; }
     [data-testid="stChatMessage"] { gap: 0.65rem; }
     [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) { padding: 0.75rem 0.85rem; }
     [data-testid="stBottomBlockContainer"] { padding-left: 0.7rem; padding-right: 0.7rem; padding-bottom: 1rem; }
@@ -488,6 +582,70 @@ header[data-testid="stHeader"] { background: transparent; }
 """
 
 st.markdown(CIEL_CSS, unsafe_allow_html=True)
+
+# Top bar that follows the scroll: scrolling down pushes it up behind the
+# header pixel for pixel, scrolling up pulls it back, and when scrolling
+# stops it glides fully in or out based on the last direction (so a small
+# scroll up always brings it back). Writes --ciel-nav-offset on <body>,
+# which React never touches, so reruns don't reset it; the guard on the
+# scroll container keeps reruns from adding listeners.
+NAV_SCROLL_JS = """
+<script>
+(() => {
+    const main = document.querySelector('section.stMain');
+    if (!main || main.dataset.cielNav) return;
+    main.dataset.cielNav = '1';
+
+    const body = document.body;
+    const SETTLE_MS = 120;
+    const wrapper = () => document.querySelector('[data-testid="stLayoutWrapper"]:has(> .st-key-topbar)');
+    const range = () => { const w = wrapper(); return w ? w.offsetHeight + 8 : 0; };
+
+    let offset = 0;
+    let last = main.scrollTop;
+    let direction = 0;
+    let settleTimer = 0;
+
+    // Scroll events already arrive at most once per frame, so write directly.
+    const render = (max) => {
+        body.style.setProperty('--ciel-nav-offset', `${offset}px`);
+        if (offset >= max - 1) body.dataset.cielNav = 'hidden';
+        else delete body.dataset.cielNav;
+    };
+
+    const settle = () => {
+        delete body.dataset.cielNavMoving;
+        const max = range();
+        offset = direction > 0 && main.scrollTop > max ? max : 0;
+        render(max);
+    };
+
+    main.addEventListener('scroll', () => {
+        const y = Math.max(0, main.scrollTop);
+        const dy = y - last;
+        last = y;
+        if (Math.abs(dy) > 2) direction = Math.sign(dy);
+
+        const max = range();
+        offset = Math.min(max, Math.max(0, offset + dy), y);
+
+        body.dataset.cielNavMoving = '1';
+        render(max);
+        clearTimeout(settleTimer);
+        settleTimer = setTimeout(settle, SETTLE_MS);
+    }, { passive: true });
+
+    // Keyboard users tabbing into the nav always see it.
+    document.addEventListener('focusin', (event) => {
+        const w = wrapper();
+        if (w && w.contains(event.target)) { direction = -1; settle(); }
+    });
+})();
+</script>
+"""
+
+with st.container(key="navjs"):
+    st.html(NAV_SCROLL_JS, unsafe_allow_javascript=True)
 
 
 
@@ -679,6 +837,20 @@ def user_key():
 
 
 # ============================================================
+# ERRORS
+# ============================================================
+
+class CielError(str):
+    """
+    Pesan gagal untuk pengguna (judul, saran, lalu detail teknis).
+
+    Tipenya, bukan isi teksnya, yang membuat UI menampilkan kartu error
+    dengan tombol coba lagi. Dulu pesan diawali emoji sebagai penanda;
+    sekarang teksnya bisa ditulis sebagai kalimat biasa.
+    """
+
+
+# ============================================================
 # RATE LIMIT
 # ============================================================
 
@@ -743,10 +915,10 @@ def check_rate_limit():
         else ""
     )
 
-    return (
-        "⏳ Batas pemakaian tercapai.\n\n"
+    return CielError(
+        "Batas pesan per jam tercapai.\n\n"
         f"Ciel menerima hingga {limit} pesan per jam per pengguna, dan "
-        "pemakaian anonim juga dibatasi bersama. Silakan coba lagi nanti."
+        "pemakaian tanpa login juga dibatasi bersama. Silakan coba lagi nanti."
         f"{hint}"
     )
 
@@ -877,12 +1049,12 @@ def ask_langflow(message, tweaks=None, session_id=None):
                 str(data)[:500],
             )
 
-            return (
-                "⚠️ Response Langflow diterima, "
-                "tetapi format output tidak dikenali.\n\n"
+            return CielError(
+                "Jawaban Ciel tidak bisa dibaca.\n\n"
                 "Silakan coba lagi. Jika terus terjadi, sampaikan kode "
-                "di bagian detail teknis kepada admin.\n\n"
-                f"Request ID: `{request_id}`"
+                "di bagian detail teknis kepada pengelola.\n\n"
+                f"Request ID: `{request_id}`\n"
+                "Penyebab: format output tidak dikenali."
             )
 
     except requests.exceptions.Timeout:
@@ -895,10 +1067,12 @@ def ask_langflow(message, tweaks=None, session_id=None):
             elapsed,
         )
 
-        return (
-            "⏱️ Request timeout.\n\n"
-            "Langflow membutuhkan terlalu lama "
-            "untuk memberikan jawaban."
+        return CielError(
+            "Ciel terlalu lama menjawab.\n\n"
+            "Pertanyaan riset bisa memakan waktu lama. Silakan coba lagi, "
+            "atau persempit pertanyaannya.\n\n"
+            f"Request ID: `{request_id}`\n"
+            "Penyebab: request timeout setelah 240 detik."
         )
 
     except requests.exceptions.ConnectionError:
@@ -911,10 +1085,11 @@ def ask_langflow(message, tweaks=None, session_id=None):
             elapsed,
         )
 
-        return (
-            "🔌 Tidak dapat terhubung ke ngrok.\n\n"
-            "Pastikan Langflow Desktop dan ngrok "
-            "sedang berjalan."
+        return CielError(
+            "Ciel sedang tidak bisa dihubungi.\n\n"
+            "Server Ciel mungkin sedang offline. Silakan coba lagi sebentar lagi.\n\n"
+            f"Request ID: `{request_id}`\n"
+            "Penyebab: koneksi ke backend gagal."
         )
 
     except requests.exceptions.HTTPError as error:
@@ -933,33 +1108,42 @@ def ask_langflow(message, tweaks=None, session_id=None):
         )
 
         if status in (401, 403):
-            return (
-                "🔐 Authentication gagal.\n\n"
-                "Periksa konfigurasi API key atau akses backend."
+            return CielError(
+                "Ciel sedang tidak bisa menjawab.\n\n"
+                "Ada masalah konfigurasi di server. Pengelola perlu memeriksanya.\n\n"
+                f"HTTP Status: {status}\n"
+                f"Request ID: `{request_id}`\n"
+                "Penyebab: autentikasi ke backend ditolak."
             )
 
         if status == 429:
-            return (
-                "⏳ Request terlalu banyak.\n\n"
-                "Backend sedang membatasi request. "
-                "Silakan coba lagi setelah beberapa saat."
+            return CielError(
+                "Ciel sedang menerima terlalu banyak permintaan.\n\n"
+                "Silakan coba lagi dalam beberapa saat.\n\n"
+                f"HTTP Status: {status}\n"
+                f"Request ID: `{request_id}`"
             )
 
         if status == 500:
-            return (
-                "⚠️ Backend mengalami internal error.\n\n"
-                "Silakan coba lagi setelah backend pulih."
+            return CielError(
+                "Ciel mengalami gangguan saat menyusun jawaban.\n\n"
+                "Silakan coba lagi.\n\n"
+                f"HTTP Status: {status}\n"
+                f"Request ID: `{request_id}`\n"
+                "Penyebab: internal error di backend."
             )
 
         if status in (502, 503, 504):
-            return (
-                "🔧 Backend sedang tidak tersedia.\n\n"
-                "Langflow/ngrok belum siap atau sedang mengalami "
-                "gangguan sementara. Silakan coba lagi nanti."
+            return CielError(
+                "Ciel sedang tidak tersedia.\n\n"
+                "Server sedang mengalami gangguan sementara. Silakan coba lagi nanti.\n\n"
+                f"HTTP Status: {status}\n"
+                f"Request ID: `{request_id}`"
             )
 
-        return (
-            "🚫 Request ke Langflow gagal.\n\n"
+        return CielError(
+            "Permintaan ke Ciel gagal.\n\n"
+            "Silakan coba lagi.\n\n"
             f"HTTP Status: {status}\n"
             f"Request ID: `{request_id}`"
         )
@@ -977,8 +1161,8 @@ def ask_langflow(message, tweaks=None, session_id=None):
             error,
         )
 
-        return (
-            "❌ Request gagal.\n\n"
+        return CielError(
+            "Permintaan ke Ciel gagal.\n\n"
             "Terjadi gangguan saat menghubungi Ciel. Silakan coba lagi.\n\n"
             f"Request ID: `{request_id}`"
         )
@@ -993,9 +1177,11 @@ def ask_langflow(message, tweaks=None, session_id=None):
             elapsed,
         )
 
-        return (
-            "⚠️ Response dari Langflow "
-            "bukan JSON yang valid."
+        return CielError(
+            "Jawaban Ciel tidak bisa dibaca.\n\n"
+            "Silakan coba lagi.\n\n"
+            f"Request ID: `{request_id}`\n"
+            "Penyebab: response bukan JSON yang valid."
         )
 
 
@@ -1078,19 +1264,23 @@ def upload_images(images):
 
         logger.error("image_upload_timeout id=%s", request_id)
 
-        return [], (
-            "⏱️ Upload gambar timeout.\n\n"
-            "Gambar terlalu besar atau koneksi lambat. "
-            "Coba gambar yang lebih kecil."
+        return [], CielError(
+            "Gambar gagal diunggah.\n\n"
+            "Gambarnya terlalu besar atau koneksi lambat. "
+            "Coba gambar yang lebih kecil.\n\n"
+            f"Request ID: `{request_id}`\n"
+            "Penyebab: upload timeout."
         )
 
     except requests.exceptions.ConnectionError:
 
         logger.error("image_upload_connection_error id=%s", request_id)
 
-        return [], (
-            "🔌 Tidak dapat terhubung ke ngrok saat mengunggah gambar.\n\n"
-            "Pastikan Langflow Desktop dan ngrok sedang berjalan."
+        return [], CielError(
+            "Gambar gagal diunggah.\n\n"
+            "Server Ciel sedang tidak bisa dihubungi. Silakan coba lagi sebentar lagi.\n\n"
+            f"Request ID: `{request_id}`\n"
+            "Penyebab: koneksi ke backend gagal."
         )
 
     except requests.exceptions.HTTPError:
@@ -1104,21 +1294,26 @@ def upload_images(images):
         )
 
         if status in (401, 403):
-            return [], (
-                "🔐 Authentication gagal saat mengunggah gambar.\n\n"
-                "Periksa konfigurasi API key atau akses backend."
+            return [], CielError(
+                "Gambar gagal diunggah.\n\n"
+                "Ada masalah konfigurasi di server. Pengelola perlu memeriksanya.\n\n"
+                f"HTTP Status: {status}\n"
+                f"Request ID: `{request_id}`\n"
+                "Penyebab: autentikasi ke backend ditolak."
             )
 
         if status in (404, 405):
-            return [], (
-                "🚫 Endpoint upload gambar tidak ditemukan.\n\n"
-                "Versi Langflow mungkin berbeda atau flow ID salah.\n\n"
+            return [], CielError(
+                "Gambar gagal diunggah.\n\n"
+                "Server ini belum bisa menerima gambar.\n\n"
                 f"HTTP Status: {status}\n"
-                f"Request ID: `{request_id}`"
+                f"Request ID: `{request_id}`\n"
+                "Penyebab: endpoint upload tidak ditemukan (versi Langflow atau flow ID)."
             )
 
-        return [], (
-            "🚫 Upload gambar ke Langflow gagal.\n\n"
+        return [], CielError(
+            "Gambar gagal diunggah.\n\n"
+            "Silakan coba lagi.\n\n"
             f"HTTP Status: {status}\n"
             f"Request ID: `{request_id}`"
         )
@@ -1127,10 +1322,11 @@ def upload_images(images):
 
         logger.error("image_upload_parse_error id=%s", request_id)
 
-        return [], (
-            "⚠️ Upload gambar berhasil dikirim, tetapi response "
-            "Langflow tidak dikenali.\n\n"
-            f"Request ID: `{request_id}`"
+        return [], CielError(
+            "Gambar gagal diunggah.\n\n"
+            "Silakan coba lagi.\n\n"
+            f"Request ID: `{request_id}`\n"
+            "Penyebab: response upload tidak dikenali."
         )
 
     except requests.exceptions.RequestException as error:
@@ -1143,8 +1339,8 @@ def upload_images(images):
             error,
         )
 
-        return [], (
-            "❌ Upload gambar gagal.\n\n"
+        return [], CielError(
+            "Gambar gagal diunggah.\n\n"
             "Terjadi gangguan saat mengunggah gambar. Silakan coba lagi.\n\n"
             f"Request ID: `{request_id}`"
         )
@@ -1322,22 +1518,34 @@ AVATARS = {
     "assistant": ":material/cloud:",
 }
 
-# ask_langflow() reports failures as friendly text that starts with one of
-# these markers. The UI recognises them so failures render as an error
-# card with a retry action instead of looking like a normal answer.
-ERROR_MARKERS = ("⏱", "🔌", "🔐", "⏳", "🔧", "🚫", "❌", "⚠")
-
 STARTER_PROMPTS = (
     "Ajari aku limit fungsi dari dasar, lalu kasih 2 soal latihan",
     "Analisis: apakah model bahasa open-source sudah layak dipakai untuk riset skripsi?",
     "Rangkum perkembangan terbaru model bahasa open-source beserta sumbernya",
 )
 
-CAPABILITIES = (
-    ("Riset anti-ngarang", "Jawaban riset disertai sumber. Kalau buktinya tidak ada, Ciel bilang belum tahu."),
-    ("Teman belajar", "Menjelaskan bertahap, memberi latihan, dan mengingat progresmu (perlu login)."),
-    ("Mode analisis", "Awali dengan &ldquo;analisis&rdquo; untuk jawaban terstruktur lengkap dengan tingkat keyakinan."),
-    ("Hitung &amp; data", "Angka dari CSV/TSV-mu dihitung langsung dari file, bukan ditebak."),
+# Contoh di empty state: format asli mode analisis (lihat prompt flow:
+# "Analisis dimulai.", Kesimpulan, Dasar berlabel, Tingkat keyakinan,
+# Batasan). Datanya ilustrasi dan diberi keterangan begitu, supaya halaman
+# depan tidak mengarang fakta atau sumber.
+SAMPLE_ANSWER_HTML = (
+    '<figure class="ciel-sample">'
+    "<figcaption>Contoh jawaban mode analisis &middot; data ilustrasi</figcaption>"
+    '<p class="ciel-sample-q">analisis: dari nilai_kelas.csv, kelas ini sudah siap ujian akhir?</p>'
+    '<div class="ciel-sample-a">'
+    "<p>Analisis dimulai.</p>"
+    "<p><b>Kesimpulan:</b> Sebagian besar siap; 6 dari 32 siswa masih di bawah KKM 75.</p>"
+    "<p><b>Dasar:</b></p>"
+    "<ol>"
+    "<li>Rata-rata kelas 78,4 dan median 80, dihitung dari 32 baris file. "
+    '<span class="ciel-label is-ok">Terverifikasi</span></li>'
+    "<li>Nilai terendah ada di soal geometri, jadi bab itu kemungkinan perlu diulang. "
+    '<span class="ciel-label is-guess">Dugaan</span></li>'
+    "</ol>"
+    "<p><b>Tingkat keyakinan:</b> Sedang, karena datanya hanya satu ujian.</p>"
+    "<p><b>Batasan:</b> File tidak memuat nilai tugas.</p>"
+    "</div>"
+    "</figure>"
 )
 
 THINKING_HTML = (
@@ -1404,7 +1612,7 @@ def format_size(size):
 
 
 def is_error_answer(text):
-    return str(text).lstrip().startswith(ERROR_MARKERS)
+    return isinstance(text, CielError)
 
 
 def split_error(text):
@@ -1766,9 +1974,9 @@ def unpack_chat_input(value):
 
 
 def current_view():
-    # Disimpan di URL (?page=pricing, ?page=privacy) agar halaman bisa dibagikan.
+    # Disimpan di URL (?page=pricing, ?page=privacy, ?page=login) agar halaman bisa dibagikan.
     page = st.query_params.get("page")
-    return page if page in ("pricing", "privacy") else "chat"
+    return page if page in ("pricing", "privacy", "login") else "chat"
 
 
 def show_chat():
@@ -1781,6 +1989,10 @@ def show_pricing():
 
 def show_privacy():
     st.query_params["page"] = "privacy"
+
+
+def show_login():
+    st.query_params["page"] = "login"
 
 
 def new_chat():
@@ -1941,7 +2153,7 @@ def render_error(content, index, show_retry):
 
         st.markdown(
             '<div class="ciel-errhead" role="alert">'
-            '<span class="ciel-badge">Error</span>'
+            '<span class="ciel-badge">Gagal</span>'
             f"<strong>{html.escape(title)}</strong>"
             "</div>",
             unsafe_allow_html=True,
@@ -1951,12 +2163,12 @@ def render_error(content, index, show_retry):
             st.markdown("\n\n".join(plain))
 
         if technical:
-            with st.expander("Technical details"):
+            with st.expander("Detail teknis"):
                 st.markdown("\n\n".join(technical))
 
         if show_retry:
             st.button(
-                "Retry",
+                "Coba lagi",
                 key=f"retry_{index}",
                 icon=":material/refresh:",
                 on_click=retry_last,
@@ -1972,7 +2184,6 @@ with st.sidebar:
     st.markdown(
         '<div class="ciel-sidehead">'
         '<span class="ciel-wordmark">Ciel</span>'
-        '<span class="ciel-tagline">Riset &amp; teman belajar</span>'
         "</div>",
         unsafe_allow_html=True,
     )
@@ -1982,43 +2193,19 @@ with st.sidebar:
     # --------------------------------------------------------
 
     st.button(
-        "New chat",
+        "Chat baru",
         key="newchat",
         type="primary",
         icon=":material/add:",
         on_click=new_chat,
     )
 
-    with st.container(key="nav"):
-
-        st.button(
-            "Harga & paket",
-            key=(
-                "navactive_pricing"
-                if current_view() == "pricing"
-                else "nav_pricing"
-            ),
-            icon=":material/sell:",
-            on_click=show_pricing,
-        )
-
-        st.button(
-            "Privasi",
-            key=(
-                "navactive_privacy"
-                if current_view() == "privacy"
-                else "nav_privacy"
-            ),
-            icon=":material/shield:",
-            on_click=show_privacy,
-        )
-
     # --------------------------------------------------------
     # PROJECTS
     # --------------------------------------------------------
 
     st.markdown(
-        '<div class="ciel-eyebrow">Projects</div>',
+        '<div class="ciel-eyebrow">Proyek</div>',
         unsafe_allow_html=True,
     )
 
@@ -2027,7 +2214,7 @@ with st.sidebar:
     with st.container(key="projects"):
 
         st.button(
-            "All chats",
+            "Semua chat",
             key=(
                 "projactive_all"
                 if active_project_id is None
@@ -2054,17 +2241,17 @@ with st.sidebar:
                 args=(project_id,),
             )
 
-    with st.popover("New project", icon=":material/create_new_folder:"):
+    with st.popover("Proyek baru", icon=":material/create_new_folder:"):
 
         st.text_input(
-            "Project name",
+            "Nama proyek",
             key="newproj_name",
             max_chars=40,
             placeholder="Contoh: Riset kompetitor",
         )
 
         st.button(
-            "Create project",
+            "Buat proyek",
             key="createproj",
             type="primary",
             on_click=create_project,
@@ -2076,12 +2263,12 @@ with st.sidebar:
         upload_key = f"pfup_{active_project_id}_{st.session_state.upload_nonce}"
 
         with st.expander(
-            f"Project files ({len(project['files'])})",
+            f"File proyek ({len(project['files'])})",
             expanded=not project["files"],
         ):
 
             st.file_uploader(
-                "Add files to this project",
+                "Tambahkan file ke proyek ini",
                 type=ALLOWED_FILE_TYPES,
                 accept_multiple_files=True,
                 key=upload_key,
@@ -2107,7 +2294,7 @@ with st.sidebar:
                 )
 
                 st.button(
-                    f"Remove {short(item['name'], 20)}",
+                    f"Hapus {short(item['name'], 20)}",
                     key=f"rmfile_{active_project_id}_{item['name']}",
                     icon=":material/close:",
                     on_click=remove_project_file,
@@ -2115,7 +2302,7 @@ with st.sidebar:
                 )
 
             st.button(
-                "Delete project",
+                "Hapus proyek",
                 key=f"delproj_{active_project_id}",
                 icon=":material/delete:",
                 on_click=delete_project,
@@ -2127,7 +2314,7 @@ with st.sidebar:
     # --------------------------------------------------------
 
     st.markdown(
-        '<div class="ciel-eyebrow">History</div>',
+        '<div class="ciel-eyebrow">Riwayat</div>',
         unsafe_allow_html=True,
     )
 
@@ -2163,156 +2350,13 @@ with st.sidebar:
             )
 
     # --------------------------------------------------------
-    # MEMORY (INFORMATIF)
-    # --------------------------------------------------------
-
-    st.markdown(
-        '<div class="ciel-eyebrow">Memory</div>',
-        unsafe_allow_html=True,
-    )
-
-    if AUTH_ENABLED:
-
-        if logged_in():
-
-            st.caption(
-                f"Masuk sebagai {st.user.get('name') or st.user.get('email') or 'pengguna'}"
-            )
-
-            st.button(
-                "Keluar",
-                key="logout",
-                icon=":material/logout:",
-                on_click=st.logout,
-            )
-
-        else:
-
-            st.button(
-                "Masuk dengan Google",
-                key="login",
-                icon=":material/login:",
-                on_click=st.login,
-            )
-
-    if logged_in():
-        memory_status = (
-            "<p>Long-term memory aktif dan hanya milik akunmu. Ciel bisa "
-            "mengingat konteks penting lintas percakapan.</p>"
-            f"<p>ID memory: <code>{memory_owner_id()}</code></p>"
-        )
-    elif AUTH_ENABLED:
-        memory_status = (
-            "<p>Kamu belum masuk, jadi Ciel tidak menyimpan atau membaca "
-            "long-term memory untukmu. Masuk untuk mengaktifkannya.</p>"
-        )
-    else:
-        memory_status = (
-            "<p>Long-term memory nonaktif di deployment ini karena login "
-            "belum dikonfigurasi.</p>"
-        )
-
-    with st.expander("About long-term memory"):
-
-        st.markdown(
-            '<div class="ciel-note">'
-            f"{memory_status}"
-            "<p>Ini berbeda dari riwayat chat di sidebar, yang hanya "
-            "tersimpan selama sesi browser ini.</p>"
-            + (
-                "<p>Lihat dan hapus memory-mu di bagian Data saya.</p>"
-                if logged_in() and MEMORY_ADMIN_FLOW_ID
-                else ""
-            )
-            + "</div>",
-            unsafe_allow_html=True,
-        )
-
-    if logged_in():
-
-        with st.expander("Data saya"):
-
-            if not MEMORY_ADMIN_FLOW_ID:
-
-                st.caption("Pengelolaan data belum aktif di deployment ini.")
-
-            else:
-
-                notice = st.session_state.pop("data_notice", None)
-
-                if notice:
-                    (st.success if notice[0] == "success" else st.error)(notice[1])
-
-                st.button(
-                    "Tampilkan memoriku",
-                    key="load_memories",
-                    icon=":material/visibility:",
-                    on_click=load_my_memories,
-                )
-
-                listing = st.session_state.get("my_memories")
-
-                if listing is not None and not listing.get("ok"):
-                    st.caption("Memory belum bisa dimuat. Silakan coba lagi.")
-
-                elif listing is not None and not listing.get("memories"):
-                    st.caption("Belum ada memory yang tersimpan.")
-
-                elif listing is not None:
-
-                    st.caption(f"{listing.get('total', 0)} memory tersimpan")
-
-                    for item in listing["memories"]:
-
-                        st.markdown(
-                            '<div class="ciel-projfile">'
-                            f"<span>{html.escape(short(item['text'], 90))}</span>"
-                            "</div>",
-                            unsafe_allow_html=True,
-                        )
-
-                        st.button(
-                            "Hapus",
-                            key=f"delmem_{item['id']}",
-                            icon=":material/close:",
-                            on_click=delete_my_memory,
-                            args=(item["id"],),
-                        )
-
-                st.checkbox(
-                    "Saya yakin ingin menghapus semua memoriku",
-                    key="confirm_delete_memories",
-                )
-
-                st.button(
-                    "Hapus semua memoriku",
-                    key="delete_all_memories",
-                    icon=":material/delete:",
-                    disabled=not st.session_state.get("confirm_delete_memories"),
-                    on_click=delete_all_my_memories,
-                )
-
-                st.checkbox(
-                    "Saya yakin ingin menghapus riwayat chat-ku di server",
-                    key="confirm_delete_history",
-                )
-
-                st.button(
-                    "Hapus riwayat chat-ku di server",
-                    key="delete_history",
-                    icon=":material/history:",
-                    disabled=not st.session_state.get("confirm_delete_history"),
-                    on_click=delete_my_chat_history,
-                )
-
-    # --------------------------------------------------------
     # CLEAR CHAT (AKSI SEKUNDER)
     # --------------------------------------------------------
 
     with st.container(key="clearchat"):
 
         st.button(
-            "Clear chat",
+            "Hapus chat",
             key="clearchat_btn",
             icon=":material/delete:",
             disabled=active_chat() is None,
@@ -2328,7 +2372,13 @@ topbar_project = st.session_state.projects.get(
     st.session_state.active_project
 )
 
-with st.container(key="topbar"):
+# Satu baris flex (bukan st.columns) supaya brand dan nav tidak ditumpuk
+# Streamlit di layar sempit.
+with st.container(
+    key="topbar",
+    horizontal=True,
+    vertical_alignment="center",
+):
 
     project_chip = ""
 
@@ -2336,7 +2386,7 @@ with st.container(key="topbar"):
         project_chip = (
             '<div class="ciel-status" data-state="ok">'
             '<span class="ciel-dot" aria-hidden="true"></span>'
-            f"<span>Project <b>{html.escape(short(topbar_project['name'], 28))}</b></span>"
+            f"<span>Proyek <b>{html.escape(short(topbar_project['name'], 28))}</b></span>"
             "</div>"
         )
 
@@ -2344,12 +2394,152 @@ with st.container(key="topbar"):
         '<div class="ciel-topbar">'
         '<div class="ciel-brand">'
         '<span class="ciel-wordmark">Ciel</span>'
-        '<span class="ciel-tagline">Riset tanpa ngarang, teman belajar yang ingat progresmu</span>'
         "</div>"
         f"{project_chip}"
         "</div>",
         unsafe_allow_html=True,
     )
+
+    with st.container(
+        key="topnav",
+        horizontal=True,
+        horizontal_alignment="right",
+        vertical_alignment="center",
+        width="content",
+    ):
+
+        st.button(
+            "Harga",
+            key=(
+                "navactive_pricing"
+                if current_view() == "pricing"
+                else "nav_pricing"
+            ),
+            type="tertiary",
+            on_click=show_pricing,
+        )
+
+        st.button(
+            "Privasi",
+            key=(
+                "navactive_privacy"
+                if current_view() == "privacy"
+                else "nav_privacy"
+            ),
+            type="tertiary",
+            on_click=show_privacy,
+        )
+
+        if not logged_in():
+
+            st.button(
+                "Masuk",
+                key=(
+                    "navactive_login"
+                    if current_view() == "login"
+                    else "login"
+                ),
+                on_click=show_login,
+            )
+
+        else:
+
+            account_name = st.user.get("name") or st.user.get("email") or "Akun"
+
+            with st.popover(short(account_name, 18)):
+
+                st.caption(f"Masuk sebagai {account_name}")
+
+                st.markdown(
+                    '<div class="ciel-note">'
+                    "<p>Long-term memory aktif dan hanya milik akunmu. Ciel bisa "
+                    "mengingat konteks penting lintas percakapan.</p>"
+                    f"<p>ID memory: <code>{memory_owner_id()}</code></p>"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+
+                with st.expander("Data saya"):
+
+                    if not MEMORY_ADMIN_FLOW_ID:
+
+                        st.caption("Pengelolaan data belum aktif di deployment ini.")
+
+                    else:
+
+                        notice = st.session_state.pop("data_notice", None)
+
+                        if notice:
+                            (st.success if notice[0] == "success" else st.error)(notice[1])
+
+                        st.button(
+                            "Tampilkan memoriku",
+                            key="load_memories",
+                            icon=":material/visibility:",
+                            on_click=load_my_memories,
+                        )
+
+                        listing = st.session_state.get("my_memories")
+
+                        if listing is not None and not listing.get("ok"):
+                            st.caption("Memory belum bisa dimuat. Silakan coba lagi.")
+
+                        elif listing is not None and not listing.get("memories"):
+                            st.caption("Belum ada memory yang tersimpan.")
+
+                        elif listing is not None:
+
+                            st.caption(f"{listing.get('total', 0)} memory tersimpan")
+
+                            for item in listing["memories"]:
+
+                                st.markdown(
+                                    '<div class="ciel-projfile">'
+                                    f"<span>{html.escape(short(item['text'], 90))}</span>"
+                                    "</div>",
+                                    unsafe_allow_html=True,
+                                )
+
+                                st.button(
+                                    "Hapus",
+                                    key=f"delmem_{item['id']}",
+                                    icon=":material/close:",
+                                    on_click=delete_my_memory,
+                                    args=(item["id"],),
+                                )
+
+                        st.checkbox(
+                            "Saya yakin ingin menghapus semua memoriku",
+                            key="confirm_delete_memories",
+                        )
+
+                        st.button(
+                            "Hapus semua memoriku",
+                            key="delete_all_memories",
+                            icon=":material/delete:",
+                            disabled=not st.session_state.get("confirm_delete_memories"),
+                            on_click=delete_all_my_memories,
+                        )
+
+                        st.checkbox(
+                            "Saya yakin ingin menghapus riwayat chat-ku di server",
+                            key="confirm_delete_history",
+                        )
+
+                        st.button(
+                            "Hapus riwayat chat-ku di server",
+                            key="delete_history",
+                            icon=":material/history:",
+                            disabled=not st.session_state.get("confirm_delete_history"),
+                            on_click=delete_my_chat_history,
+                        )
+
+                st.button(
+                    "Keluar",
+                    key="logout",
+                    icon=":material/logout:",
+                    on_click=st.logout,
+                )
 
 
 # ============================================================
@@ -2372,6 +2562,20 @@ if current_view() == "privacy":
         memory_enabled=AUTH_ENABLED,
         data_controls=bool(MEMORY_ADMIN_FLOW_ID),
         contact_url=safe_contact_url(CONTACT_URL),
+    )
+    st.stop()
+
+if current_view() == "login":
+    render_login(
+        auth_enabled=AUTH_ENABLED,
+        on_google=st.login,
+        on_back=show_chat,
+        rate_limits=(RATE_LIMIT_PER_HOUR, RATE_LIMIT_PER_HOUR_LOGIN),
+        signed_in_as=(
+            st.user.get("name") or st.user.get("email") or "pengguna"
+            if logged_in()
+            else None
+        ),
     )
     st.stop()
 
@@ -2409,24 +2613,21 @@ if not messages and not pending_request:
 
     with st.container(key="emptystate"):
 
-        capabilities_html = "".join(
-            f"<div class=\"ciel-cap\"><strong>{name}</strong><span>{desc}</span></div>"
-            for name, desc in CAPABILITIES
-        )
-
         st.markdown(
             '<div class="ciel-hero">'
-            "<h1>Riset yang jujur, belajar yang ditemani.</h1>"
-            "<p>Ciel menjawab dari sumber dan data yang bisa dicek, bilang "
-            "terus terang kalau belum tahu, dan menemanimu belajar langkah "
-            "demi langkah. Lampirkan file teks atau foto dari tombol di "
-            "kotak pesan.</p>"
+            "<h1>Kalau sumbernya tidak ada, Ciel bilang tidak tahu.</h1>"
+            "<p>Teman riset dan belajar yang menjawab dari sumber dan data "
+            "yang bisa kamu cek. Di mode analisis, setiap poin diberi label: "
+            "terverifikasi dari data, atau masih dugaan.</p>"
             "</div>"
-            f'<div class="ciel-caps">{capabilities_html}</div>',
+            f"{SAMPLE_ANSWER_HTML}"
+            '<p class="ciel-hint">Tulis &ldquo;analisis&rdquo; di awal pertanyaan '
+            "untuk format ini. Lampirkan CSV, file teks, atau foto lewat tombol + "
+            "di kotak pesan.</p>",
             unsafe_allow_html=True,
         )
 
-        st.caption("Coba salah satu:")
+        st.caption("Coba tanyakan")
 
         with st.container(key="starters"):
 
@@ -2531,7 +2732,7 @@ if pending_request:
             unsafe_allow_html=True,
         )
 
-        # Satu session Langflow per chat: "New chat" benar-benar mulai
+        # Satu session Langflow per chat: "Chat baru" benar-benar mulai
         # dari konteks kosong dan riwayat Agent tidak tercampur antar pengguna.
         session_id = f"{user_key()}-{chat['id']}"
 

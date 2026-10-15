@@ -1,6 +1,7 @@
 [theme]
-base = "dark"
-primaryColor = "#3cc9b6"
-backgroundColor = "#0c1011"
-secondaryBackgroundColor = "#12181a"
-textColor = "#e7eeee"
+# Keep in step with the --c-* tokens in CIEL_CSS (app.py).
+base = "light"
+primaryColor = "#203a72"
+backgroundColor = "#f3f2ee"
+secondaryBackgroundColor = "#e9e7e1"
+textColor = "#1c1b19"

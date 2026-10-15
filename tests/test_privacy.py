@@ -234,7 +234,7 @@ class PrivacyPageTest(unittest.TestCase):
         full = self.text(retention_days=30, memory_enabled=True, data_controls=True, contact_url="mailto:halo@ciel.ai")
         self.assertIn("paling lama <strong>30 hari</strong>", full)
         self.assertIn("<strong>Data saya</strong>", full)
-        self.assertIn("DeepSeek", full)
+        self.assertIn("dikirim ke server Ciel untuk dijawab", full)
         self.assertIn('<a href="mailto:halo@ciel.ai">hubungi kami</a>', full)
 
         minimal = self.text(retention_days=90, memory_enabled=False, data_controls=False)

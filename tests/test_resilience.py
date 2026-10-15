@@ -17,12 +17,15 @@ def load_app_functions():
     function_nodes = [
         node
         for node in tree.body
-        if isinstance(node, ast.FunctionDef)
-        and node.name in ("ask_langflow", "final_answer_text", "upload_images")
+        if (isinstance(node, ast.FunctionDef)
+            and node.name in ("ask_langflow", "final_answer_text", "upload_images",
+                              "is_error_answer", "split_error"))
+        or (isinstance(node, ast.ClassDef) and node.name == "CielError")
     ]
 
     namespace = {
         "requests": requests,
+        "re": __import__("re"),
         "uuid": __import__("uuid"),
         "time": __import__("time"),
         "logger": __import__("logging").getLogger("test_resilience"),
@@ -52,6 +55,8 @@ def load_app_functions():
 APP_FUNCTIONS = load_app_functions()
 ask_langflow = APP_FUNCTIONS["ask_langflow"]
 upload_images = APP_FUNCTIONS["upload_images"]
+is_error_answer = APP_FUNCTIONS["is_error_answer"]
+split_error = APP_FUNCTIONS["split_error"]
 
 
 class DummyResponse:
@@ -140,7 +145,7 @@ class TestResiliencePolicy(unittest.TestCase):
                     result = ask_langflow("test")
 
                 self.assertIn(
-                    "Authentication gagal",
+                    "masalah konfigurasi",
                     result,
                 )
 
@@ -169,7 +174,7 @@ class TestResiliencePolicy(unittest.TestCase):
             result = ask_langflow("test")
 
         self.assertIn(
-            "Request terlalu banyak",
+            "terlalu banyak permintaan",
             result,
         )
 
@@ -255,7 +260,7 @@ class TestResiliencePolicy(unittest.TestCase):
             result = ask_langflow("test")
 
         self.assertIn(
-            "Request timeout",
+            "terlalu lama menjawab",
             result,
         )
 
@@ -274,7 +279,7 @@ class TestResiliencePolicy(unittest.TestCase):
             result = ask_langflow("test")
 
         self.assertIn(
-            "Tidak dapat terhubung",
+            "tidak bisa dihubungi",
             result,
         )
 
@@ -508,7 +513,7 @@ class TestNoInternalDetailsShownToUsers(unittest.TestCase):
                         patch("requests.post", side_effect=error):
                     result = ask_langflow("test")
 
-                self.assertTrue(result.startswith("❌ Request gagal."))
+                self.assertTrue(result.startswith("Permintaan ke Ciel gagal."))
                 self.assertIn("Request ID:", result)
                 self.assertNotIn(self.HOST, result)
                 self.assertIn(self.HOST, "\n".join(logs.output))
@@ -529,7 +534,7 @@ class TestNoInternalDetailsShownToUsers(unittest.TestCase):
                     paths, message = upload_images(images)
 
                 self.assertEqual(paths, [])
-                self.assertTrue(message.startswith("❌ Upload gambar gagal."))
+                self.assertTrue(message.startswith("Gambar gagal diunggah."))
                 self.assertIn("Request ID:", message)
                 self.assertNotIn(self.HOST, message)
 
@@ -542,6 +547,62 @@ class TestNoInternalDetailsShownToUsers(unittest.TestCase):
             _, message = upload_images(images)
 
         self.assertNotIn(self.HOST, message)
+
+
+class TestErrorsReadAsPlainSentences(unittest.TestCase):
+    # Errors used to start with an emoji (the UI detected them by it) and told
+    # public users to "make sure Langflow Desktop and ngrok are running".
+    # Now the CielError type marks a failure, and what users read (title and
+    # advice) is a plain sentence; backend names stay in the technical part.
+
+    BACKEND_WORDS = ("ngrok", "langflow")
+
+    def failures(self):
+        ask_cases = [
+            ("timeout", {"side_effect": requests.exceptions.Timeout}),
+            ("connection", {"side_effect": requests.exceptions.ConnectionError}),
+            ("request", {"side_effect": requests.exceptions.TooManyRedirects("x")}),
+            ("invalid json", {"return_value": DummyResponse(json_error=True)}),
+            ("bad shape", {"return_value": DummyResponse(data={"outputs": []})}),
+        ] + [
+            (f"http {status}", {"return_value": DummyResponse(status_code=status)})
+            for status in (401, 403, 418, 429, 500, 502, 503, 504)
+        ]
+        images = [{"name": "soal.png", "data": b"png", "mime": "image/png"}]
+        upload_cases = [
+            ("upload timeout", {"side_effect": requests.exceptions.Timeout}),
+            ("upload connection", {"side_effect": requests.exceptions.ConnectionError}),
+            ("upload bad shape", {"return_value": DummyResponse(data={})}),
+        ] + [
+            (f"upload http {status}", {"return_value": DummyResponse(status_code=status)})
+            for status in (401, 404, 500)
+        ]
+
+        for name, kwargs in ask_cases:
+            with patch("requests.post", **kwargs), self.assertLogs("test_resilience", level="ERROR"):
+                yield name, ask_langflow("test")
+
+        for name, kwargs in upload_cases:
+            with patch("requests.post", **kwargs), self.assertLogs("test_resilience", level="ERROR"):
+                yield name, upload_images(images)[1]
+
+    def test_every_failure_is_a_ciel_error_with_plain_user_text(self):
+        for name, message in self.failures():
+            with self.subTest(case=name):
+                self.assertTrue(is_error_answer(message))
+                self.assertIn("Request ID:", message)
+
+                title, plain, _technical = split_error(message)
+                user_text = " ".join([title, *plain])
+                self.assertTrue(user_text[0].isalnum(), user_text)
+                self.assertTrue(user_text.isascii(), f"non-ASCII (emoji?) in: {user_text}")
+                for word in self.BACKEND_WORDS:
+                    self.assertNotIn(word, user_text.lower())
+
+    def test_normal_answers_are_not_errors(self):
+        with patch("requests.post", return_value=success_response()):
+            self.assertFalse(is_error_answer(ask_langflow("test")))
+        self.assertFalse(is_error_answer("❌ teks biasa yang kebetulan diawali emoji"))
 
 
 if __name__ == "__main__":

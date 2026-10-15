@@ -118,7 +118,7 @@ A template is provided in `.streamlit/secrets.toml.example`. For local runs copy
 4. Paste the variables above into App settings -> Secrets, using the template format. For Google login, create an OAuth client (Web application) in Google Cloud Console with `https://<your-app>.streamlit.app/oauth2callback` as the redirect URI, and keep the `[auth]` block at the end of the secrets.
 5. Open the app and send a test message. If the backend host or tunnel is down, the app shows an error card with a Request ID and a Retry button.
 6. For "Data saya": import `flow/memory_admin/Ciel_Memory_Admin.json` into Langflow and set `MEMORY_ADMIN_FLOW_ID` to the imported flow. Schedule `tools/prune_chat_history.py` on the host (see Privacy and Data Retention).
-7. Existing memories from flows before v1.3.0 have no owner. Sign in, copy "ID memory" from the sidebar memory panel, then on the Langflow host run `python tools/migrate_memory_owner.py --user-id <ID> --dry-run`, and again without `--dry-run`.
+7. Existing memories from flows before v1.3.0 have no owner. Sign in, copy "ID memory" from the account menu (top right), then on the Langflow host run `python tools/migrate_memory_owner.py --user-id <ID> --dry-run`, and again without `--dry-run`.
 
 Later flow updates are applied in place on the existing flow (same `FLOW_ID`); see the flow deployment steps in `RELEASE_CHECKLIST.md`.
 
