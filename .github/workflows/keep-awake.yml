@@ -1,0 +1,45 @@
+name: Keep Streamlit app awake
+
+# Community Cloud sleeps an app after 12 hours without visitors. Visiting it
+# every 4 hours keeps it up, and a run fails (GitHub emails the owner) when the
+# app does not render. Set the app URL once in Settings -> Secrets and
+# variables -> Actions -> Variables as STREAMLIT_APP_URL.
+
+on:
+  schedule:
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-awake
+  cancel-in-progress: false
+
+jobs:
+  visit:
+    name: Visit app
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ vars.STREAMLIT_APP_URL != '' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Open the app and wake it if it sleeps
+        env:
+          APP_URL: ${{ vars.STREAMLIT_APP_URL }}
+        run: python tools/wake_streamlit.py "$APP_URL"

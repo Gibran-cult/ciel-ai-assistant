@@ -60,7 +60,9 @@ schtasks /Create /TN "Ciel prune chat history" /SC DAILY /ST 03:00 /TR "cmd /c c
 
 ```text
 .
-├── .github/workflows/ci.yml
+├── .github/workflows/
+│   ├── ci.yml
+│   └── keep-awake.yml           visits the Streamlit app every 4 hours
 ├── .streamlit/                  theme and secrets template
 ├── flow/
 │   ├── v1.0.0/ … v1.5.1/        main flow snapshots (latest: v1.5.1)
@@ -68,8 +70,10 @@ schtasks /Create /TN "Ciel prune chat history" /SC DAILY /ST 03:00 /TR "cmd /c c
 │   └── components/              custom component sources embedded in the flow
 ├── tests/                       offline tests, live quality scripts, results
 ├── tools/
+│   ├── ciel_watchdog.ps1        restart Ollama, Langflow and ngrok on the host when they are down
 │   ├── migrate_memory_owner.py  give pre-v1.3.0 memories an owner
-│   └── prune_chat_history.py    delete server-side messages after the retention period
+│   ├── prune_chat_history.py    delete server-side messages after the retention period
+│   └── wake_streamlit.py        open the Streamlit app and wake it from sleep
 ├── app.py                       Streamlit app
 ├── pricing.py                   pricing page
 ├── privacy.py                   privacy page
@@ -123,7 +127,24 @@ A template is provided in `.streamlit/secrets.toml.example`. For local runs copy
 
 Later flow updates are applied in place on the existing flow (same `FLOW_ID`); see the flow deployment steps in `RELEASE_CHECKLIST.md`.
 
-The deployed app is only available while the host machine, Langflow, and the ngrok tunnel are running.
+The deployed app is only available while the host machine, Langflow, and the ngrok tunnel are running. See Running 24/7 below.
+
+### Running 24/7
+
+Three things stop Ciel when nobody is watching: Streamlit Cloud puts the app to sleep after 12 hours without visitors, Langflow Desktop and ngrok do not come back by themselves after a crash or a restart of the host, and the host itself can sleep or reboot.
+
+**Frontend.** `.github/workflows/keep-awake.yml` opens the app in a headless browser every 4 hours (`tools/wake_streamlit.py`) and presses "Yes, get this app back up!" if it is asleep. A plain HTTP ping does not count as a visit. Set the app URL once under the repository's Settings -> Secrets and variables -> Actions -> Variables as `STREAMLIT_APP_URL`; until then the workflow skips. A run fails when the app does not render, and GitHub emails the owner. GitHub pauses scheduled workflows after 60 days without repository activity; re-enable it in the Actions tab if that happens. The visit only loads the page, so it uses no ngrok requests or DeepSeek tokens.
+
+**Backend.** `tools/ciel_watchdog.ps1` checks Ollama, Langflow and the ngrok tunnel and starts whatever is down. Checks run on the host only, so a healthy run sends nothing through the tunnel. The tunnel is never started without the traffic policy file, and after starting it the script checks once that the public URL refuses requests without credentials (401). It reads `NGROK_URL` from the environment or `.env` and assumes the policy at `~/ngrok-ciel-policy.yml` (`NGROK_POLICY_FILE` overrides it). Log: `~/.ciel_ai/logs/watchdog.log`. Install it from a checkout that stays in place (not a temporary worktree):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\ciel_watchdog.ps1 -DryRun
+powershell -ExecutionPolicy Bypass -File tools\ciel_watchdog.ps1 -Install
+```
+
+`-Install` registers the Task Scheduler task "Ciel backend watchdog" (at logon and every 5 minutes, also on battery); `-Uninstall` removes it. Langflow Desktop is a windowed app, so the task runs in the signed-in user's session: after a reboot the backend comes back once the user signs in.
+
+**Host.** Keep the laptop plugged in; set "Sleep" to Never on power (already the case) and "When I close the lid" to Do nothing (Control Panel -> Power Options -> Choose what closing the lid does); set Windows Update active hours so restarts happen at night. These are system settings and are not changed by the scripts.
 
 ### Hosting on a low budget
 
@@ -147,7 +168,7 @@ Configure the variables above in `.streamlit/secrets.toml` or `.env` first.
 **Offline suite** (deterministic, no credentials; this is what CI runs):
 
 ```powershell
-python -m unittest tests.test_memory_v110_contract tests.test_flow_v120_contract tests.test_flow_v130_contract tests.test_flow_v140_contract tests.test_flow_v141_contract tests.test_flow_v150_contract tests.test_flow_v151_contract tests.test_resilience tests.test_rate_limit tests.test_project_context tests.test_live_scripts tests.test_app_hygiene tests.test_performance_snapshot tests.test_pricing tests.test_privacy
+python -m unittest tests.test_memory_v110_contract tests.test_flow_v120_contract tests.test_flow_v130_contract tests.test_flow_v140_contract tests.test_flow_v141_contract tests.test_flow_v150_contract tests.test_flow_v151_contract tests.test_resilience tests.test_rate_limit tests.test_project_context tests.test_live_scripts tests.test_app_hygiene tests.test_performance_snapshot tests.test_pricing tests.test_privacy tests.test_login tests.test_keep_alive
 ```
 
 It covers the flow snapshots (contract tests per version, including running the custom components against a real Chroma database with Langflow stubbed), the app's request and error handling, rate limiting, project context, table encoding, and code hygiene.
