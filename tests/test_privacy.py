@@ -242,6 +242,39 @@ class PrivacyPageTest(unittest.TestCase):
         self.assertIn("belum aktif di deployment ini", minimal)
         self.assertNotIn("Data saya", minimal)
         self.assertNotIn("hubungi kami", minimal)
+        self.assertNotIn("mengingat konteks belajarmu", minimal)
+        self.assertIn("disampaikan ke pengelola", minimal)
+
+    def test_page_covers_the_pdp_checklist(self):
+        # UU 27/2022: operator identity (Pasal 5), purpose and basis (20-21),
+        # rights and how to request them (6-14), children (25), breach
+        # notice (46), processing outside Indonesia (56), change notice (21(2)).
+        sections = dict(__import__("privacy").privacy_sections(
+            retention_days=30, memory_enabled=True, data_controls=True,
+            contact_url="mailto:halo@ciel.ai", operator="Tim Ciel <AI>",
+        ))
+        text = " ".join(" ".join(items) for items in sections.values())
+
+        self.assertIn("Ciel dikelola oleh <strong>Tim Ciel &lt;AI&gt;</strong>.", text)
+        self.assertIn("Dasarnya adalah persetujuanmu", text)
+        self.assertIn("<strong>luar Indonesia</strong>", text)
+        for right in ("salinannya", "memperbaikinya", "dihapus", "menarik persetujuan", "dipindahkan"):
+            self.assertIn(right, text)
+        self.assertIn("setiap permintaan dicatat dan dijawab", text)
+        self.assertIn("di bawah 18 tahun", text)
+        self.assertIn("orang tua atau wali", text)
+        self.assertIn("3&times;24 jam", text)
+        self.assertIn("diumumkan di halaman ini sebelum berlaku", text)
+        self.assertEqual(list(sections)[0], "Siapa yang mengelola Ciel")
+
+    def test_third_parties_are_disclosed_without_brand_names(self):
+        text = self.text(retention_days=30, memory_enabled=True, data_controls=True)
+        self.assertIn("penyedia model AI dan layanan pencarian web pihak ketiga", text)
+        for name in ("DeepSeek", "Exa", "Langflow", "ngrok"):
+            self.assertNotIn(name, text)
+
+    def test_app_passes_the_operator_name(self):
+        self.assertIn("operator=OPERATOR_NAME", APP_PATH.read_text(encoding="utf-8"))
 
     def test_app_renders_the_privacy_page(self):
         from streamlit.testing.v1 import AppTest
@@ -255,6 +288,7 @@ class PrivacyPageTest(unittest.TestCase):
         page = " ".join(md.value for md in at.markdown)
         self.assertIn("<h1>Privasi</h1>", page)
         self.assertIn("30 hari", page)
+        self.assertIn("Terakhir diperbarui:", page)
         self.assertEqual(len(at.chat_input), 0)
 
 

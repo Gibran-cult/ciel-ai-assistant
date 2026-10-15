@@ -130,6 +130,16 @@ class TopBarNavTest(unittest.TestCase):
         self.assertIn(f"body[data-ciel-nav-moving] {bar}", source)
         self.assertIn("st.html(NAV_SCROLL_JS, unsafe_allow_javascript=True)", source)
 
+    def test_hide_on_scroll_listens_on_document_not_a_streamlit_element(self):
+        # On Streamlit Cloud the navbar never hid: the listener was bound to
+        # section.stMain, which the Cloud app shell can replace after the
+        # script ran. A capture-phase listener on document survives that.
+        source = APP_PATH.read_text(encoding="utf-8")
+        self.assertIn("document.addEventListener('scroll'", source)
+        self.assertIn("{ capture: true, passive: true }", source)
+        self.assertIn("if (window.__cielNav) return;", source)
+        self.assertNotIn("main.addEventListener('scroll'", source)
+
     def test_signed_in_user_gets_an_account_menu_instead_of_sign_in(self):
         at = run_app(user=SIGNED_IN)
         self.assertFalse(at.exception)
