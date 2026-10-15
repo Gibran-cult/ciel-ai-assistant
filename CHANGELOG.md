@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Privacy page reviewed against UU 27/2022 (PDP)
+- Review found the page silent on processing outside Indonesia and on children, the two high-priority gaps for a public study companion. Article references were checked against the law's text; this is a product checklist, not legal advice.
+- Added: who runs Ciel (new `OPERATOR_NAME` config) and where to send requests (`CONTACT_URL`) (Pasal 5); purpose and basis (consent, withdrawable) (Pasal 20-21); third-party AI model and web search providers whose servers can be outside Indonesia, without brand names (Pasal 56); the full list of data-subject rights and that requests are recorded and answered (Pasal 6-14); users under 18 use Ciel with a parent or guardian's permission (Pasal 25); written notice within 3x24 hours if a data protection failure affects them (Pasal 46); changes announced on the page before they apply, with a "Terakhir diperbarui" date (Pasal 21 ayat 2).
+- Before going public: set `OPERATOR_NAME` and `CONTACT_URL` in the deployment secrets, and have a procedure for the 3x24-hour breach notice the page now promises.
+- `tests/test_privacy.py`: the page covers every checklist item, discloses third parties without brand names, and the app passes the operator name.
+
+### Hide-on-scroll navbar works on Streamlit Cloud
+- Problem: on the deployed app the top bar never slid away when scrolling down. The script bound its scroll listener to `section.stMain` once; when that element is replaced after the script ran (the Cloud app shell can remount it), the listener stays on the detached element. Reproduced locally by swapping the element: the bar stayed visible. Not a version issue: Streamlit 1.65 (what Cloud installs) has the same DOM and worked locally.
+- The listener now sits on `document` in the capture phase and uses whichever element scrolls (ignoring the sidebar); the run-once guard moved to `window`. A container seen for the first time counts from the top, so the first scroll after load is not dropped (found while testing with a real mouse wheel).
+- Checked on Streamlit 1.54 and 1.65: normal scrolling, after the scroll container is replaced, inside an iframe (as on Cloud), sidebar scrolling ignored, and real mouse-wheel scrolling. Not yet checked on the deployed app itself.
+
 ### Warm, minimal redesign and a sign-in page
 - Anti "AI slop" pass after a design review (structure and copy, not colors):
   - Fonts: headings and labels inside markdown (plan names, prices, FAQ questions, sidebar labels) rendered in Streamlit's Source Sans instead of Geist, because only `p`/`li` were overridden; the markdown container now sets Geist. Weight 560 (not loaded) became 600. Pills and labels no longer use the monospace face; it stays for code, file names and sizes.

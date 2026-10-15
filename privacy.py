@@ -1,13 +1,24 @@
 """Halaman privasi Ciel.
 
 Isi halaman mengikuti konfigurasi yang dikirim app.py (lama retensi,
-login, panel "Data saya", kontak), supaya yang dijanjikan ke pengguna
-selalu sama dengan yang benar-benar terjadi.
+login, panel "Data saya", nama pengelola, kontak), supaya yang dijanjikan
+ke pengguna selalu sama dengan yang benar-benar terjadi.
+
+Bagian-bagiannya mengikuti informasi yang diminta UU 27/2022 tentang
+Pelindungan Data Pribadi: identitas pengelola (Pasal 5), dasar dan tujuan
+pemrosesan serta jenis data dan retensi (Pasal 20-21), hak subjek data dan
+cara memintanya (Pasal 6-14), data anak (Pasal 25), pemberitahuan
+kegagalan pelindungan (Pasal 46), dan pemrosesan di luar Indonesia
+(Pasal 56). Ini daftar periksa produk, bukan nasihat hukum.
 """
 
 import html
 
 import streamlit as st
+
+
+# Ubah tanggal ini setiap kali isi halaman berubah (Pasal 21 ayat 2).
+PRIVACY_UPDATED = "15 Oktober 2026"
 
 
 PRIVACY_CSS = """
@@ -30,6 +41,7 @@ PRIVACY_CSS = """
 }
 .stApp .ciel-privacy p,
 .stApp .ciel-privacy li { font-size: 0.92rem; line-height: 1.65; color: var(--c-muted); }
+.stApp .ciel-privacy .ciel-updated { margin-top: 0.3rem; font-size: 0.82rem; color: var(--c-faint); }
 .stApp .ciel-privacy ul { padding-left: 1.1rem; margin: 0; }
 .stApp .ciel-privacy li { margin: 0 0 0.45rem; }
 .stApp .ciel-privacy strong { color: var(--c-text); font-weight: 600; }
@@ -38,13 +50,43 @@ PRIVACY_CSS = """
 """
 
 
-def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=None):
+def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=None, operator=None):
     """Kembalikan daftar (judul, [paragraf HTML]) untuk halaman privasi."""
 
     days = int(retention_days)
+    contact_link = (
+        f'<a href="{html.escape(contact_url, quote=True)}">hubungi kami</a>'
+        if contact_url
+        else None
+    )
+
+    who = []
+
+    if operator:
+        who.append(f"Ciel dikelola oleh <strong>{html.escape(operator)}</strong>.")
+
+    who.append(
+        f"Pertanyaan atau permintaan soal datamu: {contact_link}."
+        if contact_link
+        else "Pertanyaan atau permintaan soal datamu bisa disampaikan ke pengelola Ciel."
+    )
+
+    purpose = [
+        "Ciel memproses pesan, file, dan foto yang kamu kirim untuk menyusun "
+        "jawaban" + (
+            ", dan jika kamu login, untuk mengingat konteks belajarmu lintas "
+            "percakapan." if memory_enabled else "."
+        ),
+        "Dasarnya adalah persetujuanmu saat memakai Ciel. Kamu bisa menariknya "
+        "kapan saja dengan berhenti memakai Ciel dan meminta datamu dihapus.",
+    ]
 
     processing = [
         "Pesan dan file yang kamu lampirkan dikirim ke server Ciel untuk dijawab.",
+        "Untuk menyusun jawaban, isi pesan juga diproses oleh penyedia model AI "
+        "dan layanan pencarian web pihak ketiga. Server mereka bisa berada di "
+        "<strong>luar Indonesia</strong>. Dengan memakai Ciel, kamu menyetujui "
+        "pemrosesan ini.",
         "Foto dan embedding memory diproses oleh model yang berjalan di server "
         "Ciel sendiri.",
     ]
@@ -80,29 +122,49 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
         "kode permintaan (Request ID) dan detail error untuk perbaikan."
     )
 
-    controls = []
+    rights = [
+        "Kamu berhak melihat datamu dan mendapat salinannya, memperbaikinya, "
+        "meminta pemrosesannya dihentikan atau datanya dihapus, menarik "
+        "persetujuan, dan meminta datamu dalam format yang bisa dipindahkan.",
+    ]
 
     if memory_enabled and data_controls:
-        controls.append(
+        rights.append(
             "Setelah login, buka menu akun di kanan atas lalu <strong>Data saya</strong> untuk "
             "melihat dan menghapus memory-mu, serta menghapus riwayat chat-mu "
             "di server."
         )
     elif memory_enabled:
-        controls.append(
+        rights.append(
             "Penghapusan memory dan riwayat chat belum bisa dilakukan sendiri "
             "dari aplikasi; sampaikan permintaan ke pengelola."
         )
 
-    controls.append(
+    rights.append(
+        "Untuk permintaan apa pun soal datamu, kirim lewat "
+        f'<a href="{html.escape(contact_url, quote=True)}">kontak pengelola</a>; '
+        "setiap permintaan dicatat dan dijawab."
+        if contact_url
+        else "Untuk permintaan apa pun soal datamu, sampaikan ke pengelola; "
+        "setiap permintaan dicatat dan dijawab."
+    )
+    rights.append(
         "Riwayat pesan tanpa login tidak bisa dihubungkan ke dirimu, jadi tidak "
         f"bisa dihapus per orang; pesan itu terhapus otomatis setelah {days} hari."
     )
 
-    if contact_url:
-        controls.append(
-            f'Pertanyaan atau permintaan soal datamu: <a href="{html.escape(contact_url, quote=True)}">hubungi kami</a>.'
-        )
+    children = [
+        "Jika kamu berusia di bawah 18 tahun, gunakan Ciel dengan izin dan "
+        "pendampingan orang tua atau wali.",
+    ]
+
+    incidents = [
+        "Jika terjadi kegagalan pelindungan data yang menyangkut datamu, "
+        "pengelola akan memberi tahu secara tertulis paling lambat 3&times;24 jam "
+        "setelah mengetahuinya.",
+        "Jika isi halaman ini berubah, perubahannya diumumkan di halaman ini "
+        "sebelum berlaku.",
+    ]
 
     advice = [
         "Jangan kirim kata sandi, nomor identitas, data kesehatan, data "
@@ -110,14 +172,18 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
     ]
 
     return [
+        ("Siapa yang mengelola Ciel", who),
+        ("Untuk apa datamu diproses", purpose),
         ("Apa yang terjadi saat kamu mengirim pesan", processing),
         ("Apa yang disimpan", stored),
-        ("Kendali atas datamu", controls),
+        ("Hakmu atas datamu", rights),
+        ("Pengguna di bawah 18 tahun", children),
+        ("Kebocoran data dan perubahan halaman ini", incidents),
         ("Saran", advice),
     ]
 
 
-def render_privacy(retention_days=30, memory_enabled=False, data_controls=False, contact_url=None):
+def render_privacy(retention_days=30, memory_enabled=False, data_controls=False, contact_url=None, operator=None):
     st.markdown(PRIVACY_CSS, unsafe_allow_html=True)
 
     parts = [
@@ -125,9 +191,10 @@ def render_privacy(retention_days=30, memory_enabled=False, data_controls=False,
         "<h1>Privasi</h1>",
         "<p>Ringkasan data apa yang Ciel proses dan simpan, dan cara kamu "
         "mengendalikannya.</p>",
+        f'<p class="ciel-updated">Terakhir diperbarui: {PRIVACY_UPDATED}</p>',
     ]
 
-    for title, items in privacy_sections(retention_days, memory_enabled, data_controls, contact_url):
+    for title, items in privacy_sections(retention_days, memory_enabled, data_controls, contact_url, operator):
         parts.append(f"<h2>{html.escape(title)}</h2><ul>")
         parts.extend(f"<li>{item}</li>" for item in items)
         parts.append("</ul>")

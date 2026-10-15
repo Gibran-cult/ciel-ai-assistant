@@ -587,22 +587,28 @@ st.markdown(CIEL_CSS, unsafe_allow_html=True)
 # header pixel for pixel, scrolling up pulls it back, and when scrolling
 # stops it glides fully in or out based on the last direction (so a small
 # scroll up always brings it back). Writes --ciel-nav-offset on <body>,
-# which React never touches, so reruns don't reset it; the guard on the
-# scroll container keeps reruns from adding listeners.
+# which React never touches, so reruns don't reset it.
+#
+# The listener sits on `document` in the capture phase, not on the scroll
+# container: scroll events don't bubble, but capture still sees them from
+# whichever element scrolls. On Streamlit Cloud the app shell can be
+# replaced after this script ran, and a listener bound to the old
+# section.stMain silently stopped working there. The guard lives on
+# `window` so a re-run script doesn't add a second listener.
 NAV_SCROLL_JS = """
 <script>
 (() => {
-    const main = document.querySelector('section.stMain');
-    if (!main || main.dataset.cielNav) return;
-    main.dataset.cielNav = '1';
+    if (window.__cielNav) return;
+    window.__cielNav = true;
 
     const body = document.body;
     const SETTLE_MS = 120;
     const wrapper = () => document.querySelector('[data-testid="stLayoutWrapper"]:has(> .st-key-topbar)');
     const range = () => { const w = wrapper(); return w ? w.offsetHeight + 8 : 0; };
 
+    let scroller = null;
     let offset = 0;
-    let last = main.scrollTop;
+    let last = 0;
     let direction = 0;
     let settleTimer = 0;
 
@@ -616,12 +622,25 @@ NAV_SCROLL_JS = """
     const settle = () => {
         delete body.dataset.cielNavMoving;
         const max = range();
-        offset = direction > 0 && main.scrollTop > max ? max : 0;
+        offset = direction > 0 && scroller && scroller.scrollTop > max ? max : 0;
         render(max);
     };
 
-    main.addEventListener('scroll', () => {
-        const y = Math.max(0, main.scrollTop);
+    document.addEventListener('scroll', (event) => {
+        const target = event.target === document ? document.scrollingElement : event.target;
+        const w = wrapper();
+        // Only the container that holds the top bar counts (not the sidebar).
+        if (!w || !target || !target.contains || !target.contains(w)) return;
+
+        // A container seen for the first time started at the top; the event
+        // arrives after it already moved, so counting from its current
+        // position would drop the first scroll.
+        if (target !== scroller) {
+            scroller = target;
+            last = 0;
+        }
+
+        const y = Math.max(0, target.scrollTop);
         const dy = y - last;
         last = y;
         if (Math.abs(dy) > 2) direction = Math.sign(dy);
@@ -633,7 +652,7 @@ NAV_SCROLL_JS = """
         render(max);
         clearTimeout(settleTimer);
         settleTimer = setTimeout(settle, SETTLE_MS);
-    }, { passive: true });
+    }, { capture: true, passive: true });
 
     // Keyboard users tabbing into the nav always see it.
     document.addEventListener('focusin', (event) => {
@@ -731,6 +750,10 @@ AUTH_ENABLED = auth_configured()
 
 # Opsional: tujuan tombol paket berbayar di halaman harga (https:// atau mailto:).
 CONTACT_URL = get_config("CONTACT_URL")
+
+# Opsional tapi disarankan sebelum publik: nama pengelola di halaman Privasi
+# (UU PDP Pasal 5, identitas pihak yang memproses data).
+OPERATOR_NAME = get_config("OPERATOR_NAME")
 
 # Opsional: flow "Ciel Memory Admin" untuk panel "Data saya" (lihat dan hapus
 # memory). Tanpa ini panel menyatakan bahwa fitur belum aktif.
@@ -2562,6 +2585,7 @@ if current_view() == "privacy":
         memory_enabled=AUTH_ENABLED,
         data_controls=bool(MEMORY_ADMIN_FLOW_ID),
         contact_url=safe_contact_url(CONTACT_URL),
+        operator=OPERATOR_NAME,
     )
     st.stop()
 

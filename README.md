@@ -101,7 +101,8 @@ Do not place real credentials, passwords, API keys, or tokens in this README or 
 
 Optional:
 
-- `CHAT_INPUT_ID` (default `ChatInput-X8W7I`, the Chat Input in the flow) and `CONTACT_URL` (https:// or mailto: link shown on the pricing page for people interested in paid plans; paid plans cannot be bought yet, so their buttons stay disabled).
+- `CHAT_INPUT_ID` (default `ChatInput-X8W7I`, the Chat Input in the flow) and `CONTACT_URL` (https:// or mailto: link shown on the pricing page for people interested in paid plans, and on the privacy page as the place to send data requests).
+- `OPERATOR_NAME`: who runs Ciel, shown on the privacy page. Set it and `CONTACT_URL` before going public: the privacy page follows UU 27/2022 (PDP), which expects the operator's identity and a way to send data requests.
 - `RATE_LIMIT_PER_HOUR` (default 20), `RATE_LIMIT_PER_HOUR_LOGIN` (default 60), `RATE_LIMIT_ANON_TOTAL_PER_HOUR` (default 150): hourly message limits, checked before any backend call.
 - `[auth]` block (Google OAuth client): enables "Masuk dengan Google". Long-term memory is only available to signed-in users and is private to each account; without `[auth]` memory is disabled.
 - `MEMORY_SEARCH_ID`, `MEMORY_STORE_ID` (defaults match `flow/v1.3.0` and later) and `TABLE_ANALYST_ID` (default matches `flow/v1.5.0` and later): component IDs the app sends tweaks to.
