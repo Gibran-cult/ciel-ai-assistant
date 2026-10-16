@@ -67,6 +67,25 @@ class WatchdogScriptTest(unittest.TestCase):
         self.assertIn("return $false", block)
         self.assertNotIn("SilentlyContinue", block.split("Start-Sleep", 1)[0])
 
+    def test_langflow_boot_window_is_longer_than_a_boot_and_fits_the_task_limit(self):
+        # Desktop needs about 5 minutes to a healthy backend; a shorter window
+        # restarts it mid-boot. Two waits plus ngrok must fit the 15-minute limit.
+        grace = int(re.search(r"\$LangflowGraceSeconds = (\d+)", self.script).group(1))
+        limit = int(re.search(r"ExecutionTimeLimit \(New-TimeSpan -Minutes (\d+)\)", self.script).group(1))
+        self.assertGreaterEqual(grace, 480)
+        self.assertLess(grace + 60 + 60, limit * 60)
+        # The window counts from when Desktop's processes were created, not from this run.
+        self.assertIn("CreationDate", self.script)
+
+    def test_desktop_without_a_backend_is_restarted_before_the_full_window(self):
+        # Desktop does not respawn a dead backend; waiting the full window would
+        # only add downtime. It spawned one 42 s to 2 min 42 s after launch.
+        spawn = int(re.search(r"\$BackendSpawnSeconds = (\d+)", self.script).group(1))
+        grace = int(re.search(r"\$LangflowGraceSeconds = (\d+)", self.script).group(1))
+        self.assertGreaterEqual(spawn, 200)
+        self.assertLess(spawn, grace)
+        self.assertIn("$backend.Count -eq 0 -and $age -ge $BackendSpawnSeconds", self.script)
+
     def test_no_tunnel_url_or_credentials_in_the_script(self):
         self.assertNotRegex(self.script, r"https://[a-z0-9-]+\.ngrok")
         self.assertNotRegex(self.script, r"credentials:")
