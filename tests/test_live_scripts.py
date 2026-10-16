@@ -62,6 +62,7 @@ class LiveSessionHelpersTest(unittest.TestCase):
         self.assertEqual(tweaks["CielMemorySearch-BC6pl"], {"memory_owner": ""})
         self.assertEqual(tweaks["CielMemoryStore-uBmzx"], {"memory_owner": ""})
         self.assertEqual(tweaks["CielTableAnalyst-t4bL3"], {"attached_tables": ""})
+        self.assertEqual(tweaks["CielMLAnalyst-m7Lq2"], {"attached_tables": ""})
         self.assertEqual(tweaks["ChatInput-X8W7I"], {"files": "f.png"})
 
     def test_answer_from_returns_the_final_answer(self):

@@ -744,6 +744,11 @@ MEMORY_STORE_ID = get_config("MEMORY_STORE_ID") or "CielMemoryStore-uBmzx"
 # pengguna lewat tweaks agar angkanya dihitung langsung dari file.
 TABLE_ANALYST_ID = get_config("TABLE_ANALYST_ID") or "CielTableAnalyst-t4bL3"
 
+# ID komponen Ciel ML Analyst di flow (v1.6.0); menerima file yang sama untuk
+# melatih model prediksi atau pengelompokan. Flow lama tanpa node ini
+# mengabaikan tweak-nya.
+ML_ANALYST_ID = get_config("ML_ANALYST_ID") or "CielMLAnalyst-m7Lq2"
+
 # Batas pesan per jam untuk menjaga biaya model dan beban backend.
 # Batas total anonim mencegah orang melewati batas dengan memuat ulang tab.
 RATE_LIMIT_PER_HOUR = get_int_config("RATE_LIMIT_PER_HOUR", 20)
@@ -1774,7 +1779,7 @@ def build_payload(text, files, project_files, project_note=()):
             shown = min(item["rows"], TABLE_PREVIEW_ROWS)
             note = (
                 f" (cuplikan {shown} dari {item['rows']} baris; "
-                "hitung angka dengan Ciel Table Analyst)"
+                "hitung angka dengan Ciel Table Analyst, model ML dengan Ciel ML Analyst)"
             )
 
         blocks.append(f"### {label}: {item['name']}{note}\n{body}")
@@ -1896,13 +1901,13 @@ def encode_tables(tables):
 
 def build_tweaks(image_paths=None, tables=None):
     owner = memory_owner_id()
+    encoded_tables = encode_tables(tables)
 
     tweaks = {
         MEMORY_SEARCH_ID: {"memory_owner": owner},
         MEMORY_STORE_ID: {"memory_owner": owner},
-        TABLE_ANALYST_ID: {
-            "attached_tables": encode_tables(tables),
-        },
+        TABLE_ANALYST_ID: {"attached_tables": encoded_tables},
+        ML_ANALYST_ID: {"attached_tables": encoded_tables},
     }
 
     if image_paths:

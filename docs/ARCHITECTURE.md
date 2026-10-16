@@ -30,6 +30,7 @@ Agent
  +-- Ciel Memory Search   (filtered by owner)
  +-- Ciel Memory Store    (tagged with owner)
  +-- Ciel Table Analyst   (user CSV/TSV, sent by the app via tweaks)
+ +-- Ciel ML Analyst      (models on the same user CSV/TSV)
  +-- Math Tutor Agent     (Run Flow)
  +-- Verified Data Analyst (Run Flow, built-in sales dataset only)
  +-- Knowledge Retriever  (Run Flow)
@@ -162,6 +163,18 @@ Questions about the built-in sales dataset (`200_sales_data`, 200 rows) go to th
 
 Numbers from the user's own CSV/TSV files (attached in the chat or stored as project files) come from Ciel Table Analyst (`flow/components/ciel_table_analyst.py`). The app sends the files through tweaks; the tool computes count, sum, mean, median, min, max, unique and top values, optionally per group, without running model-written code.
 
+### Ciel ML Analyst
+
+Machine learning on the same files comes from Ciel ML Analyst (`flow/components/ciel_ml_analyst.py`, tool `train_model`), which receives the same base64 tables from the app. It uses numpy only (already a Langflow dependency, so nothing extra is installed on the host) and a fixed seed, so the same file always gives the same result.
+
+- `task=predict` with a `target`: a numeric target with at least 11 distinct values is a ridge linear regression; anything else is a multinomial logistic regression (at most 20 classes). Effects are reported in the column's own units ("setiap +1") or as a category versus the most common one.
+- `task=cluster`: k-means (k-means++, 4 starts); k is chosen from 2 to 6 by silhouette unless the user gives it. Category columns are scaled so two different categories are one standard deviation apart; standardizing them made rare categories their own cluster.
+- Quality comes from 5-fold cross-validation (stratified for classes): every row is predicted by a model that did not see it, and medians, categories and scaling are refit inside each fold. Results are compared with guessing the mean or the most common class; a model that does not beat it is called weak, and R² above 0,99 or 100% accuracy triggers a target-leakage warning.
+- Row numbers, constant columns and ID-like text columns are skipped. Files above 10.000 rows are sampled; the worst case measured (10.000 rows, 9 columns) took about 5 s.
+- `predict_for` (`kolom=nilai; ...`) predicts a new row; missing columns use the median or the most common category, and the result says so.
+
+The file-reading helpers are copied from Ciel Table Analyst, because Langflow components cannot import each other; `tests/test_ml_analyst.py` fails if the copies drift.
+
 ### Knowledge Retriever
 
 Knowledge-related requests can be delegated through the Knowledge Retriever Run Flow component.
@@ -186,6 +199,9 @@ Mathematics
 
 User CSV/TSV file (attached or project file)
     -> Ciel Table Analyst
+
+Prediction, important factors or grouping on a user CSV/TSV file
+    -> Ciel ML Analyst
 
 Built-in sales dataset (200_sales_data)
     -> Verified Data Analyst
@@ -307,13 +323,14 @@ Main flow snapshots and component sources:
 
 ```text
 flow/
-+-- v1.0.0/ … v1.5.1/
++-- v1.0.0/ … v1.6.0/
 |   +-- Ciel_AI_Long-Term_Memory_Master.json
 +-- components/
     +-- ciel_vision_router.py
     +-- ciel_memory_search.py
     +-- ciel_memory_store.py
     +-- ciel_table_analyst.py
+    +-- ciel_ml_analyst.py
 ```
 
 Contract tests check that each snapshot embeds the same component code as `flow/components/`.
@@ -326,6 +343,7 @@ Contract tests check that each snapshot embeds the same component code as `flow/
 - **v1.4.1:** the memory owner input is renamed from `user_id` to `memory_owner`. Langflow's `Component` already has a read-only `user_id` (the Langflow account that owns the flow), which shadowed the input in v1.3.0/v1.4.0, so every visitor was stored under that account. Component inputs must not reuse Langflow's own attribute names.
 - **v1.5.0:** adds Ciel Table Analyst. Before, a question about a user's own CSV could be answered with numbers from the built-in sample dataset. The app keeps attached and project CSV/TSV files per chat and sends them base64-encoded (Langflow turns every backslash-n in a str input into a newline, which breaks plain JSON). The prompt gets only a 20-row preview of each table, and the routing restricts Verified Data Analyst to the built-in dataset.
 - **v1.5.1:** prompt-only: Indonesian number format, conversion of tool output, no invented currency. The app also returns only the final model text block, because Langflow 1.12 joins every Agent round into `Message.text`.
+- **v1.6.0:** adds Ciel ML Analyst and prompt v14.3: a machine learning route for user files (predict, important factors, new-row prediction, clustering), no derived target columns as features, model quality always reported with the result, and ML results as a study-companion example.
 
 ## Langflow Configuration Outside the Repository
 

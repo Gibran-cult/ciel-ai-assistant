@@ -101,7 +101,8 @@ class AppTableWiringTest(unittest.TestCase):
 
     def test_app_sends_tables_to_the_table_analyst(self):
         self.assertIn(f'TABLE_ANALYST_ID = get_config("TABLE_ANALYST_ID") or "{TABLE_ID}"', self.source)
-        self.assertIn('"attached_tables": encode_tables(tables)', self.source)
+        self.assertIn("encoded_tables = encode_tables(tables)", self.source)
+        self.assertIn('TABLE_ANALYST_ID: {"attached_tables": encoded_tables}', self.source)
 
     def test_tables_survive_langflow_str_processing(self):
         # Langflow runs every str input through unescape_string, which turns each

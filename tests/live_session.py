@@ -23,6 +23,7 @@ APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
 MEMORY_SEARCH_ID = "CielMemorySearch-BC6pl"
 MEMORY_STORE_ID = "CielMemoryStore-uBmzx"
 TABLE_ANALYST_ID = "CielTableAnalyst-t4bL3"
+ML_ANALYST_ID = "CielMLAnalyst-m7Lq2"
 
 
 def _load_app_function(name):
@@ -47,6 +48,7 @@ def app_tweaks(extra=None):
         MEMORY_SEARCH_ID: {"memory_owner": ""},
         MEMORY_STORE_ID: {"memory_owner": ""},
         TABLE_ANALYST_ID: {"attached_tables": ""},
+        ML_ANALYST_ID: {"attached_tables": ""},
     }
 
     for node_id, values in (extra or {}).items():
