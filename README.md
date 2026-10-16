@@ -12,6 +12,7 @@ The Streamlit app (`app.py`) is a thin public frontend; the Langflow flow, the l
 - **Anti-fabrication rules:** research answers end with the sources the tools returned; no invented titles, DOIs or URLs; Indonesian number format without invented currencies.
 - **Study companion:** step-by-step explanations, comprehension checks, practice questions.
 - **Numbers from the user's own files:** attached CSV/TSV files are computed by Ciel Table Analyst (sum, mean, median, min, max, counts, per group) directly from the file.
+- **Machine learning on the user's own files:** Ciel ML Analyst trains a model on an attached CSV/TSV to predict a column (linear or logistic regression), rank the factors that matter, predict a new row, or group similar rows (k-means). Quality is measured with 5-fold cross-validation against a simple baseline, and weak or suspiciously perfect models are flagged.
 - **Per-user long-term memory** with optional Google login; anonymous visitors get no memory.
 - **Public-deployment safeguards:** one Langflow session per chat, hourly rate limits, no internal details in error messages (a Request ID instead).
 - **Privacy:** a privacy page that follows the deployment's configuration, a "Data saya" panel where signed-in users view and delete their memories and delete their server-side chat history, and a 30-day retention script for server-side messages.
@@ -25,6 +26,7 @@ Streamlit app (app.py)  --ngrok-->  Langflow (host PC)
   session per chat                    Chat Input -> Ciel Vision Router -> Agent (DeepSeek)
   tweaks: memory owner,                 +-- Ciel Memory Search / Store  (Chroma + Ollama embeddings)
           user tables, images           +-- Ciel Table Analyst          (user CSV/TSV)
+                                        +-- Ciel ML Analyst             (models on user CSV/TSV)
                                         +-- Math Tutor Agent            (Run Flow)
                                         +-- Verified Data Analyst       (Run Flow, built-in dataset)
                                         +-- Knowledge Retriever         (Run Flow)
@@ -65,7 +67,7 @@ schtasks /Create /TN "Ciel prune chat history" /SC DAILY /ST 03:00 /TR "cmd /c c
 │   └── keep-awake.yml           visits the Streamlit app every 4 hours
 ├── .streamlit/                  theme and secrets template
 ├── flow/
-│   ├── v1.0.0/ … v1.5.1/        main flow snapshots (latest: v1.5.1)
+│   ├── v1.0.0/ … v1.6.0/        main flow snapshots (latest: v1.6.0)
 │   ├── memory_admin/            Ciel Memory Admin flow ("Data saya")
 │   └── components/              custom component sources embedded in the flow
 ├── tests/                       offline tests, live quality scripts, results
@@ -109,7 +111,7 @@ Optional:
 - `OPERATOR_NAME`: who runs Ciel, shown on the privacy page. Set it and `CONTACT_URL` before going public: the privacy page follows UU 27/2022 (PDP), which expects the operator's identity and a way to send data requests.
 - `RATE_LIMIT_PER_HOUR` (default 20), `RATE_LIMIT_PER_HOUR_LOGIN` (default 60), `RATE_LIMIT_ANON_TOTAL_PER_HOUR` (default 150): hourly message limits, checked before any backend call.
 - `[auth]` block (Google OAuth client): enables "Masuk dengan Google". Long-term memory is only available to signed-in users and is private to each account; without `[auth]` memory is disabled.
-- `MEMORY_SEARCH_ID`, `MEMORY_STORE_ID` (defaults match `flow/v1.3.0` and later) and `TABLE_ANALYST_ID` (default matches `flow/v1.5.0` and later): component IDs the app sends tweaks to.
+- `MEMORY_SEARCH_ID`, `MEMORY_STORE_ID` (defaults match `flow/v1.3.0` and later) `TABLE_ANALYST_ID` (default matches `flow/v1.5.0` and later) and `ML_ANALYST_ID` (default matches `flow/v1.6.0` and later): component IDs the app sends tweaks to. A flow without the ML node ignores its tweak.
 - `MEMORY_ADMIN_FLOW_ID` (and `MEMORY_ADMIN_NODE_ID`, default `CielMemoryAdmin-adm1n`): the Ciel Memory Admin flow behind the "Data saya" panel. Without it, signed-in users cannot view or delete their data from the app, and the privacy page says so.
 - `CHAT_RETENTION_DAYS` (default 30): how long server-side chat history is kept, as stated on the privacy page. Use the same value for `tools/prune_chat_history.py`.
 
@@ -118,7 +120,7 @@ A template is provided in `.streamlit/secrets.toml.example`. For local runs copy
 ## Deployment (Streamlit Community Cloud)
 
 1. Start the backend on the host machine: Langflow (port 7860) with its Ollama and Chroma dependencies, then the ngrok tunnel pointing at `localhost:7860` with the Basic Auth traffic policy.
-2. Import `flow/v1.5.1/Ciel_AI_Long-Term_Memory_Master.json` (latest) into Langflow and set `FLOW_ID` to the imported flow. The flow calls four sub-flows by Run Flow (Math Tutor Agent, Verified Data Analyst, Knowledge Retriever, Web Research Assistant), which are not in this repository; see `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
+2. Import `flow/v1.6.0/Ciel_AI_Long-Term_Memory_Master.json` (latest) into Langflow and set `FLOW_ID` to the imported flow. The flow calls four sub-flows by Run Flow (Math Tutor Agent, Verified Data Analyst, Knowledge Retriever, Web Research Assistant), which are not in this repository; see `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
 3. Deploy `app.py` from the `main` branch of this repository.
 4. Paste the variables above into App settings -> Secrets, using the template format. For Google login, create an OAuth client (Web application) in Google Cloud Console with `https://<your-app>.streamlit.app/oauth2callback` as the redirect URI, and keep the `[auth]` block at the end of the secrets.
 5. Open the app and send a test message. If the backend host or tunnel is down, the app shows an error card with a Request ID and a Retry button.

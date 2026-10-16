@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Machine learning on the user's own files (flow v1.6.0)
+- New tool Ciel ML Analyst (`flow/components/ciel_ml_analyst.py`, tool `train_model`) on the same CSV/TSV files the app already sends to Ciel Table Analyst. `task=predict` trains a linear regression (numeric target) or logistic regression (category target) and reports the strongest factors in the column's own units; `predict_for` predicts a new row. `task=cluster` groups similar rows with k-means, choosing the number of groups by silhouette unless the user gives it.
+- Anti-fabrication for models: quality is measured with 5-fold cross-validation and compared with a simple baseline (mean or most common class). Weak models, near-perfect results (possible target leakage), small files, truncated or sampled files are flagged under "Catatan untuk jawaban", together with "hubungan statistik, bukan sebab-akibat".
+- numpy only, fixed seed, no new dependency on the Langflow host (scikit-learn is not installed there). Row numbers and ID-like columns are skipped automatically.
+- Prompt v14.3: routes prediction and grouping questions on user files to the tool, forbids derived target columns as features, requires the model quality in the answer, and lets the study-companion mode explain ML with the user's own data. Every v14.2 line is kept.
+- App: sends the same encoded tables to `ML_ANALYST_ID` (default `CielMLAnalyst-m7Lq2`). Langflow ignores tweaks for node IDs that are not in the flow, so the new app also works with the v1.5.1 flow.
+- Tests (in CI): `tests/test_flow_v160_contract.py` (node wiring, embedded code and hash, only the ML node, its edge and the prompt change from v1.5.1, prompt lines) and `tests/test_ml_analyst.py` (recovers known effects from synthetic data, beats the baseline, flags weak and leaky models, cluster recovery, determinism, input errors, Langflow string processing, file-reading helpers identical to Table Analyst). The helper check caught a lost non-breaking space in the first copy of `clean()`.
+- Live test (2026-10-15) on a separate flow "Ciel AI Long-Term Memory Master v1.6.0 (test)" through ngrok, production flow untouched, with the app's payload (20-row preview + base64 tweaks): important factors, new-row prediction ("belajar 6 jam, kehadiran 90"), pass/fail classification, customer segments and a plain average per city. Each went to the right tool (the average stayed with analyze_table); the Agent left out the derived `lulus`/`nilai` columns by itself; the three planted customer segments were found (silhouette 0,70); tool numbers matched a local run exactly. 18–32 s per answer.
+- Fixed after the live run: the Agent re-ranked factors by their "setiap +1" effects (hours against percentage points) and put a weaker factor first. Regression effects now also give the change for +1 standard deviation, and the tool says the order is already comparable and must be kept. Retest: correct order, standard-deviation figures quoted.
+- Not yet done: replacing the production flow with v1.6.0 and deploying the app.
+
 ### Cleaner chat composer
 - Focusing the message box drew a second, square box around the text inside the rounded composer: the app-wide `:focus-visible` outline also applied to the composer's textarea. The textarea's outline is now off; the composer's own border, which turns ink navy on focus, stays the single focus indicator. Checked in the browser.
 
