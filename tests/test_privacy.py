@@ -114,7 +114,7 @@ class MemoryAdminComponentTest(unittest.TestCase):
 
     def test_inputs_do_not_shadow_langflow_attributes(self):
         names = input_names(COMPONENT.read_text(encoding="utf-8"))
-        self.assertEqual(sorted(names), ["memory_action", "memory_id", "memory_owner"])
+        self.assertEqual(sorted(names), ["dataset_name", "memory_action", "memory_id", "memory_owner"])
         self.assertFalse(RESERVED_COMPONENT_ATTRIBUTES & set(names))
 
 

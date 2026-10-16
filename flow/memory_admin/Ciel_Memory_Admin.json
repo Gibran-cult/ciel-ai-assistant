@@ -21,7 +21,7 @@
                 "list": false,
                 "show": true,
                 "multiline": true,
-                "value": "from langflow.custom import Component\nfrom langflow.io import MessageTextInput, Output\nfrom langflow.schema import Message\n\nimport chromadb\nimport json\nfrom pathlib import Path\n\n\nACTIONS = (\"list\", \"delete\", \"delete_all\")\nMAX_LISTED = 200\n\n\nclass CielMemoryAdmin(Component):\n    \"\"\"\n    Lets a signed-in user see and delete their own long-term memories.\n\n    Runs in its own flow, called directly by the app, never as an Agent tool,\n    so the model cannot list or delete memories. Every input is set by the app\n    through tweaks; the owner is the app's hash of the signed-in account.\n    The result is JSON in the message text.\n    \"\"\"\n\n    display_name = \"Ciel Memory Admin\"\n    description = \"Daftar dan hapus long-term memory milik pengguna yang login.\"\n    icon = \"shield\"\n\n    inputs = [\n        # Jangan dinamai `user_id`: Component Langflow sudah punya atribut\n        # bawaan `user_id` (akun Langflow pemilik flow) yang menimpa input ini.\n        MessageTextInput(\n            name=\"memory_owner\",\n            display_name=\"Memory Owner\",\n            info=\"ID pemilik memory, dikirim app lewat tweaks.\",\n            advanced=True,\n        ),\n        MessageTextInput(\n            name=\"memory_action\",\n            display_name=\"Action\",\n            info=\"list, delete, atau delete_all.\",\n            advanced=True,\n        ),\n        MessageTextInput(\n            name=\"memory_id\",\n            display_name=\"Memory ID\",\n            info=\"ID memory untuk action delete.\",\n            advanced=True,\n        ),\n    ]\n\n    outputs = [\n        Output(name=\"result\", display_name=\"Result\", method=\"run_action\"),\n    ]\n\n    def run_action(self) -> Message:\n        return Message(text=json.dumps(self.handle(), ensure_ascii=False))\n\n    def handle(self) -> dict:\n        owner = str(self.memory_owner or \"\").strip()\n        action = str(self.memory_action or \"\").strip().lower()\n\n        if not owner:\n            return {\"ok\": False, \"error\": \"login_required\"}\n        if action not in ACTIONS:\n            return {\"ok\": False, \"error\": \"unknown_action\"}\n\n        collection = chromadb.PersistentClient(\n            path=str(Path.home() / \".ciel_ai\" / \"long_term_memory\")\n        ).get_or_create_collection(\n            name=\"ciel_long_term_memory\",\n            metadata={\"hnsw:space\": \"cosine\"},\n        )\n        owned = collection.get(where={\"user_id\": owner}, include=[\"documents\", \"metadatas\"])\n        ids = owned.get(\"ids\") or []\n\n        if action == \"list\":\n            items = [\n                {\n                    \"id\": memory_id,\n                    \"text\": str(document or \"\"),\n                    \"created_at\": str((metadata or {}).get(\"created_at\") or \"\"),\n                }\n                for memory_id, document, metadata in zip(\n                    ids, owned.get(\"documents\") or [], owned.get(\"metadatas\") or []\n                )\n            ]\n            items.sort(key=lambda item: item[\"created_at\"], reverse=True)\n            return {\"ok\": True, \"total\": len(items), \"memories\": items[:MAX_LISTED]}\n\n        if action == \"delete\":\n            memory_id = str(self.memory_id or \"\").strip()\n            # Only an ID that belongs to this owner can be deleted.\n            if memory_id not in ids:\n                return {\"ok\": False, \"error\": \"not_found\"}\n            collection.delete(ids=[memory_id])\n            return {\"ok\": True, \"deleted\": 1}\n\n        if ids:\n            collection.delete(ids=ids)\n        return {\"ok\": True, \"deleted\": len(ids)}\n",
+                "value": "from langflow.custom import Component\nfrom langflow.io import MessageTextInput, Output\nfrom langflow.schema import Message\n\nimport chromadb\nimport json\nimport re\nfrom datetime import datetime\nfrom pathlib import Path\n\n\nACTIONS = (\"list\", \"delete\", \"delete_all\")\nDATASET_ACTIONS = (\"list_datasets\", \"export_dataset\", \"delete_dataset\", \"delete_all_datasets\")\nMAX_LISTED = 200\n\n\n# Dataset tersimpan: sama persis di Dataset Store, Table Analyst, ML Analyst\n# dan Memory Admin (tests/test_personal_datasets.py).\n\ndef owner_dir(owner):\n    \"\"\"\n    Folder of the signed-in user's saved datasets, or None. The owner is the\n    app's hash of the account (sent through tweaks, never by the Agent); the\n    pattern also keeps it from being used as a path.\n    \"\"\"\n    owner = str(owner or \"\").strip()\n    if not re.fullmatch(r\"[A-Za-z0-9_-]{8,64}\", owner):\n        return None\n    return Path.home() / \".ciel_ai\" / \"user_datasets\" / owner\n\n\ndef saved_tables(owner):\n    \"\"\"The owner's saved datasets as {name: {\"text\", \"truncated\": False}}.\"\"\"\n    folder = owner_dir(owner)\n    if folder is None or not folder.is_dir():\n        return {}\n    return {\n        path.stem: {\"text\": path.read_text(encoding=\"utf-8\"), \"truncated\": False}\n        for path in sorted(folder.glob(\"*.csv\"))\n    }\n\n\nclass CielMemoryAdmin(Component):\n    \"\"\"\n    Lets a signed-in user see and delete their own long-term memories, and\n    list, download and delete their saved datasets.\n\n    Runs in its own flow, called directly by the app, never as an Agent tool,\n    so the model cannot list or delete memories. Every input is set by the app\n    through tweaks; the owner is the app's hash of the signed-in account.\n    The result is JSON in the message text.\n    \"\"\"\n\n    display_name = \"Ciel Memory Admin\"\n    description = \"Daftar dan hapus long-term memory dan dataset milik pengguna yang login.\"\n    icon = \"shield\"\n\n    inputs = [\n        # Jangan dinamai `user_id`: Component Langflow sudah punya atribut\n        # bawaan `user_id` (akun Langflow pemilik flow) yang menimpa input ini.\n        MessageTextInput(\n            name=\"memory_owner\",\n            display_name=\"Memory Owner\",\n            info=\"ID pemilik memory, dikirim app lewat tweaks.\",\n            advanced=True,\n        ),\n        MessageTextInput(\n            name=\"memory_action\",\n            display_name=\"Action\",\n            info=\"list, delete, delete_all, list_datasets, export_dataset, delete_dataset, atau delete_all_datasets.\",\n            advanced=True,\n        ),\n        MessageTextInput(\n            name=\"memory_id\",\n            display_name=\"Memory ID\",\n            info=\"ID memory untuk action delete.\",\n            advanced=True,\n        ),\n        MessageTextInput(\n            name=\"dataset_name\",\n            display_name=\"Dataset Name\",\n            info=\"Nama dataset untuk export_dataset dan delete_dataset.\",\n            advanced=True,\n        ),\n    ]\n\n    outputs = [\n        Output(name=\"result\", display_name=\"Result\", method=\"run_action\"),\n    ]\n\n    def run_action(self) -> Message:\n        return Message(text=json.dumps(self.handle(), ensure_ascii=False))\n\n    def handle(self) -> dict:\n        owner = str(self.memory_owner or \"\").strip()\n        action = str(self.memory_action or \"\").strip().lower()\n\n        if not owner:\n            return {\"ok\": False, \"error\": \"login_required\"}\n        if action in DATASET_ACTIONS:\n            return self.handle_datasets(owner, action)\n        if action not in ACTIONS:\n            return {\"ok\": False, \"error\": \"unknown_action\"}\n\n        collection = chromadb.PersistentClient(\n            path=str(Path.home() / \".ciel_ai\" / \"long_term_memory\")\n        ).get_or_create_collection(\n            name=\"ciel_long_term_memory\",\n            metadata={\"hnsw:space\": \"cosine\"},\n        )\n        owned = collection.get(where={\"user_id\": owner}, include=[\"documents\", \"metadatas\"])\n        ids = owned.get(\"ids\") or []\n\n        if action == \"list\":\n            items = [\n                {\n                    \"id\": memory_id,\n                    \"text\": str(document or \"\"),\n                    \"created_at\": str((metadata or {}).get(\"created_at\") or \"\"),\n                }\n                for memory_id, document, metadata in zip(\n                    ids, owned.get(\"documents\") or [], owned.get(\"metadatas\") or []\n                )\n            ]\n            items.sort(key=lambda item: item[\"created_at\"], reverse=True)\n            return {\"ok\": True, \"total\": len(items), \"memories\": items[:MAX_LISTED]}\n\n        if action == \"delete\":\n            memory_id = str(self.memory_id or \"\").strip()\n            # Only an ID that belongs to this owner can be deleted.\n            if memory_id not in ids:\n                return {\"ok\": False, \"error\": \"not_found\"}\n            collection.delete(ids=[memory_id])\n            return {\"ok\": True, \"deleted\": 1}\n\n        if ids:\n            collection.delete(ids=ids)\n        return {\"ok\": True, \"deleted\": len(ids)}\n\n    def handle_datasets(self, owner, action):\n        folder = owner_dir(owner)\n        if folder is None:\n            return {\"ok\": False, \"error\": \"login_required\"}\n        saved = saved_tables(owner)\n\n        if action == \"list_datasets\":\n            items = []\n            for name, entry in saved.items():\n                lines = [line for line in entry[\"text\"].splitlines() if line.strip()]\n                items.append({\n                    \"name\": name,\n                    \"rows\": max(len(lines) - 1, 0),\n                    \"columns\": lines[0] if lines else \"\",\n                    \"updated_at\": datetime.fromtimestamp((folder / f\"{name}.csv\").stat().st_mtime).isoformat(timespec=\"minutes\"),\n                })\n            return {\"ok\": True, \"total\": len(items), \"datasets\": items}\n\n        if action == \"delete_all_datasets\":\n            for name in saved:\n                (folder / f\"{name}.csv\").unlink()\n            return {\"ok\": True, \"deleted\": len(saved)}\n\n        # Only a dataset that belongs to this owner can be read or deleted.\n        name = str(self.dataset_name or \"\").strip()\n        if name not in saved:\n            return {\"ok\": False, \"error\": \"not_found\"}\n        if action == \"export_dataset\":\n            return {\"ok\": True, \"name\": name, \"text\": saved[name][\"text\"]}\n        (folder / f\"{name}.csv\").unlink()\n        return {\"ok\": True, \"deleted\": 1}\n",
                 "fileTypes": [],
                 "file_path": "",
                 "password": false,
@@ -53,7 +53,7 @@
                   "Message"
                 ],
                 "dynamic": false,
-                "info": "list, delete, atau delete_all.",
+                "info": "list, delete, delete_all, list_datasets, export_dataset, delete_dataset, atau delete_all_datasets.",
                 "title_case": false,
                 "track_in_telemetry": false,
                 "type": "str",
@@ -110,9 +110,35 @@
                 "track_in_telemetry": false,
                 "type": "str",
                 "_input_type": "MessageTextInput"
+              },
+              "dataset_name": {
+                "tool_mode": false,
+                "trace_as_input": true,
+                "trace_as_metadata": true,
+                "load_from_db": false,
+                "list": false,
+                "list_add_label": "Add More",
+                "override_skip": false,
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "name": "dataset_name",
+                "value": "",
+                "display_name": "Dataset Name",
+                "advanced": true,
+                "api_editable": false,
+                "input_types": [
+                  "Message"
+                ],
+                "dynamic": false,
+                "info": "Nama dataset untuk export_dataset dan delete_dataset.",
+                "title_case": false,
+                "track_in_telemetry": false,
+                "type": "str",
+                "_input_type": "MessageTextInput"
               }
             },
-            "description": "Daftar dan hapus long-term memory milik pengguna yang login.",
+            "description": "Daftar dan hapus long-term memory dan dataset milik pengguna yang login.",
             "icon": "shield",
             "base_classes": [
               "Message"
@@ -148,14 +174,15 @@
             "field_order": [
               "memory_owner",
               "memory_action",
-              "memory_id"
+              "memory_id",
+              "dataset_name"
             ],
             "beta": false,
             "legacy": false,
             "edited": false,
             "metadata": {
               "module": "custom_components.ciel_memory_admin",
-              "code_hash": "30102e40e964",
+              "code_hash": "d77b1794a380",
               "dependencies": {
                 "total_dependencies": 2,
                 "dependencies": [

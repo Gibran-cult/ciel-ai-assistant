@@ -749,6 +749,11 @@ TABLE_ANALYST_ID = get_config("TABLE_ANALYST_ID") or "CielTableAnalyst-t4bL3"
 # mengabaikan tweak-nya.
 ML_ANALYST_ID = get_config("ML_ANALYST_ID") or "CielMLAnalyst-m7Lq2"
 
+# ID komponen Ciel Dataset Store di flow (v1.7.0): dataset pribadi milik
+# pengguna yang login. Kedua analyst juga menerima pemilik agar bisa membaca
+# dataset itu.
+DATASET_STORE_ID = get_config("DATASET_STORE_ID") or "CielDatasetStore-d4tA5"
+
 # Batas pesan per jam untuk menjaga biaya model dan beban backend.
 # Batas total anonim mencegah orang melewati batas dengan memuat ulang tab.
 RATE_LIMIT_PER_HOUR = get_int_config("RATE_LIMIT_PER_HOUR", 20)
@@ -1382,9 +1387,10 @@ def upload_images(images):
 # DATA SAYA (MEMORY DAN RIWAYAT CHAT DI SERVER)
 # ============================================================
 
-def memory_admin(action, memory_id=""):
+def memory_admin(action, memory_id="", dataset_name=""):
     """
-    Panggil flow "Ciel Memory Admin" untuk akun yang sedang login.
+    Panggil flow "Ciel Memory Admin" untuk akun yang sedang login: memory
+    dan dataset pribadi.
 
     Pemilik selalu memory_owner_id() dari app, bukan input pengguna atau
     model. Kembalikan dict hasil flow; kegagalan dicatat di log dengan
@@ -1396,6 +1402,11 @@ def memory_admin(action, memory_id=""):
 
     if not owner or not MEMORY_ADMIN_FLOW_ID:
         return {"ok": False, "error": "unavailable"}
+
+    tweak = {"memory_owner": owner, "memory_action": action, "memory_id": memory_id}
+
+    if dataset_name:
+        tweak["dataset_name"] = dataset_name
 
     try:
         response = requests.post(
@@ -1412,13 +1423,7 @@ def memory_admin(action, memory_id=""):
                 "input_type": "chat",
                 "output_type": "chat",
                 "session_id": f"{owner}-memory-admin",
-                "tweaks": {
-                    MEMORY_ADMIN_NODE_ID: {
-                        "memory_owner": owner,
-                        "memory_action": action,
-                        "memory_id": memory_id,
-                    },
-                },
+                "tweaks": {MEMORY_ADMIN_NODE_ID: tweak},
             },
             timeout=60,
         )
@@ -1530,6 +1535,32 @@ def delete_all_my_memories():
     set_data_notice(result, f"{result.get('deleted', 0)} memory dihapus.")
     st.session_state.confirm_delete_memories = False
     load_my_memories()
+
+
+def load_my_datasets():
+    st.session_state.my_datasets = memory_admin("list_datasets")
+    st.session_state.pop("dataset_export", None)
+
+
+def export_my_dataset(name):
+    result = memory_admin("export_dataset", dataset_name=name)
+
+    if result.get("ok"):
+        st.session_state.dataset_export = (name, result.get("text", ""))
+    else:
+        set_data_notice(result, "")
+
+
+def delete_my_dataset(name):
+    set_data_notice(memory_admin("delete_dataset", dataset_name=name), f"Dataset {name} dihapus.")
+    load_my_datasets()
+
+
+def delete_all_my_datasets():
+    result = memory_admin("delete_all_datasets")
+    set_data_notice(result, f"{result.get('deleted', 0)} dataset dihapus.")
+    st.session_state.confirm_delete_datasets = False
+    load_my_datasets()
 
 
 def delete_my_chat_history():
@@ -1906,8 +1937,9 @@ def build_tweaks(image_paths=None, tables=None):
     tweaks = {
         MEMORY_SEARCH_ID: {"memory_owner": owner},
         MEMORY_STORE_ID: {"memory_owner": owner},
-        TABLE_ANALYST_ID: {"attached_tables": encoded_tables},
-        ML_ANALYST_ID: {"attached_tables": encoded_tables},
+        TABLE_ANALYST_ID: {"attached_tables": encoded_tables, "memory_owner": owner},
+        ML_ANALYST_ID: {"attached_tables": encoded_tables, "memory_owner": owner},
+        DATASET_STORE_ID: {"attached_tables": encoded_tables, "memory_owner": owner},
     }
 
     if image_paths:
@@ -2551,6 +2583,75 @@ with st.container(
                             icon=":material/delete:",
                             disabled=not st.session_state.get("confirm_delete_memories"),
                             on_click=delete_all_my_memories,
+                        )
+
+                        st.button(
+                            "Tampilkan datasetku",
+                            key="load_datasets",
+                            icon=":material/table_chart:",
+                            on_click=load_my_datasets,
+                        )
+
+                        datasets = st.session_state.get("my_datasets")
+
+                        if datasets is not None and not datasets.get("ok"):
+                            st.caption("Dataset belum bisa dimuat. Silakan coba lagi.")
+
+                        elif datasets is not None and not datasets.get("datasets"):
+                            st.caption("Belum ada dataset yang tersimpan.")
+
+                        elif datasets is not None:
+
+                            st.caption(f"{datasets.get('total', 0)} dataset tersimpan")
+                            exported = st.session_state.get("dataset_export")
+
+                            for item in datasets["datasets"]:
+
+                                st.markdown(
+                                    '<div class="ciel-projfile">'
+                                    f"<span>{html.escape(short(item['name'], 28))}</span>"
+                                    f"<em>{item['rows']} baris</em>"
+                                    "</div>",
+                                    unsafe_allow_html=True,
+                                )
+
+                                if exported and exported[0] == item["name"]:
+                                    st.download_button(
+                                        "Unduh CSV",
+                                        data=exported[1].encode("utf-8"),
+                                        file_name=f"{item['name']}.csv",
+                                        mime="text/csv",
+                                        key=f"dl_{item['name']}",
+                                        icon=":material/download:",
+                                    )
+                                else:
+                                    st.button(
+                                        "Siapkan unduhan",
+                                        key=f"exp_{item['name']}",
+                                        icon=":material/download:",
+                                        on_click=export_my_dataset,
+                                        args=(item["name"],),
+                                    )
+
+                                st.button(
+                                    "Hapus",
+                                    key=f"deldata_{item['name']}",
+                                    icon=":material/close:",
+                                    on_click=delete_my_dataset,
+                                    args=(item["name"],),
+                                )
+
+                        st.checkbox(
+                            "Saya yakin ingin menghapus semua datasetku",
+                            key="confirm_delete_datasets",
+                        )
+
+                        st.button(
+                            "Hapus semua datasetku",
+                            key="delete_all_datasets",
+                            icon=":material/delete:",
+                            disabled=not st.session_state.get("confirm_delete_datasets"),
+                            on_click=delete_all_my_datasets,
                         )
 
                         st.checkbox(
