@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Cleaner chat composer
+- Focusing the message box drew a second, square box around the text inside the rounded composer: the app-wide `:focus-visible` outline also applied to the composer's textarea. The textarea's outline is now off; the composer's own border, which turns ink navy on focus, stays the single focus indicator. Checked in the browser.
+
 ### Running 24/7
 - Problem: Ciel stopped answering when nobody was watching. Streamlit Community Cloud sleeps the app after 12 hours without visitors, and on the host only Ollama started by itself; Langflow Desktop and the ngrok tunnel were started by hand and stayed down after a crash or reboot.
 - `.github/workflows/keep-awake.yml` + `tools/wake_streamlit.py`: every 4 hours a headless browser opens the app, presses the wake button if the app sleeps, and waits for the app to render (also inside Cloud's iframe). Needs the repository variable `STREAMLIT_APP_URL`; skips without it. A failed run emails the owner. Page load only: no ngrok requests or model tokens.

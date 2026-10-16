@@ -476,6 +476,10 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 [data-testid="stChatInput"] > div { background: transparent; border: 0; }
 [data-testid="stChatInput"] div:has(textarea) { background: transparent; }
 [data-testid="stChatInput"]:focus-within { border-color: var(--c-accent); }
+/* The composer's own border is the focus indicator; the global
+   focus-visible outline drew a second box around the textarea inside it. */
+.stApp [data-testid="stChatInput"] textarea:focus,
+.stApp [data-testid="stChatInput"] textarea:focus-visible { outline: none; box-shadow: none; }
 [data-testid="stChatInput"] textarea { color: var(--c-text); font-size: 0.98rem; }
 [data-testid="stChatInput"] textarea::placeholder { color: var(--c-faint); }
 [data-testid="stChatInputSubmitButton"] {
