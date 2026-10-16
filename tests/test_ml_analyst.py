@@ -58,7 +58,7 @@ class MLAnalystTest(unittest.TestCase):
     def run_tool(self, text=None, tables=None, **args):
         if tables is None:
             tables = {"siswa.csv": {"text": self.STUDENTS if text is None else text, "truncated": False}}
-        inputs = {"file_name": "", "task": "", "target": "", "features": "", "clusters": "", "predict_for": ""}
+        inputs = {"file_name": "", "task": "", "target": "", "features": "", "clusters": "", "predict_for": "", "memory_owner": ""}
         inputs.update(args)
         return self.Analyst(attached_tables=json.dumps(tables), **inputs).train_model()
 
@@ -173,7 +173,7 @@ class MLAnalystTest(unittest.TestCase):
     def test_input_errors_never_produce_numbers(self):
         cases = [
             ({"tables": {}, "task": "predict", "target": "nilai"}, "Tidak ada file CSV/TSV pengguna"),
-            ({"tables": {"a.csv": {"text": "x"}}, "file_name": "b.csv", "task": "cluster"}, "File 'b.csv' tidak ditemukan"),
+            ({"tables": {"a.csv": {"text": "x"}}, "file_name": "b.csv", "task": "cluster"}, "File atau dataset 'b.csv' tidak ditemukan"),
             ({"task": "predict"}, "isi target dengan kolom yang ingin diprediksi"),
             ({"task": "predict", "target": "skor"}, "Kolom yang tersedia di siswa.csv: No, Nama"),
             ({"task": "terbang"}, "Task 'terbang' tidak dikenal"),
@@ -196,7 +196,7 @@ class MLAnalystTest(unittest.TestCase):
         self.assertIn("terlalu banyak untuk diprediksi sebagai kategori", self.run_tool(text=text, task="predict", target="kode"))
 
     def test_unreadable_payload_is_reported(self):
-        out = self.Analyst(attached_tables="bukan json", file_name="", task="cluster", target="",
+        out = self.Analyst(attached_tables="bukan json", memory_owner="", file_name="", task="cluster", target="",
                            features="", clusters="", predict_for="").train_model()
         self.assertIn("tidak bisa dibaca", out)
 
@@ -215,7 +215,7 @@ class MLAnalystTest(unittest.TestCase):
 
     def test_tables_from_the_app_survive_langflow_str_processing(self):
         encoded = base64.b64encode(json.dumps({"siswa.csv": {"text": self.STUDENTS, "truncated": False}}).encode()).decode()
-        out = self.Analyst(attached_tables=encoded.replace("\\n", "\n"), file_name="", task="predict",
+        out = self.Analyst(attached_tables=encoded.replace("\\n", "\n"), memory_owner="", file_name="", task="predict",
                            target="nilai", features="", clusters="", predict_for="").train_model()
         self.assertIn("HASIL MODEL — dilatih langsung dari file siswa.csv (120 baris dipakai).", out)
 

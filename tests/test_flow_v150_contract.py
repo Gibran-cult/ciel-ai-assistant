@@ -48,9 +48,12 @@ class FlowV150ContractTest(unittest.TestCase):
         self.assertEqual(edges[0]["data"]["targetHandle"]["fieldName"], "tools")
         self.assertEqual(edges[0]["data"]["sourceHandle"]["dataType"], "CielTableAnalyst")
 
-    def test_table_analyst_code_matches_repository_source(self):
+    def test_table_analyst_snapshot_predates_saved_datasets(self):
+        # Snapshot historis: sejak v1.7.0 Table Analyst juga membaca dataset
+        # tersimpan (input memory_owner); kode terkini dicek di
+        # tests/test_flow_v170_contract.py.
         code = self.nodes[TABLE_ID]["data"]["node"]["template"]["code"]["value"]
-        self.assertEqual(normalize(code), normalize(COMPONENT.read_text(encoding="utf-8")))
+        self.assertEqual(sorted(input_names(code)), ["attached_tables", "column", "file_name", "group_by", "operation"])
 
     def test_file_contents_come_from_app_not_agent(self):
         template = self.nodes[TABLE_ID]["data"]["node"]["template"]
@@ -102,7 +105,7 @@ class AppTableWiringTest(unittest.TestCase):
     def test_app_sends_tables_to_the_table_analyst(self):
         self.assertIn(f'TABLE_ANALYST_ID = get_config("TABLE_ANALYST_ID") or "{TABLE_ID}"', self.source)
         self.assertIn("encoded_tables = encode_tables(tables)", self.source)
-        self.assertIn('TABLE_ANALYST_ID: {"attached_tables": encoded_tables}', self.source)
+        self.assertIn('TABLE_ANALYST_ID: {"attached_tables": encoded_tables, "memory_owner": owner}', self.source)
 
     def test_tables_survive_langflow_str_processing(self):
         # Langflow runs every str input through unescape_string, which turns each
@@ -167,7 +170,7 @@ class TableAnalystBehaviourTest(unittest.TestCase):
 
     def run_tool(self, tables=None, **args):
         tables = {"penjualan.csv": {"text": self.SALES, "truncated": False}} if tables is None else tables
-        inputs = {"file_name": "", "operation": "", "column": "", "group_by": ""}
+        inputs = {"file_name": "", "operation": "", "column": "", "group_by": "", "memory_owner": ""}
         inputs.update(args)
         return self.Analyst(attached_tables=json.dumps(tables), **inputs).analyze_table()
 
@@ -251,7 +254,7 @@ class TableAnalystBehaviourTest(unittest.TestCase):
             "a.csv": {"text": "x\n1\n2\n", "truncated": False},
             "b.csv": {"text": "x\n10\n20\n", "truncated": True},
         }
-        self.assertIn("File 'c.csv' tidak ditemukan", self.run_tool(tables=tables, file_name="c.csv", operation="sum", column="x"))
+        self.assertIn("File atau dataset 'c.csv' tidak ditemukan", self.run_tool(tables=tables, file_name="c.csv", operation="sum", column="x"))
         result = self.run_tool(tables=tables, file_name="B.CSV", operation="sum", column="x")
         self.assertIn("sum(x) = 30", result)
         self.assertIn("PERINGATAN: file terlalu besar", result)

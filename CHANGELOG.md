@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Personal datasets that grow over time (flow v1.7.0)
+- Ciel can now learn from a user's own data over time, without keeping any model. Signed-in users ask Ciel to save a CSV/TSV ("simpan file ini ke datasetku") or to log rows from the chat ("catat: hari ini belajar 3 jam, nilai kuis 80"). The new tool Ciel Dataset Store (`manage_dataset`) grows one dataset per topic, and Table Analyst and ML Analyst read it by name, so statistics and models always use the whole history.
+- Storage: `~/.ciel_ai/user_datasets/<owner>/<name>.csv` on the Langflow host. The owner comes from the app (same hash as long-term memory), never from the Agent. Anonymous visitors store nothing, and names cannot leave the owner's folder. Limits: 5 datasets, 10.000 rows and 1 MB each.
+- Safety: Ciel saves only on an explicit request. Columns must match to append, the same file is not saved twice, and numbers are rewritten in the dataset's own format. The Agent cannot delete. "Data saya" now lists, downloads and deletes datasets through new Memory Admin actions.
+- Privacy page (updated 16 Oktober 2026): describes personal datasets and the right to view, download and delete them, only when login is configured.
+- Prompt v14.4 keeps every v14.3 line. Langflow ignores tweaks for fields a flow does not have (checked in `lfx/processing/process.py`), so the new app also works with the v1.6.0 flow.
+- Tests (in CI): `tests/test_flow_v170_contract.py` and `tests/test_personal_datasets.py` cover the store, analysts on saved data, isolation between accounts, admin actions, app tweaks and the privacy text. The v1.5.0 and v1.6.0 snapshot tests became historical, as v1.3.0's did in v1.4.1.
+- Live test (2026-10-16) through ngrok on a separate "(test)" flow with a fake test account; production untouched, test flows and test data deleted afterwards.
+  - Day 1: a 30-row study log saved as dataset `belajar`, and a row typed in the chat appended with the right column names.
+  - Later sessions without a file: the average came from all 31 rows; "apa yang paling memengaruhi nilai kuisku?" trained on the saved dataset (R² 0,94, study hours first).
+  - Guards: a question about an attached file saved nothing; an anonymous save was refused; "hapus dataset belajarku" was sent to Data saya.
+  - Admin actions on a temporary copy of the admin flow: list, download and delete work, another account's dataset is `not_found`, and the memory list still works.
+- Fixed after the live run (prompt): the Agent listed datasets even when the user named one, and twice said a message "terkirim dua kali". The second came from Langflow showing the current message again in the chat history; it was stored once. Retest: named datasets go straight to the tool, and two rows logged in a row got no duplicate remark.
+- Google login: `[auth]` and `MEMORY_ADMIN_FLOW_ID` were added to the deployed app's secrets on 2026-10-16, and sign-in works. The Google OAuth app is still in "Testing", so only listed test users can sign in until Branding is completed and the app is published.
+
 ### Machine learning on the user's own files (flow v1.6.0)
 - New tool Ciel ML Analyst (`flow/components/ciel_ml_analyst.py`, tool `train_model`) on the same CSV/TSV files the app already sends to Ciel Table Analyst. `task=predict` trains a linear regression (numeric target) or logistic regression (category target) and reports the strongest factors in the column's own units; `predict_for` predicts a new row. `task=cluster` groups similar rows with k-means, choosing the number of groups by silhouette unless the user gives it.
 - Anti-fabrication for models: quality is measured with 5-fold cross-validation and compared with a simple baseline (mean or most common class). Weak models, near-perfect results (possible target leakage), small files, truncated or sampled files are flagged under "Catatan untuk jawaban", together with "hubungan statistik, bukan sebab-akibat".

@@ -31,6 +31,7 @@ Agent
  +-- Ciel Memory Store    (tagged with owner)
  +-- Ciel Table Analyst   (user CSV/TSV, sent by the app via tweaks)
  +-- Ciel ML Analyst      (models on the same user CSV/TSV)
+ +-- Ciel Dataset Store   (personal datasets of signed-in users)
  +-- Math Tutor Agent     (Run Flow)
  +-- Verified Data Analyst (Run Flow, built-in sales dataset only)
  +-- Knowledge Retriever  (Run Flow)
@@ -175,6 +176,17 @@ Machine learning on the same files comes from Ciel ML Analyst (`flow/components/
 
 The file-reading helpers are copied from Ciel Table Analyst, because Langflow components cannot import each other; `tests/test_ml_analyst.py` fails if the copies drift.
 
+### Personal datasets
+
+Signed-in users can keep data that grows over time, such as a study log. Ciel Dataset Store (`flow/components/ciel_dataset_store.py`, tool `manage_dataset`) stores each dataset as `~/.ciel_ai/user_datasets/<owner>/<name>.csv` on the Langflow host. The owner is the app's hash of the account (the same `memory_owner` as long-term memory), sent through tweaks; an empty or malformed owner stores nothing, and names are reduced to `[a-z0-9_-]`, so neither can point outside the owner's folder.
+
+- `save_file` saves an attached CSV/TSV as a new dataset or appends it (columns must match; a file whose rows equal the dataset's last rows is not saved twice). `add_rows` appends rows typed in the chat as `kolom=nilai; ...`. Numbers in a new file or row are rewritten in the dataset's own number format, so a column never mixes `3.5` and `3,5`. `list` and `show` read. There is no delete action: deleting is only possible under "Data saya".
+- Limits: 5 datasets per account, 10.000 rows and 1 MB per dataset; truncated files are refused.
+- Table Analyst and ML Analyst also get the owner and read saved datasets by name (`pick_table`): an attached file wins over a dataset with the same name, and without a name the only attached file, or else the only dataset, is used.
+- Ciel Memory Admin gained `list_datasets`, `export_dataset`, `delete_dataset` and `delete_all_datasets` (input `dataset_name`) for the "Data saya" panel, where users list, download and delete their datasets.
+
+`owner_dir` and `saved_tables` are identical in all four components, and `pick_table` in both analysts; `tests/test_personal_datasets.py` checks this.
+
 ### Knowledge Retriever
 
 Knowledge-related requests can be delegated through the Knowledge Retriever Run Flow component.
@@ -202,6 +214,9 @@ User CSV/TSV file (attached or project file)
 
 Prediction, important factors or grouping on a user CSV/TSV file
     -> Ciel ML Analyst
+
+Save or add data to a personal dataset (signed-in users)
+    -> Ciel Dataset Store
 
 Built-in sales dataset (200_sales_data)
     -> Verified Data Analyst
@@ -323,7 +338,7 @@ Main flow snapshots and component sources:
 
 ```text
 flow/
-+-- v1.0.0/ … v1.6.0/
++-- v1.0.0/ … v1.7.0/
 |   +-- Ciel_AI_Long-Term_Memory_Master.json
 +-- components/
     +-- ciel_vision_router.py
@@ -331,6 +346,7 @@ flow/
     +-- ciel_memory_store.py
     +-- ciel_table_analyst.py
     +-- ciel_ml_analyst.py
+    +-- ciel_dataset_store.py
 ```
 
 Contract tests check that each snapshot embeds the same component code as `flow/components/`.
@@ -344,6 +360,7 @@ Contract tests check that each snapshot embeds the same component code as `flow/
 - **v1.5.0:** adds Ciel Table Analyst. Before, a question about a user's own CSV could be answered with numbers from the built-in sample dataset. The app keeps attached and project CSV/TSV files per chat and sends them base64-encoded (Langflow turns every backslash-n in a str input into a newline, which breaks plain JSON). The prompt gets only a 20-row preview of each table, and the routing restricts Verified Data Analyst to the built-in dataset.
 - **v1.5.1:** prompt-only: Indonesian number format, conversion of tool output, no invented currency. The app also returns only the final model text block, because Langflow 1.12 joins every Agent round into `Message.text`.
 - **v1.6.0:** adds Ciel ML Analyst and prompt v14.3: a machine learning route for user files (predict, important factors, new-row prediction, clustering), no derived target columns as features, model quality always reported with the result, and ML results as a study-companion example.
+- **v1.7.0:** adds Ciel Dataset Store; Table Analyst and ML Analyst read saved datasets; prompt v14.4 (save only on an explicit request, no table data in long-term memory, deletion only through "Data saya"). The Memory Admin flow gained the dataset actions.
 
 ## Langflow Configuration Outside the Repository
 

@@ -7,6 +7,7 @@ import csv
 import io
 import json
 import re
+from pathlib import Path
 
 import numpy as np
 
@@ -159,6 +160,52 @@ def find_column(header, name):
             return h
     lowered = {h.lower(): h for h in header}
     return lowered.get(name.strip().lower())
+
+# Dataset tersimpan milik pengguna yang login: sama persis di Dataset Store,
+# Table Analyst, ML Analyst dan Memory Admin (tests/test_personal_datasets.py).
+
+def owner_dir(owner):
+    """
+    Folder of the signed-in user's saved datasets, or None. The owner is the
+    app's hash of the account (sent through tweaks, never by the Agent); the
+    pattern also keeps it from being used as a path.
+    """
+    owner = str(owner or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", owner):
+        return None
+    return Path.home() / ".ciel_ai" / "user_datasets" / owner
+
+
+def saved_tables(owner):
+    """The owner's saved datasets as {name: {"text", "truncated": False}}."""
+    folder = owner_dir(owner)
+    if folder is None or not folder.is_dir():
+        return {}
+    return {
+        path.stem: {"text": path.read_text(encoding="utf-8"), "truncated": False}
+        for path in sorted(folder.glob("*.csv"))
+    }
+
+
+def pick_table(attached, saved, requested):
+    """
+    Choose an attached file or a saved dataset. Without a name: the only
+    attached file, or the only saved dataset when nothing is attached.
+    Returns (name, entry, source, error).
+    """
+    tables = {**saved, **attached}
+    name = str(requested or "").strip()
+    if not name:
+        pool = attached or saved
+        name = next(iter(pool)) if len(pool) == 1 else ""
+    if name not in tables:
+        lowered = {k.lower(): k for k in tables}
+        key = name.lower()
+        name = lowered.get(key) or lowered.get(re.sub(r"\.(csv|tsv)$", "", key)) or name
+    if name not in tables:
+        return None, None, None, f"File atau dataset '{name}' tidak ditemukan. Yang tersedia: {', '.join(tables)}."
+    source = f"file {name}" if name in attached else f"dataset tersimpan {name}"
+    return name, tables[name], source, None
 
 
 # ---------------------------------------------------------------------------
@@ -475,6 +522,15 @@ class CielMLAnalyst(Component):
             ),
             tool_mode=True,
         ),
+        # Diisi oleh app lewat tweaks: hash akun yang login, untuk membaca
+        # dataset tersimpan miliknya. Kosong = anonim, hanya file lampiran.
+        MessageTextInput(
+            name="memory_owner",
+            display_name="Memory Owner",
+            info="ID pemilik dataset tersimpan, dikirim app lewat tweaks.",
+            advanced=True,
+            tool_mode=False,
+        ),
         # Diisi oleh app lewat tweaks (base64 dari JSON {nama_file: {"text",
         # "truncated"}}), bukan oleh Agent, agar isi file tidak lewat model.
         MessageTextInput(
@@ -504,22 +560,17 @@ class CielMLAnalyst(Component):
                 "Sampaikan bahwa ada gangguan teknis. Jangan menebak hasil."
             )
 
-        if not tables:
+        saved = saved_tables(self.memory_owner)
+        if not tables and not saved:
             return (
-                "Tidak ada file CSV/TSV pengguna untuk melatih model. "
+                "Tidak ada file CSV/TSV pengguna atau dataset tersimpan untuk melatih model. "
                 "Minta pengguna melampirkan filenya. Jangan menebak hasil."
             )
 
-        name = str(self.file_name or "").strip()
-        if not name and len(tables) == 1:
-            name = next(iter(tables))
-        if name not in tables:
-            lowered = {k.lower(): k for k in tables}
-            name = lowered.get(name.lower(), name)
-        if name not in tables:
-            return f"File '{name}' tidak ditemukan. File yang tersedia: {', '.join(tables)}."
+        name, entry, source, error = pick_table(tables, saved, self.file_name)
+        if error:
+            return error
 
-        entry = tables[name]
         header, records, delimiter = parse_table(entry.get("text", ""))
         if not header:
             return f"File {name} kosong atau bukan tabel yang bisa dibaca."
@@ -565,8 +616,8 @@ class CielMLAnalyst(Component):
             records = [records[i] for i in keep]
 
         if task == "cluster":
-            return self.cluster(name, records, columns, styles, lines)
-        return self.predict(name, records, target, columns, styles, lines)
+            return self.cluster(source, records, columns, styles, lines)
+        return self.predict(source, records, target, columns, styles, lines)
 
     def predict(self, name, records, target, columns, styles, notes):
         dropped = sum(1 for r in records if r[target] == "")
@@ -608,7 +659,7 @@ class CielMLAnalyst(Component):
         labels = design_labels(specs)
 
         n = len(records)
-        lines = [f"HASIL MODEL — dilatih langsung dari file {name} ({n} baris dipakai)."]
+        lines = [f"HASIL MODEL — dilatih langsung dari {name} ({n} baris dipakai)."]
         lines.extend(notes)
         if regression:
             lines.append(f"Jenis: regresi linear, memprediksi angka {target}.")
@@ -799,7 +850,7 @@ class CielMLAnalyst(Component):
 
         quality = "jelas" if score > 0.5 else "sedang" if score >= 0.25 else "lemah"
         n = len(records)
-        lines = [f"HASIL MODEL — pengelompokan k-means dari file {name} ({n} baris)."]
+        lines = [f"HASIL MODEL — pengelompokan k-means dari {name} ({n} baris)."]
         lines.extend(notes)
         lines.append(f"Fitur ({len(kinds)}): {', '.join(kinds)}")
         if skipped:

@@ -18,7 +18,7 @@ import streamlit as st
 
 
 # Ubah tanggal ini setiap kali isi halaman berubah (Pasal 21 ayat 2).
-PRIVACY_UPDATED = "15 Oktober 2026"
+PRIVACY_UPDATED = "16 Oktober 2026"
 
 
 PRIVACY_CSS = """
@@ -107,6 +107,14 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
             "hanya bisa dibaca oleh akunmu."
         )
         stored.append(
+            "<strong>Dataset pribadi</strong> (hanya setelah login): data tabel "
+            "yang kamu minta Ciel simpan, misalnya log belajar dari file atau "
+            "dari chat. Disimpan di server Ciel sampai kamu menghapusnya, hanya "
+            "bisa dibaca oleh akunmu, dan hanya dipakai untuk menghitung "
+            "statistik dan melatih model untukmu. Ciel tidak menyimpan dataset "
+            "tanpa permintaanmu dan tidak memakainya untuk pengguna lain."
+        )
+        stored.append(
             "<strong>Akun Google:</strong> nama dan email dipakai untuk "
             "menampilkan status login. Memory memakai kode yang diturunkan dari "
             "akunmu, bukan emailmu."
@@ -131,12 +139,12 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
     if memory_enabled and data_controls:
         rights.append(
             "Setelah login, buka menu akun di kanan atas lalu <strong>Data saya</strong> untuk "
-            "melihat dan menghapus memory-mu, serta menghapus riwayat chat-mu "
-            "di server."
+            "melihat dan menghapus memory-mu, melihat, mengunduh, dan menghapus "
+            "dataset pribadimu, serta menghapus riwayat chat-mu di server."
         )
     elif memory_enabled:
         rights.append(
-            "Penghapusan memory dan riwayat chat belum bisa dilakukan sendiri "
+            "Penghapusan memory, dataset pribadi, dan riwayat chat belum bisa dilakukan sendiri "
             "dari aplikasi; sampaikan permintaan ke pengelola."
         )
 

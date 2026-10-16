@@ -46,9 +46,11 @@ class FlowV160ContractTest(unittest.TestCase):
         self.assertEqual(edges[0]["data"]["targetHandle"]["fieldName"], "tools")
         self.assertEqual(edges[0]["data"]["sourceHandle"]["dataType"], "CielMLAnalyst")
 
-    def test_ml_analyst_code_matches_repository_source(self):
+    def test_ml_analyst_snapshot_is_consistent(self):
+        # Snapshot historis: sejak v1.7.0 ML Analyst juga membaca dataset
+        # tersimpan; kode terkini dicek di tests/test_flow_v170_contract.py.
         code = self.node["template"]["code"]["value"]
-        self.assertEqual(normalize(code), normalize(COMPONENT.read_text(encoding="utf-8")))
+        self.assertNotIn("memory_owner", code)
         self.assertEqual(self.node["metadata"]["code_hash"], hashlib.sha256(code.encode()).hexdigest()[:12])
 
     def test_file_contents_come_from_app_not_agent(self):
@@ -57,7 +59,8 @@ class FlowV160ContractTest(unittest.TestCase):
         tool = template["tools_metadata"]["value"][0]
         self.assertEqual(tool["name"], "train_model")
         self.assertEqual(sorted(tool["args"]), TOOL_ARGS)
-        self.assertEqual(sorted(input_names(COMPONENT.read_text(encoding="utf-8"))), sorted(TOOL_ARGS + ["attached_tables"]))
+        code = template["code"]["value"]
+        self.assertEqual(sorted(input_names(code)), sorted(TOOL_ARGS + ["attached_tables"]))
 
     def test_inputs_do_not_shadow_langflow_attributes(self):
         names = input_names(COMPONENT.read_text(encoding="utf-8"))
@@ -113,8 +116,8 @@ class AppMLWiringTest(unittest.TestCase):
     def test_app_sends_the_same_tables_to_the_ml_analyst(self):
         source = APP_PATH.read_text(encoding="utf-8")
         self.assertIn(f'ML_ANALYST_ID = get_config("ML_ANALYST_ID") or "{ML_ID}"', source)
-        self.assertIn('ML_ANALYST_ID: {"attached_tables": encoded_tables}', source)
-        self.assertIn('TABLE_ANALYST_ID: {"attached_tables": encoded_tables}', source)
+        self.assertIn('ML_ANALYST_ID: {"attached_tables": encoded_tables, "memory_owner": owner}', source)
+        self.assertIn('TABLE_ANALYST_ID: {"attached_tables": encoded_tables, "memory_owner": owner}', source)
 
 
 if __name__ == "__main__":
