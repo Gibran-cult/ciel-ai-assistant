@@ -9,8 +9,12 @@ task). Each run:
 
   1. Ollama     GET 127.0.0.1:11434/api/version; starts "ollama app.exe".
   2. Langflow   GET 127.0.0.1:7860/health_check; starts Langflow Desktop. If
-                Desktop is open but the backend stays unhealthy for
-                LangflowGraceSeconds, Desktop and its backend are restarted.
+                Desktop has been open longer than LangflowGraceSeconds
+                (default 10 min; it takes about 5 to boot) and the backend
+                is still unhealthy, Desktop and its backend are restarted.
+                Desktop does not respawn a dead backend, so a Desktop open
+                for BackendSpawnSeconds (5 min) without one is restarted
+                right away.
   3. ngrok      the agent's local API (127.0.0.1:4040) must list a tunnel on
                 NGROK_URL. Otherwise a stale agent is stopped and ngrok is
                 started with the Basic Auth traffic policy, then the public
@@ -41,7 +45,8 @@ param(
     [switch]$Install,
     [switch]$Uninstall,
     [int]$IntervalMinutes = 5,
-    [int]$LangflowGraceSeconds = 240
+    [int]$LangflowGraceSeconds = 600,
+    [int]$BackendSpawnSeconds = 300
 )
 
 $ErrorActionPreference = 'Stop'
@@ -142,11 +147,28 @@ function Repair-Langflow {
     $running = @(Get-LangflowProcesses $exe)
 
     if ($running.Count -gt 0) {
-        # Desktop may still be booting the backend; give it time before restarting.
-        Write-Log "langflow: unhealthy with $($running.Count) process(es) running, waiting up to $LangflowGraceSeconds s"
-        if (Wait-For { Test-Langflow } $LangflowGraceSeconds) { Write-Log 'langflow: up'; return $true }
-        if ($DryRun) { Write-Log 'langflow: still unhealthy, would restart Desktop'; return $false }
-        Write-Log 'langflow: still unhealthy, stopping Desktop and backend'
+        # Desktop takes 2 to 5 minutes from launch to a healthy backend, longer
+        # than the task interval, so judge by how long its processes have existed.
+        $oldest = ($running | Sort-Object CreationDate | Select-Object -First 1).CreationDate
+        $age = [int]((Get-Date) - $oldest).TotalSeconds
+        $remaining = $LangflowGraceSeconds - $age
+        # Desktop does not respawn a backend that died; it starts one within about
+        # 3 minutes of launch, so a Desktop older than that without one will not recover.
+        $backend = @($running | Where-Object { $_.ExecutablePath -ne $exe })
+        if ($backend.Count -eq 0 -and $age -ge $BackendSpawnSeconds) {
+            $remaining = 0
+            Write-Log "langflow: Desktop open for $age s without a backend"
+        }
+        if ($remaining -gt 0) {
+            Write-Log "langflow: starting for $age s, waiting up to $remaining s"
+            $ok = Wait-For { Test-Langflow } $remaining
+            Write-Log ("langflow: " + $(if ($ok) { 'up' } else { 'still starting, the next run decides' }))
+            return $ok
+        }
+        # Open longer than the boot window: allow a short blip before restarting.
+        if ($backend.Count -gt 0 -and (Wait-For { Test-Langflow } 60)) { Write-Log 'langflow: up'; return $true }
+        if ($DryRun) { Write-Log "langflow: unhealthy after $age s, would restart Desktop"; return $false }
+        Write-Log "langflow: unhealthy after $age s, stopping Desktop and backend"
         foreach ($p in @(Get-LangflowProcesses $exe)) {
             Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
         }
@@ -191,7 +213,15 @@ function Repair-Ngrok {
     if ($stale.Count -gt 0) {
         # An agent without our tunnel still holds the session; ngrok refuses a second one.
         Write-Log "ngrok: $($stale.Count) agent(s) running without the tunnel, stopping them"
-        $stale | Stop-Process -Force -ErrorAction SilentlyContinue
+        foreach ($agent in $stale) {
+            try {
+                Stop-Process -Id $agent.Id -Force -ErrorAction Stop
+            } catch {
+                # Started from an administrator window; this task runs without admin rights.
+                Write-Log "ngrok: cannot stop agent $($agent.Id) (started as administrator?); close it or start ngrok from a normal window"
+                return $false
+            }
+        }
         Start-Sleep -Seconds 3
     }
 
