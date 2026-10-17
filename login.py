@@ -51,7 +51,7 @@ LOGIN_CSS = """
 """
 
 
-def login_notes(auth_enabled, rate_limits):
+def login_notes(auth_enabled, rate_limits, history_saved=False):
     """Catatan di bawah tombol, mengikuti konfigurasi yang sebenarnya."""
 
     anon, logged = rate_limits
@@ -69,14 +69,17 @@ def login_notes(auth_enabled, rate_limits):
         )
 
     notes.append(
-        "Riwayat chat di sidebar berbeda dari memory: hanya tersimpan selama "
-        "sesi browser ini."
+        "Riwayat chat dan proyek di sidebar berbeda dari memory: setelah masuk, "
+        "keduanya tetap ada saat halaman dimuat ulang dan bisa kamu hapus."
+        if history_saved
+        else "Riwayat chat dan proyek di sidebar berbeda dari memory: hanya "
+        "tersimpan selama sesi browser ini."
     )
     notes.append("Masuk dengan email dan kata sandi sedang disiapkan.")
     return notes
 
 
-def render_login(auth_enabled=False, on_google=None, on_back=None, rate_limits=(20, 60), signed_in_as=None):
+def render_login(auth_enabled=False, on_google=None, on_back=None, rate_limits=(20, 60), signed_in_as=None, history_saved=False):
     """Render halaman masuk.
 
     auth_enabled: True jika login Google (st.login) dikonfigurasi.
@@ -84,6 +87,7 @@ def render_login(auth_enabled=False, on_google=None, on_back=None, rate_limits=(
     on_back: callback kembali ke chat.
     rate_limits: (batas pesan/jam tanpa login, batas setelah login) dari app.py.
     signed_in_as: nama/email jika pengguna sudah masuk.
+    history_saved: True jika riwayat chat pengguna login disimpan di database.
     """
 
     st.markdown(LOGIN_CSS, unsafe_allow_html=True)
@@ -118,7 +122,7 @@ def render_login(auth_enabled=False, on_google=None, on_back=None, rate_limits=(
                 on_click=on_google,
             )
 
-        notes = "".join(f"<li>{html.escape(n)}</li>" for n in login_notes(auth_enabled, rate_limits))
+        notes = "".join(f"<li>{html.escape(n)}</li>" for n in login_notes(auth_enabled, rate_limits, history_saved))
         st.markdown(f'<ul class="ciel-loginnotes">{notes}</ul>', unsafe_allow_html=True)
 
         # Tanpa login yang aktif, kembali ke chat adalah satu-satunya aksi.

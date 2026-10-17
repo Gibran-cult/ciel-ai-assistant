@@ -50,7 +50,7 @@ PRIVACY_CSS = """
 """
 
 
-def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=None, operator=None):
+def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=None, operator=None, history_saved=False):
     """Kembalikan daftar (judul, [paragraf HTML]) untuk halaman privasi."""
 
     days = int(retention_days)
@@ -92,8 +92,18 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
     ]
 
     stored = [
-        "<strong>Riwayat chat di sidebar</strong> hanya ada di browsermu dan "
-        "hilang saat tab ditutup.",
+        (
+            "<strong>Riwayat chat dan proyek di sidebar</strong>: setelah login, "
+            "judul dan isi percakapanmu, serta nama proyek dan isi file yang kamu "
+            "tambahkan ke proyek, disimpan di database Ciel supaya tetap ada saat "
+            "halaman dimuat ulang, sampai kamu menghapusnya (Hapus chat atau Hapus "
+            "proyek di sidebar). Mengarsipkan chat hanya menyembunyikannya dari "
+            "daftar. Tanpa login, riwayat dan proyek ini hanya ada di browsermu "
+            "dan hilang saat tab ditutup."
+            if history_saved
+            else "<strong>Riwayat chat dan proyek di sidebar</strong> hanya ada di "
+            "browsermu dan hilang saat tab ditutup."
+        ),
         f"<strong>Riwayat pesan di server:</strong> setiap pesan dan jawaban "
         f"disimpan di server Ciel paling lama <strong>{days} hari</strong>, "
         "lalu dihapus otomatis. Pesan tanpa login disimpan dengan kode acak, "
@@ -191,7 +201,7 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
     ]
 
 
-def render_privacy(retention_days=30, memory_enabled=False, data_controls=False, contact_url=None, operator=None):
+def render_privacy(retention_days=30, memory_enabled=False, data_controls=False, contact_url=None, operator=None, history_saved=False):
     st.markdown(PRIVACY_CSS, unsafe_allow_html=True)
 
     parts = [
@@ -202,7 +212,7 @@ def render_privacy(retention_days=30, memory_enabled=False, data_controls=False,
         f'<p class="ciel-updated">Terakhir diperbarui: {PRIVACY_UPDATED}</p>',
     ]
 
-    for title, items in privacy_sections(retention_days, memory_enabled, data_controls, contact_url, operator):
+    for title, items in privacy_sections(retention_days, memory_enabled, data_controls, contact_url, operator, history_saved):
         parts.append(f"<h2>{html.escape(title)}</h2><ul>")
         parts.extend(f"<li>{item}</li>" for item in items)
         parts.append("</ul>")
