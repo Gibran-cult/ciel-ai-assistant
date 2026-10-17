@@ -1100,6 +1100,13 @@ def user_key():
     return memory_owner_id() or st.session_state.visitor_id
 
 
+INTERRUPTED_ANSWER = (
+    "Jawaban terputus karena halaman dimuat ulang.\n\n"
+    "Pertanyaanmu tersimpan, tapi jawabannya belum sempat diterima. "
+    "Silakan coba lagi."
+)
+
+
 def chat_owner():
     """Pemilik chat dan proyek tersimpan; kosong jika tidak login atau tanpa database."""
     return memory_owner_id() if CHAT_STORE else ""
@@ -1143,6 +1150,12 @@ def sync_chat_owner():
     if loaded is None:
         store_notice("Riwayat chat tersimpan gagal dimuat.")
         return
+
+    # Chat yang berakhir dengan pertanyaan tanpa jawaban terputus saat halaman
+    # dimuat ulang; kartu gagal memberi tombol "Coba lagi" untuk pertanyaan itu.
+    for chat in loaded.values():
+        if chat["messages"] and chat["messages"][-1]["role"] == "user":
+            chat["messages"].append({"role": "assistant", "content": INTERRUPTED_ANSWER, "error": True})
 
     st.session_state.chats = {**loaded, **st.session_state.chats}
 
@@ -3313,6 +3326,11 @@ if pending_request:
 
     chat["messages"].append(user_message)
     chat["updated"] = time.time()
+
+    # Simpan sebelum menunggu Langflow (bisa sampai beberapa menit): jika
+    # halaman dimuat ulang saat itu, Streamlit menghentikan run ini sebelum
+    # jawaban datang, dan tanpa simpanan ini pertanyaannya ikut hilang.
+    persist_chat(chat)
 
     with st.chat_message("user", avatar=AVATARS["user"]):
 

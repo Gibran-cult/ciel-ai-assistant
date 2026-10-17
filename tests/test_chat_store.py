@@ -309,6 +309,48 @@ class SidebarHistoryTest(unittest.TestCase):
         self.assertTrue(post.call_args.kwargs["json"]["archived"])
         again.assert_not_called()  # loaded once per session, not on every rerun
 
+    def test_question_is_saved_before_waiting_for_langflow(self):
+        # A reload stops the run while Langflow is still answering, so the
+        # question must already be in the database by then.
+        with patch("requests.request", self.signed_in_store()):
+            at = self.run_app(user=SIGNED_IN, secrets=self.SECRETS)
+
+        posts = []
+
+        def post(url, **kwargs):
+            posts.append((url, kwargs.get("json")))
+            if "/rest/v1/" in url:
+                return Response()
+            raise requests.exceptions.ConnectionError("down")
+
+        # A starter prompt sends a question the same way the composer does.
+        at.button(key="starter_0").click()
+        with patch("requests.post", side_effect=post), self.assertLogs("ciel_ai", level="ERROR"):
+            at = self.run_app(user=SIGNED_IN, at=at)
+
+        self.assertFalse(at.exception)
+        first_url, first_row = posts[0]
+        self.assertTrue(first_url.endswith("/rest/v1/chats"))
+        self.assertEqual([m["role"] for m in first_row["messages"]], ["user"])
+        self.assertTrue(any("/api/v1/run/" in url for url, _ in posts))
+        self.assertEqual([m["role"] for m in posts[-1][1]["messages"]], ["user", "assistant"])
+
+    def test_an_interrupted_question_loads_with_a_retry_card(self):
+        chat = sample_chat("c1")
+        # The answer never arrived (images dropped: the sample bytes aren't a real picture).
+        chat["messages"] = [{**chat["messages"][0], "images": []}]
+        with patch("requests.request", self.signed_in_store(chats=[chat])):
+            at = self.run_app(user=SIGNED_IN, secrets=self.SECRETS)
+
+        at.button(key="chat_c1").click()
+        at = self.run_app(user=SIGNED_IN, at=at)
+
+        self.assertFalse(at.exception)
+        last = at.session_state["chats"]["c1"]["messages"][-1]
+        self.assertEqual((last["role"], last["error"]), ("assistant", True))
+        self.assertIn("terputus", last["content"])
+        self.assertTrue(at.button(key="retry_1"))
+
     def test_projects_load_before_chats_so_chats_keep_their_project(self):
         request = self.signed_in_store(projects=[sample_project("p1")],
                                        chats=[sample_chat("c1", project_id="p1")])
