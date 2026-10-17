@@ -44,9 +44,13 @@ logger.propagate = False
 # PAGE CONFIG
 # ============================================================
 
+# Logo "Kepingan": a ring cut flat on the right, with the cut piece (gold)
+# slid back out. Sources and PNG renders live in assets/brand.
+BRAND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "brand")
+
 st.set_page_config(
     page_title="Ciel AI Assistant",
-    page_icon=":material/cloud:",
+    page_icon=os.path.join(BRAND_DIR, "ciel-icon-32.png"),
     layout="wide",
     initial_sidebar_state="auto",
 )
@@ -82,6 +86,7 @@ DARK_TOKENS = """
     --c-accent-soft: rgba(157, 179, 232, 0.14);
     --c-gold: #e9d06a;
     --c-gold-ink: #2e2400;
+    --c-mark-piece: #e9d06a;
     --c-ok: #7cc49d;
     --c-warn: #e3b24f;
     --c-err: #f0907f;
@@ -109,6 +114,8 @@ CIEL_CSS = """
     --c-accent-ink: #ffffff;
     --c-gold: #f4dc6e;
     --c-gold-ink: #3a2e00;
+    /* Highlighter gold is ~1.2:1 on paper, too faint for the logo piece. */
+    --c-mark-piece: #a07800;
     --c-ok: #2e6a4c;
     --c-warn: #855a00;
     --c-err: #a33b2c;
@@ -167,6 +174,8 @@ header[data-testid="stHeader"] button,
 [data-testid="stChatInputFileUploadButton"] button:hover { color: var(--c-text); }
 [data-testid="stChatMessageAvatarCustom"],
 [data-testid="stChatMessageAvatarCustom"] [data-testid="stIconMaterial"] { background: var(--c-surface); color: var(--c-text); }
+/* Ciel's avatar is an image (the app icon), which Streamlit renders as a bare img. */
+[data-testid="stChatMessage"] > img { width: 2rem; height: 2rem; border-radius: var(--r-sm); }
 /* Popover content (account menu, "Proyek baru") renders outside .stApp,
    so widget rules below cover both. */
 :is(.stApp, [data-testid="stPopoverBody"]) [data-testid="stExpander"] summary { color: var(--c-text); background: transparent; }
@@ -271,6 +280,9 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     letter-spacing: -0.02em;
     color: var(--c-text);
 }
+.ciel-mark { width: 1.2em; height: 1.2em; margin-right: 0.36em; vertical-align: -0.2em; }
+.ciel-mark-ring { fill: var(--c-accent); }
+.ciel-mark-piece { fill: var(--c-mark-piece); }
 
 /* Theme toggle (THEME_TOGGLE_HTML): moon in light mode, sun in dark mode,
    drawn as a mask so it takes the button's text colour. */
@@ -1885,8 +1897,18 @@ def delete_my_chat_history():
 
 AVATARS = {
     "user": ":material/person:",
-    "assistant": ":material/cloud:",
+    "assistant": os.path.join(BRAND_DIR, "ciel-icon-192.png"),
 }
+
+# Inline copy of assets/brand/ciel-mark.svg, coloured by theme tokens.
+CIEL_MARK_SVG = (
+    '<svg class="ciel-mark" viewBox="0 0 32 32" aria-hidden="true">'
+    '<path class="ciel-mark-ring" d="M24.89 10.6A11.8 11.8 0 1 0 24.89 21.4'
+    'H20.57A8.2 8.2 0 1 1 20.57 10.6Z"/>'
+    '<path class="ciel-mark-piece" d="M28.39 10.6A11.8 11.8 0 0 1 28.39 21.4'
+    'H24.07A8.2 8.2 0 0 0 24.07 10.6Z"/>'
+    "</svg>"
+)
 
 STARTER_PROMPTS = (
     "Ajari aku limit fungsi dari dasar, lalu kasih 2 soal latihan",
@@ -2715,7 +2737,7 @@ with st.sidebar:
 
     st.markdown(
         '<div class="ciel-sidehead">'
-        '<span class="ciel-wordmark">Ciel</span>'
+        f'<span class="ciel-wordmark">{CIEL_MARK_SVG}Ciel</span>'
         "</div>",
         unsafe_allow_html=True,
     )
@@ -2918,7 +2940,7 @@ with st.container(
     st.markdown(
         '<div class="ciel-topbar">'
         '<div class="ciel-brand">'
-        '<span class="ciel-wordmark">Ciel</span>'
+        f'<span class="ciel-wordmark">{CIEL_MARK_SVG}Ciel</span>'
         "</div>"
         f"{project_chip}"
         "</div>",
