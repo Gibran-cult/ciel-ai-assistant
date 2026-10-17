@@ -256,6 +256,15 @@ Main Agent
 Final Response
 ```
 
+### Research Modes (v1.8.0)
+
+The main Agent starts every question for the Research Agent with a mode marker:
+
+- `[RISET CEPAT]` (default, Mode Santai): one search round with 2 different Exa queries at once, then notes with at most 5 findings and 4 sources.
+- `[RISET DALAM]` (only in Mode Analisis / Great Sage): at most 3 search rounds, then notes with at most 10 findings and 6 sources.
+
+The Research Agent never calls `get_contents`, has `max_iterations` 6, and Exa returns 5 results with at most 1,500 highlight characters each. Every source and URL in the notes must come from a search result in the same run; the agent may not add sources from memory. Ciel Exa Search (`flow/components/ciel_exa_search.py`) replaces the official Exa node and records every URL Exa returns in the graph context. Ciel Source Guard (`flow/components/ciel_source_guard.py`), between the Agent and Chat Output, removes sources whose URL Exa did not return, along with their markers and findings, and says how many it removed. Its DeepSeek model runs with thinking off (`model_kwargs = {"extra_body": {"thinking": {"type": "disabled"}}}`); the main Agent keeps thinking on. It hands back notes (findings + sources), not an essay; the main Agent writes the answer and its "Sumber:" section. The sub-flow snapshot is `flow/subflows/Web_Research_Assistant.json`.
+
 
 ## Model Architecture
 
