@@ -153,7 +153,11 @@ header[data-testid="stHeader"] { background: var(--c-bg); }
 .stApp [data-testid="stPopover"] button { color: var(--c-text); }
 header[data-testid="stHeader"] button,
 [data-testid="stSidebarCollapseButton"] button,
-[data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] { color: var(--c-muted); }
+[data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"],
+[data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"] { color: var(--c-muted); }
+/* The collapse button only shows while the sidebar is hovered. */
+[data-testid="stSidebarCollapseButton"] button:hover,
+[data-testid="stExpandSidebarButton"]:hover { background: var(--c-raised); }
 [data-testid="stPopoverBody"],
 [data-testid="stPopoverBody"] > div { background: var(--c-surface); color: var(--c-text); }
 [data-testid="stWidgetLabel"] p { color: var(--c-text); }

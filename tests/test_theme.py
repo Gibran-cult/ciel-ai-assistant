@@ -53,6 +53,14 @@ class ThemeTokensTest(unittest.TestCase):
         self.assertIn(':root[data-ciel-theme="dark"] {{{DARK_TOKENS}}}', self.css)
         self.assertIn('CIEL_CSS.replace("{{{DARK_TOKENS}}}", "{" + DARK_TOKENS + "}")', APP_PATH.read_text(encoding="utf-8"))
 
+    def test_sidebar_toggle_icons_follow_the_tokens(self):
+        # Streamlit colours these icons itself (light theme), and the collapse
+        # button only appears on hover, so it stayed black in dark mode.
+        for button in ("stExpandSidebarButton", "stSidebarCollapseButton"):
+            with self.subTest(button=button):
+                self.assertIn(f'[data-testid="{button}"] [data-testid="stIconMaterial"]', self.css)
+        self.assertIn('[data-testid="stSidebarCollapseButton"] button:hover', self.css)
+
     def test_text_pairs_pass_wcag_aa_in_both_themes(self):
         pairs = [
             ("--c-text", "--c-bg"), ("--c-muted", "--c-bg"), ("--c-faint", "--c-bg"),
