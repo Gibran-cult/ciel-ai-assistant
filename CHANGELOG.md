@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### PDF attachments
+- PDFs can be attached in chat and added to projects. The backend only takes text, so `read_text_file` extracts the text with `pypdf` (new dependency, `pypdf>=6` in `requirements.txt` and CI) and then treats it like any text file: same per-file character limit, truncation flag and prompt section.
+- Extraction stops once the text passes `MAX_FILE_CHARS` or after `MAX_PDF_PAGES` (100) pages, so a large upload doesn't keep the server busy. No OCR: a PDF without extractable text (e.g. a scan) is refused with a hint to send it as a photo; password-protected and damaged PDFs are refused with a short message (damaged ones are logged).
+- Pricing lists "Lampiran foto, PDF, dan file teks"; README describes the behaviour.
+- Checked in the browser: a generated two-page PDF attached in the chat composer was accepted, and the prompt the app sent (184 characters in the server log) matched exactly what `build_payload` produces with both pages' text. New `tests/test_pdf_attachments.py` (in CI): text extraction, character and page limits, scanned, damaged and password-protected PDFs, text files unchanged, and pdf allowed in chat and projects.
+
+### Dark mode and a shorter upload hint
+- Dark mode with the same roles on dark paper (`DARK_TOKENS`: background `#161513`, text `#eceae4`, accent `#9db3e8`, gold `#e9d06a`). It follows the device setting; a moon/sun button in the top bar overrides it, and the choice is kept in the browser (`localStorage`, page still works when storage is blocked). The choice lives on `<html data-ciel-theme>`, which React never touches. Every text pair passes WCAG AA in both themes.
+- Streamlit's own widgets take colours from the light theme in `config.toml`, so their surfaces now point at the tokens (captions, popovers and their inputs, tooltips, chat message text and avatars, expanders, inline code, the "+" upload button, sidebar and heading icons). Light mode is unchanged. A scan of every visible element on chat, pricing, privacy, sign-in, the popover, the tooltip and an error card found no light leftovers in dark mode and none in light mode.
+- The "+" button's tooltip listed every accepted extension ("Upload or drag and drop files (TXT, MD, MARKDOWN, ...)"); it now says "Lampirkan file atau foto", also used as the button's accessible name. Streamlit has no option for this text, so `UI_JS` replaces it when the tooltip appears.
+- The toggle icon is drawn in CSS because `st.html` strips inline SVG. The hidden script container is renamed `pagejs`.
+- New `tests/test_theme.py` (in CI): every light colour token has a dark value, both themes pass AA, dark tokens follow the device and the toggle, the toggle and storage contract, and the upload hint.
+
 ### Personal datasets that grow over time (flow v1.7.0)
 - Ciel can now learn from a user's own data over time, without keeping any model. Signed-in users ask Ciel to save a CSV/TSV ("simpan file ini ke datasetku") or to log rows from the chat ("catat: hari ini belajar 3 jam, nilai kuis 80"). The new tool Ciel Dataset Store (`manage_dataset`) grows one dataset per topic, and Table Analyst and ML Analyst read it by name, so statistics and models always use the whole history.
 - Storage: `~/.ciel_ai/user_datasets/<owner>/<name>.csv` on the Langflow host. The owner comes from the app (same hash as long-term memory), never from the Agent. Anonymous visitors store nothing, and names cannot leave the owner's folder. Limits: 5 datasets, 10.000 rows and 1 MB each.

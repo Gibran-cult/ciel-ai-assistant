@@ -34,7 +34,7 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install requests chromadb "streamlit>=1.45"
+          python -m pip install requests chromadb "streamlit>=1.45" "pypdf>=6"
 
       - name: Validate flow JSON
         run: |
@@ -73,4 +73,6 @@ jobs:
             tests.test_pricing \
             tests.test_privacy \
             tests.test_login \
-            tests.test_keep_alive
+            tests.test_keep_alive \
+            tests.test_theme \
+            tests.test_pdf_attachments

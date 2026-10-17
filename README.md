@@ -18,6 +18,7 @@ The Streamlit app (`app.py`) is a thin public frontend; the Langflow flow, the l
 - **Public-deployment safeguards:** one Langflow session per chat, hourly rate limits, no internal details in error messages (a Request ID instead).
 - **Privacy:** a privacy page that follows the deployment's configuration, a "Data saya" panel where signed-in users view and delete their memories and delete their server-side chat history, and a 30-day retention script for server-side messages.
 - **Photos** read by a local vision model, and **projects** with shared context files.
+- **PDF attachments** (chat and projects): the app extracts the text with `pypdf` before sending it, like any text file (no OCR, so scanned PDFs are refused with a hint to send them as photos; password-protected PDFs are refused; extraction stops at the per-file character limit or 100 pages).
 - **Testing:** offline CI suite, flow contract tests, and live quality collection with per-case session isolation.
 
 ## Architecture
@@ -91,7 +92,7 @@ schtasks /Create /TN "Ciel prune chat history" /SC DAILY /ST 03:00 /TR "cmd /c c
 
 ## Requirements
 
-Python and the dependencies in `requirements.txt` (`streamlit[auth]>=1.45`, `requests`, `python-dotenv`) for the app. The backend host needs Langflow 1.12.4, Ollama (`qwen2.5vl:3b` for images, `nomic-embed-text-v2-moe` for memory embeddings), Chroma, and ngrok.
+Python and the dependencies in `requirements.txt` (`streamlit[auth]>=1.54`, `requests`, `python-dotenv`, `pypdf>=6`) for the app. The backend host needs Langflow 1.12.4, Ollama (`qwen2.5vl:3b` for images, `nomic-embed-text-v2-moe` for memory embeddings), Chroma, and ngrok.
 
 ## Environment Variables
 
