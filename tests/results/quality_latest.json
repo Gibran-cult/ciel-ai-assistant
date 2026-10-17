@@ -1,24 +1,32 @@
 {
   "project": "Ciel AI Master",
-  "version": "v1.5.1",
-  "generated_at": "2026-10-14T16:20:54.087056+00:00",
+  "version": "v1.8.0",
+  "generated_at": "2026-10-17T13:49:51.853920+00:00",
   "overall": {
-    "status": "healthy",
-    "score": 1.0
+    "status": "degraded",
+    "score": 0.8
   },
   "response_quality": {
-    "passed": 9,
-    "failed": 0,
+    "passed": 8,
+    "failed": 1,
     "total": 9,
-    "pass_rate": 1.0,
-    "status": "healthy",
-    "failed_cases": []
+    "pass_rate": 0.8888888888888888,
+    "status": "degraded",
+    "failed_cases": [
+      {
+        "id": "research_machine_learning_01",
+        "reasons": [
+          "Tidak ada satupun nilai expected_any yang ditemukan."
+        ],
+        "answer_preview": "Ini rangkuman terbarunya, aku pilih yang paling penting aja:  **Arah riset** - Pretraining model besar bukan lagi jadi garis depan riset. Fokus sekarang bergeser ke test-time compute (kemampuan model \"berpikir\" lebih lama saat menjawab), world model/generative simulator, embodied grounding, serta arsitektur alternatif seperti state-space model (Mamba-2), flow matching, dan mixture-of-experts. - Model open-weight dari Tiongkok naik cukup tajam: dari 9% penyebutan di makalah arXiv (2024) jadi 31% (2026), dan Qwen kini menyalip Llama dalam hal penyebutan. - AI mulai dipakai untuk mempercepat riset AI itu sendiri. Di Anthropic, porsi pekerjaan R&D model yang dinilai \"dipimpin AI\" naik dari di bawah 1% (Februari 2026) ke 26% (Agustus 2026), dengan manusia tetap mengawasi.  **Adopsi industri** - Pemakaian AI sudah luas tapi skalanya masih terbatas: McKinsey (November 2025) mencatat 88% responden memakai AI di minimal satu fungsi bisnis (naik dari 78%), tapi baru sekitar sepertiga yang mulai melakukan scaling, 23% sudah scaling sistem agentic, dan 39% masih bereksperimen. - Ada sumber dengan gambaran lebih optimistis (8 dari 10 perusahaan BFSI/tech/retail mengaku sudah deploy GenAI/LLM),"
+      }
+    ]
   },
   "performance": {
-    "first_request_s": 17.433,
-    "warm_median_s": 14.583,
-    "overall_median_s": 14.621,
-    "p95_s": 16.735
+    "first_request_s": 6.326,
+    "warm_median_s": 6.768,
+    "overall_median_s": 6.366,
+    "p95_s": 18.7
   },
   "resilience": {
     "passed": 1,
@@ -33,11 +41,11 @@
     "context_reduction_k5_percent": 60.7
   },
   "versioning": {
-    "flow_snapshot": "flow/v1.5.1/Ciel_AI_Long-Term_Memory_Master.json"
+    "flow_snapshot": "flow/v1.8.0/Ciel_AI_Long-Term_Memory_Master.json"
   },
   "automated_checks": {
-    "passed": 5,
-    "failed": 0,
+    "passed": 4,
+    "failed": 1,
     "total": 5,
     "details": {
       "resilience": {
@@ -49,8 +57,8 @@
         "return_code": 0
       },
       "response_quality": {
-        "passed": true,
-        "return_code": 0
+        "passed": false,
+        "return_code": 1
       },
       "memory_multi_query": {
         "passed": true,

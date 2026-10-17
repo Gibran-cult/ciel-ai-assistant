@@ -85,8 +85,12 @@
     "question": "Apa itu overfitting?",
     "checks": {
       "expected_contains": [
-        "model",
-        "training"
+        "model"
+      ],
+      "expected_any": [
+        "training",
+        "data latihan",
+        "pelatihan"
       ],
       "min_length": 80
     },
