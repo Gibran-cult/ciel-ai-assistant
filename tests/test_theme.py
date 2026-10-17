@@ -72,6 +72,14 @@ class ThemeTokensTest(unittest.TestCase):
         self.assertIn(f'{scope} [data-testid="stExpander"] summary', self.css)
         # Streamlit 1.65 draws the text input box on this element.
         self.assertIn('[data-testid="stTextInputRootElement"] {', self.css)
+        # Disabled buttons ("Hapus semua memoriku" before its checkbox) must
+        # not pick up the hover background: it met Streamlit's light-theme
+        # disabled text and hid the label. The rule must come after the
+        # primary-button rules so it also wins for disabled primary buttons.
+        disabled = f"{scope} .stButton > button:disabled:hover"
+        self.assertIn(disabled, self.css)
+        self.assertGreater(self.css.index(disabled), self.css.index(f'{scope} .stButton > button[kind="primary"]:hover'))
+        self.assertIn(f'{scope} .stButton > button:disabled :is(p, [data-testid="stIconMaterial"]) {{ color: inherit; }}', self.css)
         # Project file uploader: button, size/type hint and the "?" help icon.
         self.assertIn('[data-testid="stFileUploaderDropzone"] button {', self.css)
         self.assertIn('[data-testid="stFileUploaderDropzoneInstructions"] span { color: var(--c-faint); }', self.css)

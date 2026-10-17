@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Disabled buttons stay readable on hover
+- In the account menu, "Hapus semua memoriku", "Hapus semua datasetku" and "Hapus riwayat chat-ku di server" (disabled until their checkbox is ticked) lost their label when the pointer was on them in dark mode: the hover background met Streamlit's light-theme disabled text (`rgba(28, 27, 25, 0.4)` on `#2a2824`). Without hover they looked exactly like enabled buttons.
+- Disabled buttons now have their own rule (after the primary-button rules): transparent background, thin border, `--c-faint` text and icon, `not-allowed` cursor, and no change on hover. Checked with a real pointer hover on Streamlit 1.65: 5.7:1 in dark mode and 5.5:1 in light mode, and visibly muted next to enabled buttons. `tests/test_theme.py` covers the rule and its order.
+
 ### Dark mode inside popovers
 - In dark mode the account menu showed "Data saya", "Tampilkan memoriku", "Tampilkan datasetku" and "Keluar" as light boxes with light text (contrast about 1.1:1), and "Proyek baru" had a light text box with light text. Popover content renders outside `.stApp`, and the button and expander rules were scoped to `.stApp`; on Streamlit 1.65 the text input box is also drawn on a new element (`stTextInputRootElement`).
 - Button, primary-button and expander rules now cover `:is(.stApp, [data-testid="stPopoverBody"])` (same specificity as before), the text input rule includes `stTextInputRootElement`, and success/error/warning messages use `--c-ok`/`--c-err`/`--c-warn` (they were 3.2-3.4:1 in dark mode).
