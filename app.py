@@ -412,6 +412,18 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     font-weight: 600;
 }
 :is(.stApp, [data-testid="stPopoverBody"]) .stButton > button[kind="primary"]:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); }
+/* Disabled buttons (e.g. "Hapus semua memoriku" until its checkbox is
+   ticked) look muted and stay the same on hover; otherwise the hover
+   background met Streamlit's light-theme disabled text and hid the label. */
+:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button:disabled,
+:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button:disabled:hover {
+    background: transparent;
+    border-color: var(--c-line);
+    color: var(--c-faint);
+    cursor: not-allowed;
+    transform: none;
+}
+:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button:disabled :is(p, [data-testid="stIconMaterial"]) { color: inherit; }
 .st-key-clearchat .stButton > button {
     border-color: transparent;
     color: var(--c-muted);
