@@ -26,6 +26,11 @@
 - Quality collector (`tests/results/quality_latest.json`, labeled v1.8.0): response quality 8/9, median 6.4 s, P95 18.7 s (was 14.6 s and 16.7 s). The failed case, research_machine_learning_01, answered on topic with sources but without the keyword; three reruns passed. knowledge_overfitting_01 now accepts "training", "data latihan" or "pelatihan" (an earlier run failed on "data latihan").
 - New `tests/test_flow_v180_contract.py` (in CI): only the prompt changes from v1.7.0, every v1.7.0 line stays in order, both research modes are routed, and the sub-flow keeps its limits, source rule, thinking-off setting, anti-ngarang rules and global-variable keys.
 
+### Send button clear of Streamlit Cloud's badges on phones
+- On Android the send button sat under Streamlit Community Cloud's bottom-right badges (Streamlit logo and creator avatar). Cloud runs the app in an iframe and draws those badges in the page around it, so app CSS can't move or hide them.
+- `UI_JS` marks `<html data-ciel-hosted>` when the app runs inside an iframe; on screens up to 960px wide (where the composer reaches that corner) the composer is lifted by 3.5rem and the end of the chat gets matching room. Run locally, nothing changes; on wide screens the composer is centred and never reaches the badges, so it isn't lifted.
+- Checked on Streamlit 1.65: at 375px inside an iframe the send button ends 69px above the bottom edge (it used to sit inside the badge area); opened directly or at 1280px inside an iframe, the composer is unchanged. `tests/test_theme.py` covers the flag and the rule.
+
 ### Disabled buttons stay readable on hover
 - In the account menu, "Hapus semua memoriku", "Hapus semua datasetku" and "Hapus riwayat chat-ku di server" (disabled until their checkbox is ticked) lost their label when the pointer was on them in dark mode: the hover background met Streamlit's light-theme disabled text (`rgba(28, 27, 25, 0.4)` on `#2a2824`). Without hover they looked exactly like enabled buttons.
 - Disabled buttons now have their own rule (after the primary-button rules): transparent background, thin border, `--c-faint` text and icon, `not-allowed` cursor, and no change on hover. Checked with a real pointer hover on Streamlit 1.65: 5.7:1 in dark mode and 5.5:1 in light mode, and visibly muted next to enabled buttons. `tests/test_theme.py` covers the rule and its order.
