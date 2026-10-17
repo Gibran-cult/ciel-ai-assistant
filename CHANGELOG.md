@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Dark mode inside popovers
+- In dark mode the account menu showed "Data saya", "Tampilkan memoriku", "Tampilkan datasetku" and "Keluar" as light boxes with light text (contrast about 1.1:1), and "Proyek baru" had a light text box with light text. Popover content renders outside `.stApp`, and the button and expander rules were scoped to `.stApp`; on Streamlit 1.65 the text input box is also drawn on a new element (`stTextInputRootElement`).
+- Button, primary-button and expander rules now cover `:is(.stApp, [data-testid="stPopoverBody"])` (same specificity as before), the text input rule includes `stTextInputRootElement`, and success/error/warning messages use `--c-ok`/`--c-err`/`--c-warn` (they were 3.2-3.4:1 in dark mode).
+- The project file uploader (sidebar, shown once a project exists) had a light "Upload" button, an invisible "200MB per file • TXT, ..." hint (1.06:1) and an invisible "?" help icon. The button, the hint and the help icon (`stTooltipIcon`, which needed a more specific selector than Streamlit's own) now use the tokens.
+- The account menu needs a signed-in user, so it was checked on a scratch page with the app's own CSS and the same widgets, on Streamlit 1.54 and 1.65: every text in both popovers reaches 4.5:1 in both themes. A contrast scan of chat, pricing, privacy and sign-in on 1.65 found nothing below 4.5:1 in either theme. `tests/test_theme.py` covers the popover scope, the input element and the message colours.
+
 ### PDF attachments
 - PDFs can be attached in chat and added to projects. The backend only takes text, so `read_text_file` extracts the text with `pypdf` (new dependency, `pypdf>=6` in `requirements.txt` and CI) and then treats it like any text file: same per-file character limit, truncation flag and prompt section.
 - Extraction stops once the text passes `MAX_FILE_CHARS` or after `MAX_PDF_PAGES` (100) pages, so a large upload doesn't keep the server busy. No OCR: a PDF without extractable text (e.g. a scan) is refused with a hint to send it as a photo; password-protected and damaged PDFs are refused with a short message (damaged ones are logged).

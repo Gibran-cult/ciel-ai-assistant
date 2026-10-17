@@ -166,13 +166,36 @@ header[data-testid="stHeader"] button,
 [data-testid="stChatInputFileUploadButton"] button:hover { color: var(--c-text); }
 [data-testid="stChatMessageAvatarCustom"],
 [data-testid="stChatMessageAvatarCustom"] [data-testid="stIconMaterial"] { background: var(--c-surface); color: var(--c-text); }
-.stApp [data-testid="stExpander"] summary { color: var(--c-text); background: transparent; }
-.stApp [data-testid="stExpander"] summary:hover { background: var(--c-raised); }
+/* Popover content (account menu, "Proyek baru") renders outside .stApp,
+   so widget rules below cover both. */
+:is(.stApp, [data-testid="stPopoverBody"]) [data-testid="stExpander"] summary { color: var(--c-text); background: transparent; }
+:is(.stApp, [data-testid="stPopoverBody"]) [data-testid="stExpander"] summary:hover { background: var(--c-raised); }
+/* File uploader (project files) and help icons: Streamlit colours the
+   button, the size/type hint and the "?" icon from the light theme. */
+[data-testid="stFileUploaderDropzone"] button {
+    background: var(--c-surface);
+    border: 1px solid var(--c-line-strong);
+    color: var(--c-text);
+}
+[data-testid="stFileUploaderDropzone"] button:hover { background: var(--c-raised); border-color: var(--c-control); }
+[data-testid="stFileUploaderDropzone"] button [data-testid="stIconMaterial"] { color: inherit; }
+[data-testid="stFileUploaderDropzoneInstructions"] span { color: var(--c-faint); }
+[data-testid="stTooltipIcon"] [data-testid="stTooltipHoverTarget"] svg.icon { stroke: var(--c-faint); }
+[data-testid="stAlertContentSuccess"] { color: var(--c-ok); }
+[data-testid="stAlertContentError"] { color: var(--c-err); }
+[data-testid="stAlertContentWarning"] { color: var(--c-warn); }
+[data-testid="stAlertContentInfo"] { color: var(--c-text); }
+[data-testid="stPopoverBody"] [data-testid="stExpander"] details {
+    border: 1px solid var(--c-line);
+    border-radius: var(--r-md);
+    background: transparent;
+}
 .stMarkdown code { background: var(--c-raised); color: var(--c-text); }
 [data-testid="stHeaderActionElements"] svg { stroke: var(--c-faint); }
 [role="tooltip"] > div { background: var(--c-surface); }
 [data-testid="stTooltipContent"] { color: var(--c-text); }
-[data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="textarea"] {
+[data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="textarea"],
+[data-testid="stTextInputRootElement"] {
     background: var(--c-raised);
     border-color: var(--c-line-strong);
 }
@@ -365,7 +388,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 .ciel-note p { margin: 0 0 0.6rem; }
 
 /* ---------- Buttons ---------- */
-.stApp .stButton > button,
+:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button,
 [data-testid="stSidebar"] [data-testid="stPopover"] > button {
     border-radius: var(--r-md);
     border: 1px solid var(--c-line-strong);
@@ -374,21 +397,21 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     font-weight: 500;
     transition: transform 0.4s var(--ease), background-color 0.4s var(--ease), border-color 0.4s var(--ease);
 }
-.stApp .stButton > button:hover,
+:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button:hover,
 [data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
     background: var(--c-raised);
     border-color: var(--c-faint);
 }
 [data-testid="stSidebar"] [data-testid="stPopover"] button { background: transparent; }
 [data-testid="stSidebar"] [data-testid="stPopover"] button:hover { background: var(--c-raised); }
-.stApp .stButton > button:active { transform: translateY(1px); }
-.stApp .stButton > button[kind="primary"] {
+:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button:active { transform: translateY(1px); }
+:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button[kind="primary"] {
     background: var(--c-accent);
     border-color: var(--c-accent);
     color: var(--c-accent-ink);
     font-weight: 600;
 }
-.stApp .stButton > button[kind="primary"]:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); }
+:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button[kind="primary"]:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); }
 .st-key-clearchat .stButton > button {
     border-color: transparent;
     color: var(--c-muted);
@@ -679,7 +702,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     [data-testid="stChatMessage"] { gap: 0.65rem; }
     [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) { padding: 0.75rem 0.85rem; }
     [data-testid="stBottomBlockContainer"] { padding-left: 0.7rem; padding-right: 0.7rem; padding-bottom: 1rem; }
-    .stApp .stButton > button,
+    :is(.stApp, [data-testid="stPopoverBody"]) .stButton > button,
     [data-testid="stSidebar"] [data-testid="stPopover"] > button { min-height: 2.75rem; }
 }
 </style>
