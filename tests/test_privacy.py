@@ -162,7 +162,7 @@ class AppDataControlsTest(unittest.TestCase):
         import logging
         import uuid
         return load_app_functions(
-            ("memory_admin", "own_session_ids", "delete_server_chat_history"),
+            ("memory_admin", "own_session_ids", "delete_langflow_sessions", "delete_server_chat_history"),
             requests=requests, uuid=uuid, json=json, logger=logging.getLogger("test_privacy"),
             memory_owner_id=lambda: owner,
             NGROK_URL="https://example.invalid", NGROK_USER="u", NGROK_PASSWORD="p",
@@ -244,6 +244,17 @@ class PrivacyPageTest(unittest.TestCase):
         self.assertNotIn("hubungi kami", minimal)
         self.assertNotIn("mengingat konteks belajarmu", minimal)
         self.assertIn("disampaikan ke pengelola", minimal)
+
+    def test_sidebar_history_text_follows_the_chat_store(self):
+        saved = self.text(retention_days=30, memory_enabled=True, data_controls=True, history_saved=True)
+        self.assertIn("disimpan di database Ciel", saved)
+        self.assertIn("isi file yang kamu tambahkan ke proyek", saved)
+        self.assertIn("Hapus proyek", saved)
+        self.assertIn("Tanpa login, riwayat dan proyek ini hanya ada di browsermu", saved)
+
+        session_only = self.text(retention_days=30, memory_enabled=True, data_controls=True)
+        self.assertIn("hilang saat tab ditutup", session_only)
+        self.assertNotIn("database Ciel", session_only)
 
     def test_page_covers_the_pdp_checklist(self):
         # UU 27/2022: operator identity (Pasal 5), purpose and basis (20-21),

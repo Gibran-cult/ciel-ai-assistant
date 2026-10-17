@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from PIL import Image
 from pypdf import PdfReader
 
+from chat_store import ChatStore
 from login import render_login
 from pricing import render_pricing, safe_contact_url
 from privacy import render_privacy
@@ -424,11 +425,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     transform: none;
 }
 :is(.stApp, [data-testid="stPopoverBody"]) .stButton > button:disabled :is(p, [data-testid="stIconMaterial"]) { color: inherit; }
-.st-key-clearchat .stButton > button {
-    border-color: transparent;
-    color: var(--c-muted);
-}
-.st-key-clearchat .stButton > button:hover {
+.stButton:is([class*="st-key-delchat_"], [class*="st-key-delproj_"]) > button:not(:disabled):hover {
     color: var(--c-err);
     border-color: rgba(163, 59, 44, 0.4);
     background: transparent;
@@ -658,6 +655,23 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+/* History row: the title fills the row; the options menu stays small and
+   always visible (no hover-only reveal, which touch screens can't reach). */
+[class*="st-key-chatrow_"] { flex-wrap: nowrap; align-items: center; gap: 0.25rem; }
+[class*="st-key-chatrow_"] > .stElementContainer { flex: 1 1 0; min-width: 0; }
+[class*="st-key-chatrow_"] [data-testid="stPopover"] { flex: 0 0 auto; width: auto; }
+[data-testid="stSidebar"] [class*="st-key-chatrow_"] [data-testid="stPopoverButton"] {
+    width: 2.2rem;
+    min-height: 2.2rem;
+    padding: 0;
+    justify-content: center;
+    border-color: transparent;
+    background: transparent;
+    color: var(--c-faint);
+}
+[data-testid="stSidebar"] [class*="st-key-chatrow_"] [data-testid="stPopoverButton"]:hover { color: var(--c-text); background: var(--c-raised); }
+/* The ⋯ icon already says "menu"; Streamlit's open/close chevron is noise here. */
+[class*="st-key-chatrow_"] [data-testid="stPopoverButton"] > div > div:last-child:not(:first-child) { display: none; }
 [data-testid="stSidebar"] [data-testid="stFileUploader"] section {
     background: var(--c-bg);
     border: 1px dashed var(--c-control);
@@ -978,6 +992,18 @@ MEMORY_ADMIN_NODE_ID = get_config("MEMORY_ADMIN_NODE_ID") or "CielMemoryAdmin-ad
 # tools/prune_chat_history.py); dipakai untuk teks halaman Privasi.
 CHAT_RETENTION_DAYS = get_int_config("CHAT_RETENTION_DAYS", 30)
 
+# Opsional: Supabase untuk menyimpan riwayat chat dan proyek sidebar pengguna
+# yang login (skema di docs/chat_store.sql). Tanpa ini keduanya hanya hidup
+# selama sesi.
+SUPABASE_URL = get_config("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = get_config("SUPABASE_SERVICE_KEY")
+
+CHAT_STORE = (
+    ChatStore(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    if AUTH_ENABLED and SUPABASE_URL and SUPABASE_SERVICE_KEY
+    else None
+)
+
 # Bersihkan URL
 if NGROK_URL:
     NGROK_URL = NGROK_URL.rstrip("/")
@@ -1020,7 +1046,8 @@ if missing_config:
 # SESSION STATE
 # ============================================================
 
-# Riwayat chat dan proyek hanya hidup selama sesi browser ini.
+# Chat dan proyek hanya hidup selama sesi browser ini, kecuali untuk
+# pengguna login saat CHAT_STORE aktif (dimuat di bawah USER IDENTITY).
 if "chats" not in st.session_state:
     st.session_state.chats = {}
 
@@ -1071,6 +1098,75 @@ def memory_owner_id():
 
 def user_key():
     return memory_owner_id() or st.session_state.visitor_id
+
+
+def chat_owner():
+    """Pemilik chat dan proyek tersimpan; kosong jika tidak login atau tanpa database."""
+    return memory_owner_id() if CHAT_STORE else ""
+
+
+def sync_chat_owner():
+    """
+    Muat proyek dan riwayat tersimpan saat sesi dimulai atau akun berganti.
+    Data akun sebelumnya dibuang dari sesi, supaya tidak terlihat lagi
+    setelah keluar.
+    """
+    owner = chat_owner()
+    previous = st.session_state.get("chats_owner", "")
+
+    if owner == previous:
+        return
+
+    st.session_state.chats_owner = owner
+
+    if previous:
+        st.session_state.chats = {}
+        st.session_state.projects = {}
+        st.session_state.active_chat = None
+        st.session_state.active_project = None
+
+    if not owner:
+        return
+
+    # Proyek dulu, supaya chat yang dimuat langsung masuk ke proyeknya. Jika
+    # proyek gagal dimuat, project_id chat tetap disimpan apa adanya: chat
+    # tetap tampil di "Semua chat" dan kembali ke proyeknya saat berhasil.
+    projects = CHAT_STORE.load_projects(owner)
+
+    if projects is None:
+        store_notice("Proyek tersimpan gagal dimuat.")
+    else:
+        st.session_state.projects = {**projects, **st.session_state.projects}
+
+    loaded = CHAT_STORE.load(owner)
+
+    if loaded is None:
+        store_notice("Riwayat chat tersimpan gagal dimuat.")
+        return
+
+    st.session_state.chats = {**loaded, **st.session_state.chats}
+
+
+def store_notice(text):
+    """Pesan gagal untuk sidebar; st.toast tepat sebelum st.rerun tidak sempat tampil."""
+    st.session_state.store_notice = text
+
+
+def persist_chat(chat):
+    owner = chat_owner()
+
+    if owner and not CHAT_STORE.save(owner, chat):
+        store_notice("Riwayat chat gagal disimpan.")
+
+
+def persist_project(project):
+    owner = chat_owner()
+
+    if owner and not CHAT_STORE.save_project(owner, project):
+        store_notice("Proyek gagal disimpan.")
+
+
+sync_chat_owner()
 
 
 # ============================================================
@@ -1661,6 +1757,21 @@ def own_session_ids(session_ids, owner):
     return [s for s in session_ids if str(s).startswith(prefix)]
 
 
+def delete_langflow_sessions(session_ids):
+    """Hapus pesan Langflow dari session ini. Melempar RequestException jika gagal."""
+
+    # Langflow menerima paling banyak 500 session per permintaan.
+    for start in range(0, len(session_ids), 500):
+        deleted = requests.delete(
+            f"{NGROK_URL}/api/v1/monitor/messages/sessions",
+            headers={"Accept": "application/json", "x-api-key": LANGFLOW_API_KEY},
+            auth=(NGROK_USER, NGROK_PASSWORD),
+            json=session_ids[start:start + 500],
+            timeout=60,
+        )
+        deleted.raise_for_status()
+
+
 def delete_server_chat_history():
     """Hapus semua pesan Langflow dari session milik akun yang sedang login."""
 
@@ -1670,29 +1781,16 @@ def delete_server_chat_history():
     if not owner:
         return {"ok": False, "error": "login_required"}
 
-    headers = {"Accept": "application/json", "x-api-key": LANGFLOW_API_KEY}
-    auth = (NGROK_USER, NGROK_PASSWORD)
-
     try:
         listing = requests.get(
             f"{NGROK_URL}/api/v1/monitor/messages/sessions",
-            headers=headers,
-            auth=auth,
+            headers={"Accept": "application/json", "x-api-key": LANGFLOW_API_KEY},
+            auth=(NGROK_USER, NGROK_PASSWORD),
             timeout=60,
         )
         listing.raise_for_status()
         mine = own_session_ids(listing.json(), owner)
-
-        # Langflow menerima paling banyak 500 session per permintaan.
-        for start in range(0, len(mine), 500):
-            deleted = requests.delete(
-                f"{NGROK_URL}/api/v1/monitor/messages/sessions",
-                headers=headers,
-                auth=auth,
-                json=mine[start:start + 500],
-                timeout=60,
-            )
-            deleted.raise_for_status()
+        delete_langflow_sessions(mine)
 
     except (requests.exceptions.RequestException, ValueError, TypeError) as error:
         logger.error(
@@ -1765,6 +1863,15 @@ def delete_all_my_datasets():
 
 def delete_my_chat_history():
     result = delete_server_chat_history()
+    owner = chat_owner()
+
+    if owner and result.get("ok"):
+        if CHAT_STORE.delete_all(owner):
+            st.session_state.chats = {}
+            new_chat()
+        else:
+            result = {"ok": False, "error": "request_failed"}
+
     set_data_notice(
         result,
         f"Riwayat chat-mu di server dihapus ({result.get('deleted_sessions', 0)} percakapan).",
@@ -1857,6 +1964,12 @@ TABLE_FILE_TYPES = ("csv", "tsv")
 MAX_TABLE_CHARS = 1_000_000
 TABLE_PREVIEW_ROWS = 20
 MAX_CHAT_TABLES = 5
+# Proyek disimpan utuh di database untuk pengguna login (satu baris per
+# proyek), termasuk tabel CSV/TSV. Batas per proyek: satu tabel ukuran penuh
+# (MAX_TABLE_CHARS) plus banyak file teks (masing-masing <= MAX_FILE_CHARS).
+# Terburuk sekitar 20 MB per akun sebelum kompresi Postgres.
+MAX_PROJECTS = 10
+MAX_PROJECT_CHARS = 2_000_000
 HISTORY_LIMIT = 12
 DEFAULT_FILE_QUESTION = "Tolong baca dan rangkum file yang saya lampirkan."
 DEFAULT_IMAGE_QUESTION = "Tolong jelaskan gambar yang saya lampirkan."
@@ -2331,26 +2444,46 @@ def create_project():
     if not name:
         return
 
+    if len(st.session_state.projects) >= MAX_PROJECTS:
+        st.toast(
+            f"Maksimal {MAX_PROJECTS} proyek. Hapus proyek lama dulu.",
+            icon=":material/error:",
+        )
+        return
+
     project_id = uuid.uuid4().hex[:8]
 
-    st.session_state.projects[project_id] = {
+    project = st.session_state.projects[project_id] = {
         "id": project_id,
         "name": name,
+        "created": time.time(),
         "files": [],
     }
 
+    persist_project(project)
     st.session_state.newproj_name = ""
     select_project(project_id)
 
 
 def delete_project(project_id):
+    owner = chat_owner()
+
+    if owner and not CHAT_STORE.delete_project(owner, project_id):
+        store_notice("Proyek gagal dihapus. Silakan coba lagi.")
+        return
+
     st.session_state.projects.pop(project_id, None)
 
     for chat in st.session_state.chats.values():
         if chat["project_id"] == project_id:
             chat["project_id"] = None
+            persist_chat(chat)
 
     select_project(None)
+
+
+def project_file_chars(item):
+    return len(item["text"]) + len(item.get("table", {}).get("text", ""))
 
 
 def add_project_files(project_id, upload_key):
@@ -2361,6 +2494,8 @@ def add_project_files(project_id, upload_key):
         return
 
     known = {item["name"] for item in project["files"]}
+    used = sum(project_file_chars(item) for item in project["files"])
+    added = False
 
     for uploaded in uploaded_files:
 
@@ -2369,12 +2504,23 @@ def add_project_files(project_id, upload_key):
 
         data, error = read_text_file(uploaded)
 
+        if not error and used + project_file_chars(data) > MAX_PROJECT_CHARS:
+            error = (
+                f"{uploaded.name}: ruang file proyek ini penuh. "
+                "Hapus file lain dulu atau buat proyek baru."
+            )
+
         if error:
             st.toast(error, icon=":material/error:")
             continue
 
         project["files"].append(data)
         known.add(uploaded.name)
+        used += project_file_chars(data)
+        added = True
+
+    if added:
+        persist_project(project)
 
     # Ganti key uploader agar daftar yang sudah diproses dikosongkan.
     st.session_state.upload_nonce += 1
@@ -2387,15 +2533,41 @@ def remove_project_file(project_id, name):
         project["files"] = [
             item for item in project["files"] if item["name"] != name
         ]
+        persist_project(project)
 
 
-def clear_chat():
-    chat_id = st.session_state.active_chat
+def delete_chat(chat_id):
+    """Hapus satu chat dari sidebar, database, dan memori percakapan Langflow."""
 
-    if chat_id:
-        st.session_state.chats.pop(chat_id, None)
+    owner = chat_owner()
 
-    new_chat()
+    if owner and not CHAT_STORE.delete(owner, chat_id):
+        store_notice("Chat gagal dihapus. Silakan coba lagi.")
+        return
+
+    st.session_state.chats.pop(chat_id, None)
+
+    try:
+        delete_langflow_sessions([f"{user_key()}-{chat_id}"])
+    except requests.exceptions.RequestException as error:
+        # Pesan di server tetap terhapus otomatis setelah CHAT_RETENTION_DAYS.
+        logger.error("chat_session_delete_error type=%s error=%s", type(error).__name__, error)
+
+    if st.session_state.active_chat == chat_id:
+        new_chat()
+
+
+def set_archived(chat_id, archived):
+    chat = st.session_state.chats.get(chat_id)
+
+    if chat is None:
+        return
+
+    chat["archived"] = archived
+    persist_chat(chat)
+
+    if archived and st.session_state.active_chat == chat_id:
+        new_chat()
 
 
 def queue_prompt(text):
@@ -2421,6 +2593,7 @@ def retry_last():
         }
 
         del messages[-2:]
+        persist_chat(active_chat())
 
 
 # ------------------------------------------------------------
@@ -2454,6 +2627,54 @@ def render_user(message):
             caption=[image["name"] for image in images],
             width=180,
         )
+
+
+def render_history_row(chat):
+    """Satu baris riwayat: judul membuka chat, menu berisi arsip dan hapus."""
+
+    chat_id = chat["id"]
+    is_active = chat_id == st.session_state.active_chat
+
+    with st.container(key=f"chatrow_{chat_id}", horizontal=True, gap="small"):
+
+        st.button(
+            short(chat["title"], 30),
+            key=f"chatactive_{chat_id}" if is_active else f"chat_{chat_id}",
+            on_click=select_chat,
+            args=(chat_id,),
+            width="stretch",
+        )
+
+        with st.popover("", icon=":material/more_horiz:", help="Opsi chat"):
+
+            if chat.get("archived"):
+                st.button(
+                    "Pulihkan",
+                    key=f"unarchive_{chat_id}",
+                    icon=":material/unarchive:",
+                    on_click=set_archived,
+                    args=(chat_id, False),
+                )
+            else:
+                st.button(
+                    "Arsipkan",
+                    key=f"archive_{chat_id}",
+                    icon=":material/archive:",
+                    on_click=set_archived,
+                    args=(chat_id, True),
+                )
+
+            # Hapus tidak bisa dibatalkan, jadi minta konfirmasi seperti panel "Data saya".
+            st.checkbox("Yakin hapus chat ini", key=f"delok_{chat_id}")
+
+            st.button(
+                "Hapus chat",
+                key=f"delchat_{chat_id}",
+                icon=":material/delete:",
+                disabled=not st.session_state.get(f"delok_{chat_id}"),
+                on_click=delete_chat,
+                args=(chat_id,),
+            )
 
 
 def render_error(content, index, show_retry):
@@ -2612,10 +2833,14 @@ with st.sidebar:
                     args=(active_project_id, item["name"]),
                 )
 
+            # Proyek tersimpan ikut terhapus dari database, jadi minta konfirmasi.
+            st.checkbox("Yakin hapus proyek ini", key=f"delprojok_{active_project_id}")
+
             st.button(
                 "Hapus proyek",
                 key=f"delproj_{active_project_id}",
                 icon=":material/delete:",
+                disabled=not st.session_state.get(f"delprojok_{active_project_id}"),
                 on_click=delete_project,
                 args=(active_project_id,),
             )
@@ -2629,7 +2854,12 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    history = sorted(
+    notice = st.session_state.pop("store_notice", None)
+
+    if notice:
+        st.toast(notice, icon=":material/error:")
+
+    project_chats = sorted(
         (
             chat
             for chat in st.session_state.chats.values()
@@ -2638,41 +2868,25 @@ with st.sidebar:
         ),
         key=lambda chat: chat["updated"],
         reverse=True,
-    )[:HISTORY_LIMIT]
+    )
+    history = [chat for chat in project_chats if not chat.get("archived")][:HISTORY_LIMIT]
+    archived = [chat for chat in project_chats if chat.get("archived")]
 
     if not history:
-        st.caption("Belum ada percakapan.")
+        st.caption("Semua chat sudah diarsipkan." if archived else "Belum ada percakapan.")
+
+    if CHAT_STORE and not logged_in():
+        st.caption("Masuk supaya riwayat chat tetap ada setelah halaman dimuat ulang.")
 
     with st.container(key="history"):
 
         for chat in history:
+            render_history_row(chat)
 
-            is_active = chat["id"] == st.session_state.active_chat
-
-            st.button(
-                short(chat["title"], 34),
-                key=(
-                    f"chatactive_{chat['id']}"
-                    if is_active
-                    else f"chat_{chat['id']}"
-                ),
-                on_click=select_chat,
-                args=(chat["id"],),
-            )
-
-    # --------------------------------------------------------
-    # CLEAR CHAT (AKSI SEKUNDER)
-    # --------------------------------------------------------
-
-    with st.container(key="clearchat"):
-
-        st.button(
-            "Hapus chat",
-            key="clearchat_btn",
-            icon=":material/delete:",
-            disabled=active_chat() is None,
-            on_click=clear_chat,
-        )
+        if archived:
+            with st.expander(f"Diarsipkan ({len(archived)})"):
+                for chat in archived:
+                    render_history_row(chat)
 
 
 # ============================================================
@@ -2945,6 +3159,7 @@ if current_view() == "privacy":
         data_controls=bool(MEMORY_ADMIN_FLOW_ID),
         contact_url=safe_contact_url(CONTACT_URL),
         operator=OPERATOR_NAME,
+        history_saved=CHAT_STORE is not None,
     )
     st.stop()
 
@@ -2959,6 +3174,7 @@ if current_view() == "login":
             if logged_in()
             else None
         ),
+        history_saved=CHAT_STORE is not None,
     )
     st.stop()
 
@@ -3177,6 +3393,7 @@ if pending_request:
         }
     )
     chat["updated"] = time.time()
+    persist_chat(chat)
 
     # Render ulang agar jawaban, riwayat sidebar, dan tombol retry tampil
     # dari state dengan struktur yang sama seperti pesan lama.

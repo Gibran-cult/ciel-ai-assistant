@@ -52,6 +52,10 @@ class LoginNotesTest(unittest.TestCase):
     def test_notes_explain_memory_versus_session_history(self):
         self.assertIn("sesi browser ini", self.notes(auth_enabled=True, rate_limits=(20, 60)))
 
+        saved = self.notes(auth_enabled=True, rate_limits=(20, 60), history_saved=True)
+        self.assertIn("dimuat ulang", saved)
+        self.assertNotIn("sesi browser ini", saved)
+
     def test_email_login_is_never_promised_as_working(self):
         self.assertIn("sedang disiapkan", self.notes(auth_enabled=True, rate_limits=(20, 60)))
 
@@ -106,7 +110,9 @@ class TopBarNavTest(unittest.TestCase):
             self.assertNotIn(label, sidebar_labels)
         self.assertNotIn("About long-term memory", [e.label for e in at.sidebar.expander])
         # Sidebar labels are Indonesian like the rest of the app.
-        for label in ("Chat baru", "Semua chat", "Hapus chat"):
+        # "Hapus chat" now lives in each history row's menu, so an empty
+        # sidebar has no delete button.
+        for label in ("Chat baru", "Semua chat"):
             self.assertIn(label, sidebar_labels)
         for label in ("New chat", "All chats", "Clear chat"):
             self.assertNotIn(label, sidebar_labels)
