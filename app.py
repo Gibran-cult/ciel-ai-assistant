@@ -743,6 +743,16 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     :is(.stApp, [data-testid="stPopoverBody"]) .stButton > button,
     [data-testid="stSidebar"] [data-testid="stPopover"] > button { min-height: 2.75rem; }
 }
+
+/* Streamlit Community Cloud runs the app in an iframe and lays its own
+   badges (Streamlit logo, creator avatar) over the bottom-right corner,
+   where app CSS can't reach. UI_JS marks that case with data-ciel-hosted;
+   where the composer reaches that corner (narrow screens), lift it and the
+   end of the chat clear of the badges. */
+@media (max-width: 960px) {
+    :root[data-ciel-hosted] [data-testid="stBottomBlockContainer"] { padding-bottom: 3.5rem; }
+    :root[data-ciel-hosted] .stMain .block-container { padding-bottom: 11.5rem; }
+}
 </style>
 """
 
@@ -833,6 +843,8 @@ NAV_SCROLL_JS = """
 # - Theme: data-ciel-theme on <html> overrides the device setting once the
 #   visitor uses the toggle (THEME_TOGGLE_HTML); the choice is kept in
 #   localStorage, and the page still works if storage is blocked.
+# - Hosted on Streamlit Cloud (inside its iframe): data-ciel-hosted on
+#   <html> lets CSS lift the composer above Cloud's corner badges.
 # - The chat composer's "+" tooltip lists every accepted extension
 #   ("Upload or drag and drop files (TXT, MD, ...)"); it is replaced with a
 #   short Indonesian hint, also used as the button's accessible name.
@@ -844,6 +856,10 @@ UI_JS = """
 
     const root = document.documentElement;
     const KEY = 'ciel-theme';
+
+    // Inside an iframe means Streamlit Community Cloud, whose badges cover
+    // the bottom-right corner (comparing windows is allowed cross-origin).
+    if (window.self !== window.top) root.dataset.cielHosted = '1';
     const UPLOAD_HINT = 'Lampirkan file atau foto';
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
 

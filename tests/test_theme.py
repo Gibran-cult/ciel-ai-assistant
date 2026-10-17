@@ -127,6 +127,15 @@ class ThemeScriptTest(unittest.TestCase):
         self.assertIn("prefersDark.addEventListener('change', apply)", self.js)
         self.assertIn("if (window.__cielUi) return;", self.js)
 
+    def test_composer_is_lifted_above_streamlit_cloud_badges(self):
+        # On Android the send button sat under Streamlit Cloud's corner
+        # badges, which live in the page around the app's iframe.
+        self.assertIn("if (window.self !== window.top) root.dataset.cielHosted = '1';", self.js)
+        css = app_constants()["CIEL_CSS"]
+        rule = css.split("@media (max-width: 960px) {\n    :root[data-ciel-hosted]", 1)
+        self.assertEqual(len(rule), 2, "hosted composer rule missing")
+        self.assertIn('[data-testid="stBottomBlockContainer"] { padding-bottom: 3.5rem; }', rule[1].split("}\n}", 1)[0])
+
     def test_upload_tooltip_is_short_and_in_indonesian(self):
         self.assertIn("const UPLOAD_HINT = 'Lampirkan file atau foto';", self.js)
         self.assertIn("tip.textContent.startsWith('Upload or drag and drop')", self.js)
