@@ -14,6 +14,7 @@ import requests
 import streamlit as st
 from dotenv import load_dotenv
 from PIL import Image
+from pypdf import PdfReader
 
 from login import render_login
 from pricing import render_pricing, safe_contact_url
@@ -56,9 +57,37 @@ st.set_page_config(
 # off-white cards, warm ink-black text and warm greys, so the ink-navy accent
 # is the only cool colour on screen (actions, the current page, verified
 # claims). Soft highlighter gold marks guesses.
+# Dark mode keeps the same roles on dark paper (DARK_TOKENS): it follows the
+# device unless the visitor picks a theme with the toggle (UI_JS sets
+# data-ciel-theme on <html>, which React never touches).
 # Styling is scoped through container keys (st-key-*) and stable
 # data-testid hooks so it survives Streamlit upgrades as far as possible.
-# Keep .streamlit/config.toml in step with these tokens.
+# Keep .streamlit/config.toml in step with the light tokens.
+
+DARK_TOKENS = """
+    color-scheme: dark;
+    --c-bg: #161513;
+    --c-surface: #1f1d1a;
+    --c-raised: #2a2824;
+    --c-line: rgba(236, 234, 228, 0.10);
+    --c-line-strong: rgba(236, 234, 228, 0.18);
+    --c-control: #827c72;
+    --c-text: #eceae4;
+    --c-muted: #b5b0a6;
+    --c-faint: #9c968c;
+    --c-accent: #9db3e8;
+    --c-accent-hover: #b4c5ee;
+    --c-accent-ink: #0e1730;
+    --c-accent-soft: rgba(157, 179, 232, 0.14);
+    --c-gold: #e9d06a;
+    --c-gold-ink: #2e2400;
+    --c-ok: #7cc49d;
+    --c-warn: #e3b24f;
+    --c-err: #f0907f;
+    --c-shimmer: rgba(236, 234, 228, 0.06);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30), 0 1px 1px rgba(0, 0, 0, 0.20);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
+"""
 
 CIEL_CSS = """
 <style>
@@ -82,6 +111,9 @@ CIEL_CSS = """
     --c-ok: #2e6a4c;
     --c-warn: #855a00;
     --c-err: #a33b2c;
+    --c-accent-soft: rgba(32, 58, 114, 0.10);
+    --c-shimmer: rgba(255, 255, 255, 0.7);
+    color-scheme: light;
     --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     --font-serif: "Fraunces", Georgia, "Times New Roman", serif;
     --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -92,6 +124,10 @@ CIEL_CSS = """
     --r-md: 10px;
     --r-lg: 16px;
 }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-ciel-theme="light"]) {{{DARK_TOKENS}}}
+}
+:root[data-ciel-theme="dark"] {{{DARK_TOKENS}}}
 
 /* ---------- Base ---------- */
 .stApp {
@@ -109,6 +145,35 @@ CIEL_CSS = """
 .stApp [data-testid="stMarkdownContainer"] { font-family: var(--font-sans); }
 /* Solid so content scrolling under the sticky top bar doesn't show through. */
 header[data-testid="stHeader"] { background: var(--c-bg); }
+
+/* Streamlit widgets take their colours from the light theme in config.toml.
+   Pointing them at the tokens changes nothing in light mode and makes them
+   follow dark mode. Popovers and tooltips render outside .stApp. */
+.stApp [data-testid="stCaptionContainer"] { color: var(--c-faint); }
+.stApp [data-testid="stPopover"] button { color: var(--c-text); }
+header[data-testid="stHeader"] button,
+[data-testid="stSidebarCollapseButton"] button,
+[data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] { color: var(--c-muted); }
+[data-testid="stPopoverBody"],
+[data-testid="stPopoverBody"] > div { background: var(--c-surface); color: var(--c-text); }
+[data-testid="stWidgetLabel"] p { color: var(--c-text); }
+[data-testid="stChatMessage"], [data-testid="stChatMessageContent"] { color: var(--c-text); }
+[data-testid="stChatInputFileUploadButton"] button { color: var(--c-muted); }
+[data-testid="stChatInputFileUploadButton"] button:hover { color: var(--c-text); }
+[data-testid="stChatMessageAvatarCustom"],
+[data-testid="stChatMessageAvatarCustom"] [data-testid="stIconMaterial"] { background: var(--c-surface); color: var(--c-text); }
+.stApp [data-testid="stExpander"] summary { color: var(--c-text); background: transparent; }
+.stApp [data-testid="stExpander"] summary:hover { background: var(--c-raised); }
+.stMarkdown code { background: var(--c-raised); color: var(--c-text); }
+[data-testid="stHeaderActionElements"] svg { stroke: var(--c-faint); }
+[role="tooltip"] > div { background: var(--c-surface); }
+[data-testid="stTooltipContent"] { color: var(--c-text); }
+[data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="textarea"] {
+    background: var(--c-raised);
+    border-color: var(--c-line-strong);
+}
+.stApp input, [data-testid="stPopoverBody"] input { color: var(--c-text); caret-color: var(--c-text); }
+.stApp input::placeholder, [data-testid="stPopoverBody"] input::placeholder { color: var(--c-faint); }
 #MainMenu, footer { visibility: hidden; }
 
 [data-testid="stMain"] .block-container,
@@ -156,7 +221,7 @@ header[data-testid="stHeader"] { background: var(--c-bg); }
 }
 body[data-ciel-nav-moving] [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) { transition: none; }
 body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topbar) { pointer-events: none; }
-[data-testid="stLayoutWrapper"]:has(> .st-key-navjs) { display: none; }
+[data-testid="stLayoutWrapper"]:has(> .st-key-pagejs) { display: none; }
 .st-key-topbar {
     background: var(--c-bg);
     padding-bottom: 1rem;
@@ -177,6 +242,37 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     font-weight: 500;
     letter-spacing: -0.02em;
     color: var(--c-text);
+}
+
+/* Theme toggle (THEME_TOGGLE_HTML): moon in light mode, sun in dark mode,
+   drawn as a mask so it takes the button's text colour. */
+.ciel-theme-toggle {
+    --ciel-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-md);
+    background: transparent;
+    color: var(--c-muted);
+    cursor: pointer;
+    transition: color 0.3s var(--ease), background-color 0.3s var(--ease);
+}
+.ciel-theme-toggle::before {
+    content: "";
+    width: 18px;
+    height: 18px;
+    background: currentColor;
+    -webkit-mask: var(--ciel-toggle-icon) center / contain no-repeat;
+    mask: var(--ciel-toggle-icon) center / contain no-repeat;
+}
+.ciel-theme-toggle:hover { color: var(--c-text); background: var(--c-raised); }
+:root[data-ciel-theme="dark"] .ciel-theme-toggle { --ciel-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='4' fill='none' stroke='black' stroke-width='1.8'/%3E%3Cpath d='M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E"); }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-ciel-theme="light"]) .ciel-theme-toggle { --ciel-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='4' fill='none' stroke='black' stroke-width='1.8'/%3E%3Cpath d='M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E"); }
 }
 
 /* Top bar nav: text links for pages, one outline button for the account.
@@ -350,7 +446,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     font-weight: 500;
     white-space: nowrap;
 }
-.ciel-label.is-ok { background: rgba(32, 58, 114, 0.10); color: var(--c-accent); }
+.ciel-label.is-ok { background: var(--c-accent-soft); color: var(--c-accent); }
 .ciel-label.is-guess { background: var(--c-gold); color: var(--c-gold-ink); }
 .stApp .ciel-hint { margin: 0 0 1.6rem; font-size: 0.84rem; line-height: 1.6; color: var(--c-muted); }
 .st-key-starters .stButton > button {
@@ -428,7 +524,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+    background: linear-gradient(90deg, transparent, var(--c-shimmer), transparent);
     transform: translateX(-100%);
     animation: ciel-shimmer 1.7s var(--ease) infinite;
 }
@@ -585,7 +681,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 </style>
 """
 
-st.markdown(CIEL_CSS, unsafe_allow_html=True)
+st.markdown(CIEL_CSS.replace("{{{DARK_TOKENS}}}", "{" + DARK_TOKENS + "}"), unsafe_allow_html=True)
 
 # Top bar that follows the scroll: scrolling down pushes it up behind the
 # header pixel for pixel, scrolling up pulls it back, and when scrolling
@@ -667,8 +763,73 @@ NAV_SCROLL_JS = """
 </script>
 """
 
-with st.container(key="navjs"):
+# Page details Streamlit gives no option for. One observer on <body> keeps
+# them applied as Streamlit re-renders:
+# - Theme: data-ciel-theme on <html> overrides the device setting once the
+#   visitor uses the toggle (THEME_TOGGLE_HTML); the choice is kept in
+#   localStorage, and the page still works if storage is blocked.
+# - The chat composer's "+" tooltip lists every accepted extension
+#   ("Upload or drag and drop files (TXT, MD, ...)"); it is replaced with a
+#   short Indonesian hint, also used as the button's accessible name.
+UI_JS = """
+<script>
+(() => {
+    if (window.__cielUi) return;
+    window.__cielUi = true;
+
+    const root = document.documentElement;
+    const KEY = 'ciel-theme';
+    const UPLOAD_HINT = 'Lampirkan file atau foto';
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const effectiveTheme = () => root.dataset.cielTheme || (prefersDark.matches ? 'dark' : 'light');
+
+    try {
+        const saved = localStorage.getItem(KEY);
+        if (saved === 'light' || saved === 'dark') root.dataset.cielTheme = saved;
+    } catch (error) { /* storage blocked: follow the device */ }
+
+    const apply = () => {
+        const label = effectiveTheme() === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap';
+        document.querySelectorAll('[data-ciel-theme-toggle]').forEach((button) => {
+            if (button.getAttribute('aria-label') !== label) {
+                button.setAttribute('aria-label', label);
+                button.title = label;
+            }
+        });
+        document.querySelectorAll('[data-testid="stTooltipContent"]').forEach((tip) => {
+            if (tip.textContent.startsWith('Upload or drag and drop')) tip.textContent = UPLOAD_HINT;
+        });
+        document.querySelectorAll('[data-testid="stChatInputFileUploadButton"] button').forEach((button) => {
+            if (button.getAttribute('aria-label') !== UPLOAD_HINT) button.setAttribute('aria-label', UPLOAD_HINT);
+        });
+    };
+
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('[data-ciel-theme-toggle]')) return;
+        const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+        root.dataset.cielTheme = next;
+        try { localStorage.setItem(KEY, next); } catch (error) { /* keep it for this visit only */ }
+        apply();
+    });
+
+    prefersDark.addEventListener('change', apply);
+    new MutationObserver(apply).observe(document.body, { childList: true, subtree: true });
+    apply();
+})();
+</script>
+"""
+
+# The icon is drawn in CSS (st.html's sanitizer strips inline SVG); UI_JS
+# handles clicks and keeps the accessible name in step with the theme.
+THEME_TOGGLE_HTML = (
+    '<button type="button" class="ciel-theme-toggle" data-ciel-theme-toggle '
+    'aria-label="Ganti tema"></button>'
+)
+
+with st.container(key="pagejs"):
     st.html(NAV_SCROLL_JS, unsafe_allow_javascript=True)
+    st.html(UI_JS, unsafe_allow_javascript=True)
 
 
 
@@ -1623,11 +1784,12 @@ THINKING_HTML = (
 )
 
 # File yang dilampirkan dibaca sebagai teks lalu disisipkan ke prompt.
-# Backend Langflow hanya menerima teks, jadi hanya format teks yang didukung.
+# Backend Langflow hanya menerima teks, jadi hanya format teks yang didukung;
+# PDF diubah menjadi teks dulu di sini (tanpa OCR, jadi PDF hasil scan ditolak).
 ALLOWED_FILE_TYPES = [
     "txt", "md", "markdown", "csv", "tsv", "json", "jsonl",
     "yaml", "yml", "xml", "html", "css", "js", "ts", "py",
-    "sql", "log", "ini", "toml",
+    "sql", "log", "ini", "toml", "pdf",
 ]
 ALLOWED_IMAGE_TYPES = ["png", "jpg", "jpeg", "bmp"]
 IMAGE_MIME = {
@@ -1641,6 +1803,9 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024
 THUMBNAIL_PX = 360
 MAX_FILES_PER_MESSAGE = 5
 MAX_FILE_CHARS = 40_000
+# Batas kerja ekstraksi PDF: berhenti setelah sekian halaman meski teksnya
+# belum mencapai MAX_FILE_CHARS (mis. ratusan halaman gambar tanpa teks).
+MAX_PDF_PAGES = 100
 # Satu salinan konteks file per permintaan; Agent juga memuat salinan
 # terakhir dari riwayat, jadi totalnya bisa dua kali lipat angka ini.
 MAX_CONTEXT_CHARS = 80_000
@@ -1703,15 +1868,58 @@ def split_error(text):
 # FILES
 # ------------------------------------------------------------
 
+def pdf_text(raw):
+    """
+    Ambil teks dari PDF tanpa OCR. Berhenti begitu teks melewati
+    MAX_FILE_CHARS atau setelah MAX_PDF_PAGES halaman, supaya PDF besar
+    tidak membuat server sibuk lama. ValueError jika PDF dikunci sandi.
+    """
+    reader = PdfReader(io.BytesIO(raw))
+
+    if reader.is_encrypted and not reader.decrypt(""):
+        raise ValueError("encrypted")
+
+    parts, total = [], 0
+
+    for page in reader.pages[:MAX_PDF_PAGES]:
+        text = (page.extract_text() or "").strip()
+        parts.append(text)
+        total += len(text)
+
+        if total > MAX_FILE_CHARS:
+            break
+
+    return "\n\n".join(part for part in parts if part)
+
+
 def read_text_file(uploaded):
     """Baca file unggahan sebagai teks. Kembalikan (data, error)."""
 
     raw = uploaded.getvalue()
 
-    if b"\x00" in raw[:4096]:
+    if file_extension(uploaded.name) == "pdf":
+        try:
+            text = pdf_text(raw)
+        except ValueError as error:
+            if str(error) == "encrypted":
+                return None, f"{uploaded.name}: PDF ini dikunci kata sandi."
+            logger.warning("pdf_read_error name=%s error=%s", uploaded.name, error)
+            return None, f"{uploaded.name}: PDF tidak bisa dibaca."
+        except Exception as error:  # pypdf raises many types on damaged files
+            logger.warning("pdf_read_error name=%s error=%s", uploaded.name, error)
+            return None, f"{uploaded.name}: PDF tidak bisa dibaca."
+
+        if not text:
+            return None, (
+                f"{uploaded.name}: tidak ada teks yang bisa dibaca di PDF ini "
+                "(mungkin hasil scan). Kirim sebagai foto agar Ciel bisa melihatnya."
+            )
+
+    elif b"\x00" in raw[:4096]:
         return None, f"{uploaded.name}: bukan file teks."
 
-    text = raw.decode("utf-8", errors="replace")
+    else:
+        text = raw.decode("utf-8", errors="replace")
 
     if file_extension(uploaded.name) in TABLE_FILE_TYPES:
         return read_table_text(uploaded.name, text, len(raw)), None
@@ -2493,6 +2701,8 @@ with st.container(
             type="tertiary",
             on_click=show_privacy,
         )
+
+        st.html(THEME_TOGGLE_HTML, width="content")
 
         if not logged_in():
 

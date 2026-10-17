@@ -31,7 +31,7 @@ PLANS = (
         "features": (
             "Chat, riset web dengan sumber, dan matematika",
             "Analisis angka dari file CSV/TSV",
-            "Lampiran foto dan file teks",
+            "Lampiran foto, PDF, dan file teks",
             "Proyek dengan file konteks bersama",
             "Riwayat chat selama sesi",
         ),
