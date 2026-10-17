@@ -13,6 +13,7 @@
 - Streamlit's own widgets take colours from the light theme in `config.toml`, so their surfaces now point at the tokens (captions, popovers and their inputs, tooltips, chat message text and avatars, expanders, inline code, the "+" upload button, sidebar and heading icons). Light mode is unchanged. A scan of every visible element on chat, pricing, privacy, sign-in, the popover, the tooltip and an error card found no light leftovers in dark mode and none in light mode.
 - The "+" button's tooltip listed every accepted extension ("Upload or drag and drop files (TXT, MD, MARKDOWN, ...)"); it now says "Lampirkan file atau foto", also used as the button's accessible name. Streamlit has no option for this text, so `UI_JS` replaces it when the tooltip appears.
 - The toggle icon is drawn in CSS because `st.html` strips inline SVG. The hidden script container is renamed `pagejs`.
+- The sidebar's « collapse button stayed black in dark mode: Streamlit colours its icon itself, and the button only appears while the sidebar is hovered, so the first scan missed it. Its icon and hover now use the tokens; a rescan with every hover-only element forced visible found nothing else.
 - New `tests/test_theme.py` (in CI): every light colour token has a dark value, both themes pass AA, dark tokens follow the device and the toggle, the toggle and storage contract, and the upload hint.
 
 ### Personal datasets that grow over time (flow v1.7.0)
