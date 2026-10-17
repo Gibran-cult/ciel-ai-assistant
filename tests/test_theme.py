@@ -61,6 +61,24 @@ class ThemeTokensTest(unittest.TestCase):
                 self.assertIn(f'[data-testid="{button}"] [data-testid="stIconMaterial"]', self.css)
         self.assertIn('[data-testid="stSidebarCollapseButton"] button:hover', self.css)
 
+    def test_widget_rules_reach_popover_content(self):
+        # Popovers (account menu, "Proyek baru") render outside .stApp, so
+        # rules scoped to .stApp left their buttons and expander light in dark
+        # mode, with light text on top.
+        scope = ':is(.stApp, [data-testid="stPopoverBody"])'
+        self.assertNotIn(".stApp .stButton > button", self.css)
+        self.assertIn(f"{scope} .stButton > button,", self.css)
+        self.assertIn(f'{scope} .stButton > button[kind="primary"]', self.css)
+        self.assertIn(f'{scope} [data-testid="stExpander"] summary', self.css)
+        # Streamlit 1.65 draws the text input box on this element.
+        self.assertIn('[data-testid="stTextInputRootElement"] {', self.css)
+        # Project file uploader: button, size/type hint and the "?" help icon.
+        self.assertIn('[data-testid="stFileUploaderDropzone"] button {', self.css)
+        self.assertIn('[data-testid="stFileUploaderDropzoneInstructions"] span { color: var(--c-faint); }', self.css)
+        self.assertIn('[data-testid="stTooltipIcon"] [data-testid="stTooltipHoverTarget"] svg.icon { stroke: var(--c-faint); }', self.css)
+        for kind, token in (("Success", "--c-ok"), ("Error", "--c-err"), ("Warning", "--c-warn")):
+            self.assertIn(f'[data-testid="stAlertContent{kind}"] {{ color: var({token}); }}', self.css)
+
     def test_text_pairs_pass_wcag_aa_in_both_themes(self):
         pairs = [
             ("--c-text", "--c-bg"), ("--c-muted", "--c-bg"), ("--c-faint", "--c-bg"),
