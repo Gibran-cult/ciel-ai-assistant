@@ -68,7 +68,7 @@ If the memory database could not be restored but older memories without an owner
 1. Offline suite (command in `README.md`) passes.
 2. Langflow `/health_check` answers through the tunnel with Basic Auth.
 3. A live quality run (`python tests/collect_quality.py`) is healthy.
-4. Through ngrok, check by hand: a greeting, a math question (Math Tutor), "total Sales_Amount pada dataset" (Verified Data Analyst), a research question with sources (Web Research), a CSV question with an attached file (Ciel Table Analyst), and an anonymous "ingat namaku …" that is refused without changing the memory count.
+4. Through ngrok, check by hand: a greeting, a math question (Calculator), a worksheet with several problems (Math Tutor), "total Sales_Amount pada dataset" (Ciel Table Analyst), a research question with sources (Ciel Exa Search), a CSV question with an attached file (Ciel Table Analyst), and an anonymous "ingat namaku …" that is refused without changing the memory count.
 5. The public app answers a test message.
 
 A recovery is complete only when all of these pass.

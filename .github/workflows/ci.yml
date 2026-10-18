@@ -83,6 +83,7 @@ jobs:
             tests.test_flow_v1101_contract \
             tests.test_flow_v1102_contract \
             tests.test_flow_v1110_contract \
+            tests.test_flow_v1120_contract \
             tests.test_gateway_policy \
             tests.test_app_security \
             tests.test_source_guard \

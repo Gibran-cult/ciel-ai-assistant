@@ -30,9 +30,10 @@ Streamlit app (app.py)  --ngrok-->  Langflow (host PC)
           user tables, images           +-- Ciel Table Analyst          (user CSV/TSV, built-in dataset)
                                         +-- Ciel ML Analyst             (models on user CSV/TSV)
                                         +-- Ciel Dataset Store          (personal datasets, signed-in)
-                                        +-- Math Tutor Agent            (Run Flow)
+                                        +-- Calculator                  (every computed number)
+                                        +-- Math Tutor Agent            (Run Flow, worksheets)
                                         +-- Knowledge Retriever         (Run Flow)
-                                        +-- Web Research Assistant      (Run Flow, Exa)
+                                        +-- Ciel Exa Search             (web search; Ciel Source Guard checks the sources)
 ```
 
 See `docs/ARCHITECTURE.md` for details, including the Langflow configuration that lives outside this repository.
@@ -122,7 +123,7 @@ A template is provided in `.streamlit/secrets.toml.example`. For local runs copy
 ## Deployment (Streamlit Community Cloud)
 
 1. Start the backend on the host machine: Langflow (port 7860) with its Ollama and Chroma dependencies, then the ngrok tunnel pointing at `localhost:7860` with the Basic Auth traffic policy.
-2. Import `flow/v1.11.0/Ciel_AI_Long-Term_Memory_Master.json` (latest) into Langflow and set `FLOW_ID` to the imported flow. The flow calls two sub-flows by Run Flow (Math Tutor Agent, Knowledge Retriever), which are not in this repository, and Ciel Table Analyst reads the built-in dataset from `~/.ciel_ai/builtin_datasets/200_sales_data.csv`; see `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
+2. Import `flow/v1.12.0/Ciel_AI_Long-Term_Memory_Master.json` (latest) into Langflow and set `FLOW_ID` to the imported flow. The flow calls two sub-flows by Run Flow (Math Tutor Agent, Knowledge Retriever), which are not in this repository, and Ciel Table Analyst reads the built-in dataset from `~/.ciel_ai/builtin_datasets/200_sales_data.csv`; see `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
 3. Deploy `app.py` from the `main` branch of this repository.
 4. Paste the variables above into App settings -> Secrets, using the template format. For Google login, create an OAuth client (Web application) in Google Cloud Console with `https://<your-app>.streamlit.app/oauth2callback` as the redirect URI, and keep the `[auth]` block at the end of the secrets.
 5. Open the app and send a test message. If the backend host or tunnel is down, the app shows an error card with a Request ID and a Retry button.

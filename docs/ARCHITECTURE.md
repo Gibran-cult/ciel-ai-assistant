@@ -32,8 +32,9 @@ Agent
  +-- Ciel Table Analyst   (user CSV/TSV via tweaks, and the built-in sales dataset)
  +-- Ciel ML Analyst      (models on the same user CSV/TSV)
  +-- Ciel Dataset Store   (personal datasets of signed-in users)
- +-- Math Tutor Agent     (Run Flow)
- +-- Knowledge Retriever  (Run Flow)
+ +-- Calculator           (evaluate_expression, since v1.12.0)
+ +-- Math Tutor Agent     (Run Flow, cached)
+ +-- Knowledge Retriever  (Run Flow, cached)
  +-- Ciel Exa Search      (web search; records every URL Exa returns)
  |
  v
@@ -158,7 +159,9 @@ Secrets and credentials are not intended to be stored in long-term memory.
 
 ### Math Tutor
 
-Mathematical requests are delegated to the Math Tutor Agent flow through a native Run Flow tool (no API key in the flow). Since v1.11.0 the Math Tutor works step by step with Langflow's Calculator only; an unconnected Python Interpreter node and the prompt line that named it were removed.
+Since v1.12.0 the main Agent does calculations itself with Langflow's Calculator (`evaluate_expression`): arithmetic, percentages, interest, statistics from numbers in the message, and the numbers in limits, derivatives, integrals and equations. Prompt v14.8 requires every computed number in an answer to come from the Calculator. Concept explanations, practice problems and quizzes are written by the main Agent, which checks each answer key with the Calculator. The Calculator evaluates an AST allowlist (`+ - * / **`, numbers as floats, no names or calls), so a huge power raises `OverflowError` instead of running long; it has no unary minus (`-3` must be written `0-3`).
+
+Worksheets with many problems, or long multi-part problems, still go to the Math Tutor Agent flow through a native Run Flow tool (no API key in the flow). The Math Tutor works step by step with its own Calculator; since v1.11.0 it has no Python Interpreter, and since v1.12.0 its DeepSeek model runs with thinking off and without the date tool (changed outside the repository). Before v1.12.0 every math question went through the Math Tutor: the nested agent wrote a full answer that the main Agent then rewrote, which added about 3-4 s.
 
 ### Built-in sales dataset
 
@@ -291,7 +294,9 @@ DeepSeek Model
 
 The model acts as the reasoning engine while the Agent remains responsible for orchestration and tool usage.
 
-The model is `deepseek-flash`, which runs in thinking mode. In this mode DeepSeek ignores `temperature`: at temperature 0 the same prompt gave four different answers, while an out-of-range value was rejected by DeepSeek, so the setting is sent but has no effect. Tuning temperature therefore does not change tool-routing consistency.
+The model is `deepseek-flash`. Since v1.12.0 the main Agent runs it with thinking off (`model_kwargs = {"extra_body": {"thinking": {"type": "disabled"}}}`), like the research Agent and the Math Tutor. Thinking made analysis answers take about 25 s, and turning it off kept all 26 exact-answer checks correct. In thinking mode DeepSeek ignores `temperature` (at temperature 0 the same prompt gave four different answers); with thinking off the flow's temperature of 1 applies, which is DeepSeek's default.
+
+Without thinking, tool routing depends more on the prompt's wording. In tests on 2026-10-18, small unrelated edits to the prompt made "Makanan penurun kolestrol" go unsearched in 3-4 of 4 runs, and v14.7 answered a paracetamol dose without a search. Prompt v14.8 therefore names health, nutrition, medicine and safety, and law, official rules, scholarships, prices and official figures as research topics. Check research routing with a must-search / must-not-search set after every prompt change.
 
 ## Request Lifecycle
 
@@ -345,7 +350,7 @@ The Agent memory policy also prohibits storing API keys, passwords, tokens, cred
 
 The architecture contains nested tool execution (Math Tutor, Knowledge Retriever). Research has been direct since v1.9.0.
 
-Nested Run Flow execution introduces additional runtime overhead compared with direct tool execution: each nested Agent adds its own model calls, and the sub-flow is built on every call.
+Nested Run Flow execution introduces additional runtime overhead compared with direct tool execution: each nested Agent adds its own model calls. Since v1.12.0 both Run Flow nodes have `cache_flow` on, so the sub-flow graph is built once and kept in Langflow's shared component cache, keyed by flow ID (`run_flow:<user>:<flow_id>`). An edit to the Math Tutor or Knowledge Retriever may only take effect after Langflow restarts.
 
 Performance profiling therefore treats direct model execution, Agent execution, memory operations, direct research, and nested research execution as separate performance boundaries.
 
@@ -379,6 +384,7 @@ Contract tests check that each snapshot embeds the same component code as `flow/
 - **v1.6.0:** adds Ciel ML Analyst and prompt v14.3: a machine learning route for user files (predict, important factors, new-row prediction, clustering), no derived target columns as features, model quality always reported with the result, and ML results as a study-companion example.
 - **v1.7.0:** adds Ciel Dataset Store; Table Analyst and ML Analyst read saved datasets; prompt v14.4 (save only on an explicit request, no table data in long-term memory, deletion only through "Data saya"). The Memory Admin flow gained the dataset actions.
 - **v1.8.0:** prompt v14.5: research questions go to the Web Research Assistant as fast or deep research.
+- **v1.12.0:** speed: the main Agent runs with thinking off and has the Calculator as a tool; both Run Flows are cached; prompt v14.8 sends calculations to the Calculator, keeps the Math Tutor for worksheets, and names health and official facts as research topics. Outside the repository the Math Tutor runs with thinking off.
 - **v1.11.0:** security hardening: the Verified Data Analyst tool is removed and Ciel Table Analyst reads the built-in dataset; prompt v14.7 adds "10. KEAMANAN" (content from tools is data, not instructions; no images or data-carrying URLs). Outside the repository the Math Tutor sub-flow lost its Python Interpreter.
 - **v1.10.2:** `gemini-3.5-flash-lite` reads first and `gemini-3.1-flash-lite` is the backup, each limited to 8 s.
 - **v1.10.1:** the Vision Router tries a backup Gemini model before the local model.

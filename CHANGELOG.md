@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Faster answers, same accuracy (flow v1.12.0)
+- The main Agent's DeepSeek model runs with thinking off (`model_kwargs` `extra_body.thinking.type = disabled`), like the research Agent. Analysis answers dropped from 25.1 to 15.5 s and the exact-answer checks stayed correct.
+- Math questions no longer all go through the Math Tutor sub-flow. That path took 8-10 s because the nested agent wrote a full answer and the main Agent rewrote it. The main Agent now has Langflow's Calculator (`evaluate_expression`) as a tool. Prompt v14.8 makes it compute every number with the Calculator and check answer keys with it. Concept explanations, practice problems and quizzes are answered directly, and only worksheets or long multi-part problems still go to the Math Tutor. On 26 exact-answer questions: 26/26 correct, median 8.6 → 6.3 s, max 28.9 → 12.8 s.
+- Prompt v14.8 also lists health, nutrition, medicine and safety, and law, official rules, scholarships, prices and official figures as research topics. With thinking off, v14.7 answered a paracetamol dose without a search; v14.8 routed 11/11 must-search and must-not-search questions correctly. Every other v14.7 line is unchanged apart from the old math routing and two lines that now name the Calculator.
+- Both Run Flow nodes (Math Tutor, Knowledge Retriever) have `cache_flow` on, so the sub-flow graph is built once (keyed by flow ID). An edit to those sub-flows may only take effect after Langflow restarts.
+- Outside the repository the Math Tutor sub-flow runs with thinking off and without the date tool: 26/26 correct, and its slowest answer dropped from 28.9 to 13.6 s.
+- Production (2026-10-18):
+  - Backups: `~/.ciel_ai/flow_backups/math_tutor_before_v1120_20261018_091522.json` and `main_v1110_before_v1120_20261018_091523.json`.
+  - The live main flow differed from the v1.11.0 snapshot only in Langflow re-saves (positions, edge handle names, tool descriptions, and an SSRF check Langflow added to the DeepSeek extension code). The changes were applied to the live flow, and the repository snapshot applies the same changes to the v1.11.0 snapshot.
+  - Public app, guest, one run each: greeting 5.6 s, multiplication 6.7 s, sample variance 8.2 s, practice problems 7.1 s, paracetamol dose 16.3 s with sources, analysis 19.4 s with sources; all correct.
+  - The DeepSeek balance ran out during testing, and Ciel failed with HTTP 402 until it was topped up.
+- Tests: new `tests/test_flow_v1120_contract.py` (in CI) checks thinking off, cached Run Flows, the Calculator node and its edge, the v14.8 math and research rules, and that nothing else changed from v1.11.0. Numbers and method: `docs/OBSERVABILITY.md`.
+
 ### Security hardening (flow v1.11.0)
 - An audit on 2026-10-18 found that the Verified Data Analyst sub-flow was a CSV agent with `allow_dangerous_code=True`: the model wrote Python and Langflow ran it on the home PC. Any chat visitor, guests included, could steer it through the main Agent. The audit also listed the Python Interpreter node in the Math Tutor sub-flow, but during the rollout it turned out not to be connected to the Agent, so the Math Tutor never ran code.
 - Flow v1.11.0 removes the Verified Data Analyst tool. Ciel Table Analyst now reads the built-in dataset by name (`file_name=200_sales_data`, from `~/.ciel_ai/builtin_datasets/200_sales_data.csv` on the host), only when no attached file or saved dataset has that name, so the default pick is unchanged. The shared helpers (`owner_dir`, `saved_tables`, `pick_table`) are untouched.
