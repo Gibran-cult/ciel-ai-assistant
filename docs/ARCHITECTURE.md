@@ -158,7 +158,7 @@ Secrets and credentials are not intended to be stored in long-term memory.
 
 ### Math Tutor
 
-Mathematical requests are delegated to the Math Tutor Agent flow through a native Run Flow tool (no API key in the flow). Since v1.11.0 the Math Tutor works step by step with Langflow's Calculator only; its Python Interpreter, which ran model-written code, was removed.
+Mathematical requests are delegated to the Math Tutor Agent flow through a native Run Flow tool (no API key in the flow). Since v1.11.0 the Math Tutor works step by step with Langflow's Calculator only; an unconnected Python Interpreter node and the prompt line that named it were removed.
 
 ### Built-in sales dataset
 

@@ -48,10 +48,14 @@ class BuildPolicyTest(unittest.TestCase):
         deny = policy()["on_http_request"][2]
         self.assertEqual(deny["actions"][0]["config"], {"status_code": 404, "body": "Not found"})
         expression = deny["expressions"][0]
+        # The app's secret may hold a flow ID with or without dashes.
         allowed = [
             ("POST", f"/api/v1/run/{FLOW}"),
+            ("POST", f"/api/v1/run/{FLOW.replace('-', '')}"),
             ("POST", f"/api/v1/run/{ADMIN}"),
+            ("POST", f"/api/v1/run/{ADMIN.replace('-', '')}"),
             ("POST", f"/api/v1/files/upload/{FLOW}"),
+            ("POST", f"/api/v1/files/upload/{FLOW.replace('-', '')}"),
             ("GET", "/api/v1/monitor/messages/sessions"),
             ("DELETE", "/api/v1/monitor/messages/sessions"),
             ("GET", "/health_check"),
@@ -69,9 +73,15 @@ class BuildPolicyTest(unittest.TestCase):
         config = rule["actions"][0]["config"]
         self.assertEqual((config["name"], config["capacity"], config["rate"]), ("ciel-api-per-ip", 20, "60s"))
         self.assertEqual(config["bucket_key"], ["conn.client_ip"])
-        for path in (f"/api/v1/run/{FLOW}", f"/api/v1/run/{ADMIN}", f"/api/v1/files/upload/{FLOW}"):
+        for path in (f"/api/v1/run/{FLOW}", f"/api/v1/run/{ADMIN.replace('-', '')}", f"/api/v1/files/upload/{FLOW}"):
             self.assertIn(path_check(path), rule["expressions"][0])
         self.assertNotIn("sessions", rule["expressions"][0])
+
+    def test_flow_ids_without_dashes_give_the_same_policy(self):
+        self.assertEqual(
+            policy_tool.build_policy(USER, PASSWORD, FLOW.replace("-", ""), ADMIN.replace("-", "")),
+            policy(),
+        )
 
     def test_refuses_weak_or_missing_settings(self):
         cases = {
