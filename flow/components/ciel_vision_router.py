@@ -19,6 +19,8 @@ Perilaku baru:
 
 Sejak v1.10.0: jika Vision API Key diisi, gambar dibaca lewat Gemini API
 (cepat), dan model lokal hanya dipakai bila API gagal atau terlalu lama.
+Sejak v1.10.2: gemini-3.5-flash-lite dulu (1,3-2,7 dtk), lalu
+gemini-3.1-flash-lite, masing-masing dibatasi 8 dtk.
 Model lokal di CPU laptop butuh ~66 dtk per foto baru (uji 2026-10-18).
 """
 
@@ -127,20 +129,20 @@ class CielVisionRouter(Component):
         MessageTextInput(
             name="api_model",
             display_name="Vision API Model",
-            value="gemini-3.1-flash-lite",
+            value="gemini-3.5-flash-lite",
             advanced=True,
         ),
         MessageTextInput(
             name="api_fallback_model",
             display_name="Vision API Model Cadangan",
-            value="gemini-3.5-flash-lite",
+            value="gemini-3.1-flash-lite",
             advanced=True,
             info="Dicoba jika model utama gagal (misalnya HTTP 503), sebelum model lokal.",
         ),
         IntInput(
             name="api_timeout",
             display_name="Vision API Timeout (detik)",
-            value=20,
+            value=8,
             advanced=True,
             info="Batas per model API; setelah semua gagal, gambar dibaca model lokal.",
         ),
@@ -175,7 +177,9 @@ class CielVisionRouter(Component):
 
         # Production 2026-10-18: gemini-3.1-flash-lite answered HTTP 503 for a
         # while; the local model then took 136 s. Another Gemini model usually
-        # still works, so try it before the local model.
+        # still works, so try it before the local model. In 8 timed photos,
+        # gemini-3.5-flash-lite read every one in 1.3-2.7 s, while
+        # gemini-3.1-flash-lite took up to 10 s and timed out 3 times.
         api_errors = []
         if self.vision_api_key:
             models = [m for m in dict.fromkeys((self.api_model, self.api_fallback_model)) if m]
