@@ -99,14 +99,16 @@ class LoginPageTest(unittest.TestCase):
 
 class TopBarNavTest(unittest.TestCase):
 
-    def test_pages_and_sign_in_live_in_the_top_bar_not_the_sidebar(self):
+    def test_sign_in_lives_in_the_top_bar_and_page_links_stay_hidden(self):
         at = run_app()
         self.assertFalse(at.exception)
         main_labels = [b.label for b in at.main.button]
         sidebar_labels = [b.label for b in at.sidebar.button]
-        for label in ("Harga", "Privasi", "Masuk"):
-            self.assertIn(label, main_labels)
-        for label in ("Harga & paket", "Privasi", "Masuk", "Masuk dengan Google", "Keluar"):
+        self.assertIn("Masuk", main_labels)
+        # Pricing and Privasi only show in the account menu, after sign-in.
+        for label in ("Pricing", "Harga", "Privasi"):
+            self.assertNotIn(label, main_labels)
+        for label in ("Harga & paket", "Pricing", "Privasi", "Masuk", "Masuk dengan Google", "Keluar"):
             self.assertNotIn(label, sidebar_labels)
         self.assertNotIn("About long-term memory", [e.label for e in at.sidebar.expander])
         # Sidebar labels are Indonesian like the rest of the app.
@@ -146,14 +148,26 @@ class TopBarNavTest(unittest.TestCase):
         self.assertIn("if (window.__cielNav) return;", source)
         self.assertNotIn("main.addEventListener('scroll'", source)
 
-    def test_signed_in_user_gets_an_account_menu_instead_of_sign_in(self):
+    def test_signed_in_user_gets_an_account_menu_at_the_bottom_of_the_sidebar(self):
         at = run_app(user=SIGNED_IN)
         self.assertFalse(at.exception)
-        labels = [b.label for b in at.main.button]
-        self.assertNotIn("Masuk", labels)
-        self.assertIn("Keluar", labels)
+        main_labels = [b.label for b in at.main.button]
+        sidebar_labels = [b.label for b in at.sidebar.button]
+        for label in ("Masuk", "Pricing", "Privasi", "Keluar"):
+            self.assertNotIn(label, main_labels)
+        # The menu holds Pricing and Privasi (once each, as rows with icons),
+        # the memory note, "Data saya" and Keluar.
+        self.assertEqual(sidebar_labels.count("Pricing"), 1)
+        self.assertEqual(sidebar_labels.count("Privasi"), 1)
+        self.assertIn("Keluar", sidebar_labels)
+        rows = [b for b in at.sidebar.button if b.label in ("Pricing", "Privasi", "Keluar")]
+        self.assertTrue(all(b.proto.icon for b in rows))
+        self.assertIn("Data saya", [e.label for e in at.sidebar.expander])
         self.assertIn("Long-term memory aktif", page_text(at))
-        self.assertIn("Data saya", [e.label for e in at.main.expander])
+        # Last in the sidebar, after the history.
+        source = APP_PATH.read_text(encoding="utf-8")
+        self.assertGreater(source.index('with st.container(key="sideaccount"):'), source.index('with st.container(key="history"):'))
+        self.assertLess(source.index('with st.container(key="sideaccount"):'), source.index("# HEADER"))
 
 
 if __name__ == "__main__":

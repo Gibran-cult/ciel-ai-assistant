@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Navbar buttons in the style of the claude.ai app
+- The theme toggle and Masuk are now quiet ghost buttons: no border, 8px corners, and no underline. Masuk sits on a soft grey background (`--c-raised`) with bolder text and darkens on hover and on the login page (new `--c-raised-strong`, with a dark-mode value).
+- Masuk text stays well above AA in both themes (12.6–13.9:1). Checked on Streamlit 1.65 in light and dark mode, including a real pointer hover; `tests/test_theme.py` covers the new navbar rules.
+- "Harga" is now "Pricing", and it and Privasi only show after sign-in, as the first rows of the account menu: left-aligned, with an icon, and the grey background on the current page (new `page_nav_buttons` helper, `.st-key-accountnav` rules). Before sign-in the top bar shows only the theme toggle and Masuk. The `?page=pricing` and `?page=privacy` links still open for everyone, so the privacy policy stays public.
+- The account menu moved from the top bar to the bottom of the sidebar, as in the claude.ai app. The account button (icon, name, chevron) stays in view while the history scrolls and sits at the bottom when the sidebar is short. Its menu opens upwards with the email, Pricing, Privasi, the memory note, "Data saya", and Keluar as a menu row under a line. The email is plain HTML, so markdown does not turn it into a blue mailto link.
+- Checked on Streamlit 1.65 with 3 and 40 chats in both themes (menu text 7.6–16.6:1). `tests/test_login.py` covers where the buttons are before and after sign-in, and `tests/test_theme.py` covers the sticky account button.
+
 ### Fastest Gemini model first (flow v1.10.2)
 - Image questions in production still took 30-32 s. The image itself took 9.9-21.7 s to read, while the Agent took about 8 s. Timing both models on 8 new photos showed `gemini-3.5-flash-lite` reading every one in 1.3-2.7 s. `gemini-3.1-flash-lite` took up to 10 s when it answered and timed out at 20 s three times, and every timeout delayed the answer by 20 s before the backup ran.
 - Ciel Vision Router now reads with `gemini-3.5-flash-lite` first, uses `gemini-3.1-flash-lite` as the backup, and limits each model to 8 s (`api_timeout`). The cost per photo stays about the same.

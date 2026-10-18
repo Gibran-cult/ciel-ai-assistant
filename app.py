@@ -74,6 +74,7 @@ DARK_TOKENS = """
     --c-bg: #161513;
     --c-surface: #1f1d1a;
     --c-raised: #2a2824;
+    --c-raised-strong: #34322d;
     --c-line: rgba(236, 234, 228, 0.10);
     --c-line-strong: rgba(236, 234, 228, 0.18);
     --c-control: #827c72;
@@ -103,6 +104,7 @@ CIEL_CSS = """
     --c-bg: #f3f2ee;
     --c-surface: #fcfbf9;
     --c-raised: #e9e7e1;
+    --c-raised-strong: #dfdcd4;
     --c-line: rgba(28, 27, 25, 0.10);
     --c-line-strong: rgba(28, 27, 25, 0.18);
     --c-control: #86817a;
@@ -295,7 +297,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     height: 2.2rem;
     padding: 0;
     border: 0;
-    border-radius: var(--r-md);
+    border-radius: 8px;
     background: transparent;
     color: var(--c-muted);
     cursor: pointer;
@@ -315,50 +317,99 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     :root:not([data-ciel-theme="light"]) .ciel-theme-toggle { --ciel-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='4' fill='none' stroke='black' stroke-width='1.8'/%3E%3Cpath d='M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E"); }
 }
 
-/* Top bar nav: text links for pages, one outline button for the account.
-   Selectors start with .stApp so they outrank the generic button rules
-   further down (same specificity otherwise, and those come later). */
+/* Top bar nav, in the style of the claude.ai app: quiet ghost buttons with
+   no border and 8px corners, a soft grey background on hover, and Masuk a
+   little firmer. Selectors start with .stApp so they outrank the generic
+   button rules further down. */
 .st-key-topnav { gap: 0.25rem; }
-/* Underline is a background line so it can grow from the centre on hover. */
-.stApp .st-key-topnav .stButton > button[kind="tertiary"],
-.stApp .st-key-topnav .stButton > button[kind="tertiary"]:hover {
+.stApp .st-key-topnav .stButton > button {
+    min-height: 2.2rem;
+    padding: 0 0.75rem;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    margin-left: 0.25rem;
+    background: var(--c-raised);
+    color: var(--c-text);
+    font-weight: 600;
+    transition: background-color 0.2s var(--ease), color 0.2s var(--ease);
+}
+.stApp .st-key-topnav .stButton > button:hover,
+.stApp .st-key-topnav [class*="st-key-navactive_"] button {
+    border-color: transparent;
+    background: var(--c-raised-strong);
+}
+/* Account button at the bottom of the sidebar, as in the claude.ai app: it
+   stays in view while the history scrolls, and sits at the bottom when the
+   sidebar is short. */
+[data-testid="stSidebarUserContent"]:has(.st-key-sideaccount) {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    padding-bottom: 0;
+}
+[data-testid="stSidebarUserContent"]:has(.st-key-sideaccount) > div { flex: 1 0 auto; display: flex; flex-direction: column; }
+[data-testid="stSidebarUserContent"]:has(.st-key-sideaccount) > div > [data-testid="stVerticalBlock"] { flex: 1 0 auto; }
+[data-testid="stLayoutWrapper"]:has(> .st-key-sideaccount) {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin-top: auto;
+    padding: 0.5rem 0 0.75rem;
+    border-top: 1px solid var(--c-line);
+    background: var(--c-surface);
+}
+[data-testid="stSidebar"] .st-key-sideaccount [data-testid="stPopoverButton"] {
+    justify-content: flex-start;
+    min-height: 2.6rem;
+    border-color: transparent;
+    border-radius: 8px;
+    color: var(--c-text);
+}
+[data-testid="stSidebar"] .st-key-sideaccount [data-testid="stPopoverButton"]:hover { border-color: transparent; }
+/* Label left, Streamlit's chevron pushed to the right edge. */
+[data-testid="stSidebar"] .st-key-sideaccount [data-testid="stPopoverButton"] > div { flex: 1; justify-content: space-between; }
+[data-testid="stSidebar"] .st-key-sideaccount [data-testid="stPopoverButton"] > div > div:first-child { justify-content: flex-start; }
+[data-testid="stSidebar"] .st-key-sideaccount [data-testid="stPopoverButton"] [data-testid="stIconMaterial"] { color: var(--c-muted); }
+.ciel-account-email {
+    padding: 0 0.6rem;
+    font-size: 0.82rem;
+    color: var(--c-muted);
+    overflow-wrap: anywhere;
+}
+/* Account menu rows (Pricing, Privasi, Keluar), like a menu list: full
+   width, left aligned, a soft grey background on hover and for the current
+   page, with lines between the groups. */
+[data-testid="stPopoverBody"] .st-key-accountnav {
+    gap: 0.1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--c-line);
+}
+[data-testid="stPopoverBody"] .st-key-accountexit {
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--c-line);
+}
+[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) [data-testid="stElementContainer"]:has(.stButton),
+[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) .stButton,
+[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) .stButton > button { width: 100%; }
+[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) .stButton > button {
+    justify-content: flex-start;
     min-height: 2.2rem;
     padding: 0 0.6rem;
-    border-color: transparent;
-    background-color: transparent;
-    background-image: linear-gradient(var(--c-line-strong), var(--c-line-strong));
-    background-repeat: no-repeat;
-    background-position: center calc(100% - 0.2rem);
-    background-size: 0 2px;
-    color: var(--c-muted);
-    font-weight: 500;
-    transition: color 0.3s var(--ease), background-size 0.4s var(--ease);
-}
-.stApp .st-key-topnav .stButton > button[kind="tertiary"]:hover {
-    color: var(--c-text);
-    background-size: calc(100% - 1.2rem) 2px;
-}
-.stApp .st-key-topnav [class*="st-key-navactive_"] button[kind="tertiary"],
-.stApp .st-key-topnav [class*="st-key-navactive_"] button[kind="tertiary"]:hover {
-    color: var(--c-text);
-    background-image: linear-gradient(var(--c-accent), var(--c-accent));
-    background-size: calc(100% - 1.2rem) 2px;
-}
-.stApp .st-key-topnav .stButton > button[kind="secondary"],
-.stApp .st-key-topnav [data-testid="stPopover"] button {
-    min-height: 2.2rem;
-    margin-left: 0.4rem;
-    padding: 0 0.9rem;
-    border: 1px solid var(--c-line-strong);
-    border-radius: var(--r-md);
+    border: 1px solid transparent;
+    border-radius: 8px;
     background: transparent;
     color: var(--c-text);
     font-weight: 500;
-    transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease), transform 0.3s var(--ease);
 }
-.stApp .st-key-topnav .stButton > button[kind="secondary"]:hover,
-.stApp .st-key-topnav [data-testid="stPopover"] button:hover { background: var(--c-surface); border-color: var(--c-control); }
-.stApp .st-key-topnav [class*="st-key-navactive_"] button[kind="secondary"] { border-color: var(--c-accent); }
+[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) .stButton > button:hover,
+[data-testid="stPopoverBody"] .st-key-accountnav [class*="st-key-navactive_"] button {
+    border-color: transparent;
+    background: var(--c-raised);
+    color: var(--c-text);
+}
+/* Streamlit centres the icon and label in an inner wrapper. */
+[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) .stButton > button > div { justify-content: flex-start; }
+[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) [data-testid="stIconMaterial"] { color: var(--c-muted); }
 .stApp .st-key-topbar { flex-wrap: nowrap; }
 .stApp .st-key-topbar > [data-testid="stElementContainer"]:first-child { flex: 1 1 0; min-width: 0; }
 
@@ -2485,6 +2536,21 @@ def show_login():
     st.query_params["page"] = "login"
 
 
+def page_nav_buttons():
+    """Pricing dan Privasi sebagai baris menu akun (hanya setelah login)."""
+    for label, view, icon, on_click in (
+        ("Pricing", "pricing", ":material/sell:", show_pricing),
+        ("Privasi", "privacy", ":material/shield:", show_privacy),
+    ):
+        st.button(
+            label,
+            key=("navactive_" if current_view() == view else "nav_") + view,
+            type="tertiary",
+            icon=icon,
+            on_click=on_click,
+        )
+
+
 def new_chat():
     show_chat()
     st.session_state.active_chat = None
@@ -2954,94 +3020,32 @@ with st.sidebar:
                 for chat in archived:
                     render_history_row(chat)
 
+    # --------------------------------------------------------
+    # ACCOUNT (bawah sidebar, seperti menu akun claude.ai)
+    # --------------------------------------------------------
 
-# ============================================================
-# HEADER
-# ============================================================
+    if logged_in():
 
-topbar_project = st.session_state.projects.get(
-    st.session_state.active_project
-)
+        account_name = st.user.get("name") or st.user.get("email") or "Akun"
 
-# Satu baris flex (bukan st.columns) supaya brand dan nav tidak ditumpuk
-# Streamlit di layar sempit.
-with st.container(
-    key="topbar",
-    horizontal=True,
-    vertical_alignment="center",
-):
+        with st.container(key="sideaccount"):
 
-    project_chip = ""
+            with st.popover(
+                short(account_name, 22),
+                icon=":material/account_circle:",
+                width="stretch",
+            ):
 
-    if topbar_project:
-        project_chip = (
-            '<div class="ciel-status" data-state="ok">'
-            '<span class="ciel-dot" aria-hidden="true"></span>'
-            f"<span>Proyek <b>{html.escape(short(topbar_project['name'], 28))}</b></span>"
-            "</div>"
-        )
+                # HTML, bukan st.caption: markdown mengubah email jadi link mailto.
+                st.markdown(
+                    '<div class="ciel-account-email">'
+                    f'{html.escape(st.user.get("email") or account_name)}'
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
 
-    st.markdown(
-        '<div class="ciel-topbar">'
-        '<div class="ciel-brand">'
-        f'<span class="ciel-wordmark">{CIEL_MARK_SVG}Ciel</span>'
-        "</div>"
-        f"{project_chip}"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    with st.container(
-        key="topnav",
-        horizontal=True,
-        horizontal_alignment="right",
-        vertical_alignment="center",
-        width="content",
-    ):
-
-        st.button(
-            "Harga",
-            key=(
-                "navactive_pricing"
-                if current_view() == "pricing"
-                else "nav_pricing"
-            ),
-            type="tertiary",
-            on_click=show_pricing,
-        )
-
-        st.button(
-            "Privasi",
-            key=(
-                "navactive_privacy"
-                if current_view() == "privacy"
-                else "nav_privacy"
-            ),
-            type="tertiary",
-            on_click=show_privacy,
-        )
-
-        st.html(THEME_TOGGLE_HTML, width="content")
-
-        if not logged_in():
-
-            st.button(
-                "Masuk",
-                key=(
-                    "navactive_login"
-                    if current_view() == "login"
-                    else "login"
-                ),
-                on_click=show_login,
-            )
-
-        else:
-
-            account_name = st.user.get("name") or st.user.get("email") or "Akun"
-
-            with st.popover(short(account_name, 18)):
-
-                st.caption(f"Masuk sebagai {account_name}")
+                with st.container(key="accountnav"):
+                    page_nav_buttons()
 
                 st.markdown(
                     '<div class="ciel-note">'
@@ -3196,12 +3200,74 @@ with st.container(
                             on_click=delete_my_chat_history,
                         )
 
-                st.button(
-                    "Keluar",
-                    key="logout",
-                    icon=":material/logout:",
-                    on_click=st.logout,
-                )
+                with st.container(key="accountexit"):
+
+                    st.button(
+                        "Keluar",
+                        key="logout",
+                        type="tertiary",
+                        icon=":material/logout:",
+                        on_click=st.logout,
+                    )
+
+
+# ============================================================
+# HEADER
+# ============================================================
+
+topbar_project = st.session_state.projects.get(
+    st.session_state.active_project
+)
+
+# Satu baris flex (bukan st.columns) supaya brand dan nav tidak ditumpuk
+# Streamlit di layar sempit.
+with st.container(
+    key="topbar",
+    horizontal=True,
+    vertical_alignment="center",
+):
+
+    project_chip = ""
+
+    if topbar_project:
+        project_chip = (
+            '<div class="ciel-status" data-state="ok">'
+            '<span class="ciel-dot" aria-hidden="true"></span>'
+            f"<span>Proyek <b>{html.escape(short(topbar_project['name'], 28))}</b></span>"
+            "</div>"
+        )
+
+    st.markdown(
+        '<div class="ciel-topbar">'
+        '<div class="ciel-brand">'
+        f'<span class="ciel-wordmark">{CIEL_MARK_SVG}Ciel</span>'
+        "</div>"
+        f"{project_chip}"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    with st.container(
+        key="topnav",
+        horizontal=True,
+        horizontal_alignment="right",
+        vertical_alignment="center",
+        width="content",
+    ):
+
+        st.html(THEME_TOGGLE_HTML, width="content")
+
+        if not logged_in():
+
+            st.button(
+                "Masuk",
+                key=(
+                    "navactive_login"
+                    if current_view() == "login"
+                    else "login"
+                ),
+                on_click=show_login,
+            )
 
 
 # ============================================================

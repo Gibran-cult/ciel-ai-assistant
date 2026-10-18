@@ -61,6 +61,30 @@ class ThemeTokensTest(unittest.TestCase):
                 self.assertIn(f'[data-testid="{button}"] [data-testid="stIconMaterial"]', self.css)
         self.assertIn('[data-testid="stSidebarCollapseButton"] button:hover', self.css)
 
+    def test_top_bar_buttons_are_quiet_ghost_buttons(self):
+        # Masuk follows the claude.ai app: no border, 8px corners, a soft grey
+        # background that darkens on hover (no underline).
+        nav = self.css.split("/* Top bar nav,", 1)[1].split("/* Account button", 1)[0]
+        self.assertIn("border: 1px solid transparent;", nav)
+        self.assertIn("border-radius: 8px;", nav)
+        self.assertNotIn("background-image", nav)
+        self.assertIn("background: var(--c-raised);", nav)
+        self.assertIn("background: var(--c-raised-strong);", nav)
+        self.assertIn("font-weight: 600;", nav)
+
+    def test_account_button_stays_at_the_bottom_of_the_sidebar(self):
+        # Sticky on the wrapper Streamlit puts around the keyed container: a
+        # sticky element only moves inside its parent, and the keyed block
+        # alone is exactly as tall as that wrapper.
+        wrapper = '[data-testid="stLayoutWrapper"]:has(> .st-key-sideaccount) {'
+        self.assertIn(wrapper, self.css)
+        rule = self.css.split(wrapper, 1)[1].split("}", 1)[0]
+        for line in ("position: sticky;", "bottom: 0;", "margin-top: auto;", "background: var(--c-surface);"):
+            self.assertIn(line, rule)
+        self.assertIn('[data-testid="stSidebarUserContent"]:has(.st-key-sideaccount) {', self.css)
+        # The menu's email is HTML, so markdown cannot turn it into a mailto link.
+        self.assertIn('<div class="ciel-account-email">', APP_PATH.read_text(encoding="utf-8"))
+
     def test_widget_rules_reach_popover_content(self):
         # Popovers (account menu, "Proyek baru") render outside .stApp, so
         # rules scoped to .stApp left their buttons and expander light in dark
