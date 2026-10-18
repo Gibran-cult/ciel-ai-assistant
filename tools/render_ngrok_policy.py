@@ -26,12 +26,13 @@ import json
 import os
 import re
 import sys
+import uuid
 from pathlib import Path
 
 from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parents[1]
-UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+UUID = re.compile(r"^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$")
 MIN_PASSWORD = 24
 MAX_PASSWORD = 128  # ngrok's limit
 SESSIONS_PATH = "/api/v1/monitor/messages/sessions"
@@ -46,12 +47,17 @@ def exact_path(path):
     return f"(req.url.path == '{path}' && req.url.raw_path == '{path}')"
 
 
+def id_forms(flow_id):
+    # Langflow accepts a flow ID with or without dashes; the app's secret may use either.
+    return [flow_id, flow_id.replace("-", "")]
+
+
 def allowed_requests(flow_id, admin_flow_id):
     """(method, path) pairs the app and the watchdog use."""
     return [
-        ("POST", f"/api/v1/run/{flow_id}"),
-        ("POST", f"/api/v1/run/{admin_flow_id}"),
-        ("POST", f"/api/v1/files/upload/{flow_id}"),
+        *(("POST", f"/api/v1/run/{form}") for form in id_forms(flow_id)),
+        *(("POST", f"/api/v1/run/{form}") for form in id_forms(admin_flow_id)),
+        *(("POST", f"/api/v1/files/upload/{form}") for form in id_forms(flow_id)),
         ("GET", SESSIONS_PATH),
         ("DELETE", SESSIONS_PATH),
         ("GET", "/health_check"),
@@ -90,11 +96,12 @@ def check_settings(user, password, flow_id, admin_flow_id):
         raise PolicyError("NGROK_USER dan NGROK_PASSWORD tidak boleh berisi '${'.")
     for name, value in (("FLOW_ID", flow_id), ("MEMORY_ADMIN_FLOW_ID", admin_flow_id)):
         if not UUID.match(str(value or "")):
-            raise PolicyError(f"{name} harus UUID flow Langflow (huruf kecil), misalnya 00000000-0000-0000-0000-000000000000.")
+            raise PolicyError(f"{name} harus UUID flow Langflow (huruf kecil, boleh tanpa tanda hubung).")
 
 
 def build_policy(user, password, flow_id, admin_flow_id):
     check_settings(user, password, flow_id, admin_flow_id)
+    flow_id, admin_flow_id = str(uuid.UUID(flow_id)), str(uuid.UUID(admin_flow_id))
     allowed = allowed_requests(flow_id, admin_flow_id)
     costly = [r for r in allowed if r[1].startswith(("/api/v1/run/", "/api/v1/files/upload/"))]
     return {
