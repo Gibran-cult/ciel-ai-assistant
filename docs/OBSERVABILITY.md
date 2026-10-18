@@ -64,6 +64,19 @@ The previous run (2026-10-14, v1.5.1) had 17.4 s, 14.6 s, 14.6 s and 16.7 s.
 
 For comparison, the v1.1.0 baseline recorded a median of 36.2 s and a P95 of 51.1 s. The main contributors to the drop: v1.2.0 stopped sending every message through the local vision model, and v1.5.2 removed the shared test session and shortened sub-agent history. Runs through local Langflow skip ngrok, so public latency is slightly higher. These are observed benchmarks, not service-level guarantees.
 
+### Flow v1.9.0: research by the main Agent (2026-10-18, through ngrok)
+
+Ciel's own browser test on v1.8.0 still took 31.8-40.5 s on the Langflow side: research answers were written twice (research sub-agent, then the main Agent), the first memory call after 5 idle minutes reloaded the embedding model (14 s), and analysis ran 3 search rounds in the sub-flow. Same questions as the table below, measured end to end like the app:
+
+| Type | v1.8.0 with source guard | v1.9.0 |
+|---|---|---|
+| Chat (5 questions) | 4-7.5 s | 4.0-6.3 s |
+| Tutor and explanations (3) | 7-40 s | 5.5-10.9 s |
+| Web research, fast mode (3) | 9.8, 38.8, 40.4 s | 8.5, 13.8, 13.6 s |
+| Analysis mode (1) | 60.2 s | 16.0 s |
+
+Every research and analysis answer listed sources, and every cited URL was one Exa returned in that run (the guard removed nothing). The response quality suite passed 9/9 on a test copy of v1.9.0. A warm embedding call takes 0.04 s; a cold one took 5-14 s.
+
 ### Latency by question type (2026-10-17, through ngrok)
 
 Measured end to end like the app (own session per request, app tweaks), before and after flow v1.8.0 and the Langflow host changes below. Same questions both times, taken from real test usage.
@@ -100,6 +113,8 @@ Production traces before the change (108 runs, 13-17 Oct): median 29.9 s, P90 12
 - `LANGFLOW_VERTEX_BUILDS_STORAGE_ENABLED=false` in `%APPDATA%\com.LangflowDesktop\data\.env`. After every layer of the graph, Langflow 1.12 logs each component's build result one by one (`lfx/graph/graph/base.py`, `_execute_tasks`), at 1-3.6 s per component. With 11 components in the first layer, every request waited about 11-17 s before the Agent started, even "iya boleh". These rows only feed the build view in the Langflow editor; messages (the Agent's chat history) and transactions are still stored.
 - `LANGFLOW_DEACTIVATE_TRACING=true`. Tracing had written about 3 GB to the `span` table. That data was deleted and the database compacted on 2026-10-17 (3.2 GB to 232 MB; backup in `~/.ciel_ai/langflow_db_backups/`). While the database was that large and the PC was short of memory, storing a chat message took 11-12 s, and two requests stalled for 8 and 14 minutes.
 - The backend shares the PC's 8 GB of RAM with everyday apps. When available memory dropped to about 160 MB (committed memory near its limit), Langflow, Ollama and ngrok all timed out. Close unused apps before others test Ciel.
+
+- Langflow 1.12 derives `Message.text` from the message's text blocks, and assigning it replaces every text block with one joined block. Chat Output assigns it, so a component between the Agent and Chat Output must keep only the final answer's text block, or the app shows earlier rounds as well (seen on the first v1.9.0 test).
 
 ### Measuring a slow request
 

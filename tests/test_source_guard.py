@@ -19,8 +19,22 @@ def install_stubs():
             self.ctx = {}
 
     class Message:
+        # Like Langflow 1.12: text is derived from the text blocks, and
+        # assigning it replaces every text block with one joined block.
         def __init__(self, text=""):
-            self.text = text
+            self.content_blocks = []
+            self._data_text = text
+
+        @property
+        def text(self):
+            joined = "".join(b.text for b in self.content_blocks if getattr(b, "type", None) == "text")
+            return joined or self._data_text
+
+        @text.setter
+        def text(self, value):
+            others = [b for b in self.content_blocks if getattr(b, "type", None) != "text"]
+            self.content_blocks = others + ([types.SimpleNamespace(type="text", text=value)] if value else [])
+            self._data_text = value
 
     class StructuredTool:
         def __init__(self, func, name, description, args_schema):
@@ -123,7 +137,7 @@ class SourceGuardTest(unittest.TestCase):
         self.assertIn("Konflik atau ketidakpastian: [1] dan menekankan", checked)
         for url in LIVE_RETRIEVED:
             self.assertIn(url, checked)
-        self.assertTrue(checked.endswith("(2 sumber dihapus karena tidak ada di hasil pencarian Exa.)"))
+        self.assertTrue(checked.endswith("(2 sumber dihapus karena tidak ada di hasil pencarian.)"))
 
     def test_notes_with_only_retrieved_sources_are_unchanged(self):
         notes = LIVE_NOTES.split("[4] Stanford")[0].rstrip()
@@ -134,11 +148,9 @@ class SourceGuardTest(unittest.TestCase):
         text = "Aku tidak menemukan sumber yang relevan untuk pertanyaan ini."
         self.assertEqual(self.filter(text, []), (text, 0))
 
-    def test_no_search_results_remove_every_source(self):
-        checked, removed = self.filter(LIVE_NOTES, [])
-        self.assertEqual(removed, 5)
-        self.assertNotIn("https://", checked)
-        self.assertIn("Sumber:", checked)
+    def test_answers_from_runs_without_a_search_pass_through(self):
+        # In the main flow most answers never search (files, Knowledge Base, memory).
+        self.assertEqual(self.filter(LIVE_NOTES, []), (LIVE_NOTES, 0))
 
     def test_url_variants_still_match(self):
         notes = (
@@ -154,12 +166,16 @@ class SourceGuardTest(unittest.TestCase):
         ]
         self.assertEqual(self.filter(notes, retrieved), (notes, 0))
 
-    def test_entry_without_url_is_removed(self):
-        notes = "Temuan:\n- Fakta A [1].\n- Fakta B [2].\n\nSumber:\n[1] A — https://a.example/x — 2026\n[2] Buku B — tanpa tautan"
+    def test_sources_without_a_url_are_kept(self):
+        notes = "- Fakta A [1].\n- Fakta B [2].\n\nSumber:\n[1] A — https://a.example/x — 2026\n[2] File yang kamu lampirkan: nilai.csv"
+        self.assertEqual(self.filter(notes, ["https://a.example/x"]), (notes, 0))
+
+    def test_unnumbered_source_lines_are_checked(self):
+        notes = "Jawaban singkat.\n\nSumber:\n- A — https://a.example/x\n- Dari ingatan — https://ingatan.example/y"
         checked, removed = self.filter(notes, ["https://a.example/x"])
         self.assertEqual(removed, 1)
-        self.assertNotIn("Fakta B", checked)
-        self.assertNotIn("Buku B", checked)
+        self.assertIn("- A — https://a.example/x", checked)
+        self.assertNotIn("ingatan.example", checked)
 
     def test_finding_after_the_source_list_is_checked_too(self):
         # Live test: the Agent wrote a finding below "Sumber:" citing a source from memory.
@@ -179,7 +195,35 @@ class SourceGuardTest(unittest.TestCase):
         self.assertEqual(removed, 1)
         self.assertIn("- Fakta [1].", checked)
 
-    def test_component_reads_urls_from_the_graph_context(self):
+    def test_component_filters_the_agent_message_in_place(self):
+        # The app shows the last text block of the message, so every text block
+        # must survive on its own (live v1.9.0 test: assigning Message.text
+        # merged the tool round and the answer, and the app showed both).
+        uninstall = install_stubs()
+        try:
+            namespace = load(GUARD_SOURCE, "ciel_source_guard")
+            Message = sys.modules["langflow.schema.message"].Message
+            agent_message = Message()
+            tool = types.SimpleNamespace(type="tool_use", name="search", text=None)
+            first = types.SimpleNamespace(type="text", text="Total Sales_Amount adalah 1.065.600,71.")
+            final = types.SimpleNamespace(type="text", text=LIVE_NOTES)
+            agent_message.content_blocks = [tool, first, final]
+            guard = namespace["CielSourceGuard"](notes=agent_message)
+            guard.ctx[namespace["RETRIEVED_URLS_KEY"]] = LIVE_RETRIEVED
+            result = guard.check()
+        finally:
+            uninstall()
+        self.assertIs(result, agent_message)
+        self.assertEqual(result.content_blocks, [tool, final])
+        self.assertNotIn("hai.stanford.edu", final.text)
+        self.assertEqual(guard.status, "3 URL dari Exa, 2 sumber dihapus.")
+        # Chat Output then assigns Message.text, which joins the text blocks:
+        # only the final answer may be left to join.
+        result.text = result.text
+        self.assertEqual(result.text, final.text)
+        self.assertNotIn("Total Sales_Amount adalah", result.text)
+
+    def test_component_filters_a_message_without_blocks(self):
         uninstall = install_stubs()
         try:
             namespace = load(GUARD_SOURCE, "ciel_source_guard")
@@ -190,7 +234,18 @@ class SourceGuardTest(unittest.TestCase):
         finally:
             uninstall()
         self.assertNotIn("hai.stanford.edu", result.text)
-        self.assertEqual(guard.status, "3 URL dari Exa, 2 sumber dihapus.")
+
+    def test_component_without_a_search_returns_the_message_unchanged(self):
+        uninstall = install_stubs()
+        try:
+            namespace = load(GUARD_SOURCE, "ciel_source_guard")
+            Message = sys.modules["langflow.schema.message"].Message
+            agent_message = Message(LIVE_NOTES)
+            result = namespace["CielSourceGuard"](notes=agent_message).check()
+        finally:
+            uninstall()
+        self.assertIs(result, agent_message)
+        self.assertEqual(result.text, LIVE_NOTES)
 
 
 class ExaSearchRecordTest(unittest.TestCase):

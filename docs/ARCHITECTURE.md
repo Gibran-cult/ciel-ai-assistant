@@ -35,7 +35,10 @@ Agent
  +-- Math Tutor Agent     (Run Flow)
  +-- Verified Data Analyst (Run Flow, built-in sales dataset only)
  +-- Knowledge Retriever  (Run Flow)
- +-- Web Research Assistant (Run Flow)
+ +-- Ciel Exa Search      (web search; records every URL Exa returns)
+ |
+ v
+Ciel Source Guard        (drops sources no search returned)
  |
  v
 Chat Output
@@ -193,11 +196,9 @@ Knowledge-related requests can be delegated through the Knowledge Retriever Run 
 
 The nested flow is exposed as a tool available to the Agent.
 
-### Web Research Assistant
+### Web Research (v1.9.0)
 
-Current or web-based research is delegated to the Web Research Assistant.
-
-The main flow exposes a Run Flow tool for the Web Research Assistant.
+The main Agent searches the web itself with Ciel Exa Search. Until v1.8.0 it delegated research to the Web Research Assistant sub-flow, which is still in Langflow (with its own guard) as the rollback path but is no longer connected.
 
 Sensitive API configuration is kept outside source control.
 
@@ -225,7 +226,7 @@ Knowledge Base / Internal Material
     -> Knowledge Agent
 
 Current / Web Information
-    -> Research Agent
+    -> search (Ciel Exa Search)
 
 Previous User Context
     -> Ciel Memory Search
@@ -235,28 +236,34 @@ Some requests may require more than one specialist.
 
 ## Research Flow
 
-The Web Research Assistant is connected to the main Agent through the Run Flow tool mechanism.
+Since v1.9.0 research is direct: the main Agent calls Exa, writes the answer with numbered sources, and the guard checks the sources before Chat Output.
 
 ```text
 Main Agent
     |
     v
-Web Research Assistant Tool
+search (Ciel Exa Search, 2 queries at once)
     |
     v
-Nested Research Flow
+Main Agent writes the answer + "Sumber:"
     |
     v
-Research Result
-    |
-    v
-Main Agent
+Ciel Source Guard
     |
     v
 Final Response
 ```
 
-### Research Modes (v1.8.0)
+Until v1.8.0 the main Agent called the Web Research Assistant sub-flow, whose own Agent searched and wrote notes that the main Agent then rewrote. Writing every research answer twice, plus the sub-agent's planning step and building the sub-flow, cost about 8-14 s per research question.
+
+### Research Rules (v1.9.0, prompt v14.6)
+
+- Mode Santai (fast research): one round, 2 different queries at once, then the answer.
+- Mode Analisis (deep research): at most 3 rounds of at most 2 queries; the answer still ends with "Sumber:" after the Batasan line (before v14.6 the analysis format said to end right after Batasan, and only 3 of 6 production analysis answers listed sources).
+- No `get_contents`; the date is asked for in the same round as the search; sources and URLs only from that run's search results, numbered as [1], [2] and listed under "Sumber:".
+- Ciel Exa Search returns 5 results per query with at most 1,500 highlight characters each and records every URL Exa returns in the graph context. Ciel Source Guard removes source lines whose URLs no search returned, their markers and the findings that cited only them, and says how many it removed. Runs without a search pass through unchanged, and so do source lines without a URL (a file, the Knowledge Base). The guard keeps only the final answer's text block: Langflow 1.12's Chat Output assigns `Message.text`, which joins every text block, and the app would otherwise show earlier rounds too.
+
+### Research Modes in the Web Research Assistant (v1.8.0, rollback path)
 
 The main Agent starts every question for the Research Agent with a mode marker:
 
@@ -335,9 +342,9 @@ The Agent memory policy also prohibits storing API keys, passwords, tokens, cred
 
 ## Performance Considerations
 
-The architecture contains nested tool execution, especially for Web Research.
+The architecture contains nested tool execution (Math Tutor, Verified Data Analyst, Knowledge Retriever). Research has been direct since v1.9.0.
 
-Nested Run Flow execution introduces additional runtime overhead compared with direct tool execution.
+Nested Run Flow execution introduces additional runtime overhead compared with direct tool execution: each nested Agent adds its own model calls, and the sub-flow is built on every call.
 
 Performance profiling therefore treats direct model execution, Agent execution, memory operations, direct research, and nested research execution as separate performance boundaries.
 
@@ -370,12 +377,14 @@ Contract tests check that each snapshot embeds the same component code as `flow/
 - **v1.5.1:** prompt-only: Indonesian number format, conversion of tool output, no invented currency. The app also returns only the final model text block, because Langflow 1.12 joins every Agent round into `Message.text`.
 - **v1.6.0:** adds Ciel ML Analyst and prompt v14.3: a machine learning route for user files (predict, important factors, new-row prediction, clustering), no derived target columns as features, model quality always reported with the result, and ML results as a study-companion example.
 - **v1.7.0:** adds Ciel Dataset Store; Table Analyst and ML Analyst read saved datasets; prompt v14.4 (save only on an explicit request, no table data in long-term memory, deletion only through "Data saya"). The Memory Admin flow gained the dataset actions.
+- **v1.8.0:** prompt v14.5: research questions go to the Web Research Assistant as fast or deep research.
+- **v1.9.0:** the main Agent searches with Ciel Exa Search itself and Ciel Source Guard checks the answer's sources (prompt v14.6); the Web Research Assistant tool is removed. The memory components keep the embedding model loaded for an hour (`keep_alive`), because reloading it after Ollama's 5-minute default took up to 14 s.
 
 ## Langflow Configuration Outside the Repository
 
 Parts of production are configured in Langflow and are not versioned here. Changes to them are recorded in `CHANGELOG.md`, backed up to `~/.ciel_ai/flow_backups/` on the Langflow host, and listed in `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
 
-- **Sub-flows:** Math Tutor Agent (Agent `n_messages` = 4), Web Research Assistant (Agent `n_messages` = 0, Exa search), Verified Data Analyst, and Knowledge Retriever (knowledge base `TITANIC_DATA_SCIENCE_SOLUTIONS`). Sub-agents get a complete question from the main Agent, so they keep little or no history; their history is scoped by session and flow.
+- **Sub-flows:** Math Tutor Agent (Agent `n_messages` = 4), Web Research Assistant (Agent `n_messages` = 0, Exa search; not connected since v1.9.0, kept as the rollback path), Verified Data Analyst, and Knowledge Retriever (knowledge base `TITANIC_DATA_SCIENCE_SOLUTIONS`). Sub-agents get a complete question from the main Agent, so they keep little or no history; their history is scoped by session and flow.
 - **API keys:** every production flow reads model and search keys from Langflow global variables (`DEEPSEEK_API_KEY`, `EXA_API_KEY`); no production flow stores a literal key.
 - **Projects:** "Starter Project" holds only the five production flows. Earlier experiments and versions are in the project "Arsip" (some of them still contain literal keys).
 

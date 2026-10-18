@@ -114,6 +114,9 @@ class CielMemorySearch(Component):
                 json={
                     "model": embedding_model,
                     "input": query,
+                    # Ollama unloads a model after 5 idle minutes; reloading
+                    # this one took 14 s on the Langflow PC (2026-10-17).
+                    "keep_alive": "1h",
                 },
                 timeout=120,
             )
