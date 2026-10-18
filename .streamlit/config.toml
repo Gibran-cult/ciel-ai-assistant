@@ -5,3 +5,8 @@ primaryColor = "#203a72"
 backgroundColor = "#f3f2ee"
 secondaryBackgroundColor = "#e9e7e1"
 textColor = "#1c1b19"
+
+[server]
+# MB per file. Images are capped at 5 MB and text at 40,000 characters in
+# app.py; this stops oversized uploads before the app reads them.
+maxUploadSize = 25

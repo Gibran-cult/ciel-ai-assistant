@@ -14,11 +14,11 @@ The following parts of production are **not in Git** and need their own protecte
 |---|---|---|
 | App secrets | Streamlit Cloud Secrets, local `.streamlit/secrets.toml` / `.env` | `NGROK_URL`, `NGROK_USER`, `NGROK_PASSWORD`, `LANGFLOW_API_KEY`, `FLOW_ID`, optional `[auth]` and rate limits |
 | Langflow global variables | Langflow database | At least `DEEPSEEK_API_KEY` (main Agent and the DeepSeek sub-flows) and `EXA_API_KEY` (Web Research). Flows store only the variable names. |
-| Sub-flows | Langflow database | Math Tutor Agent, Verified Data Analyst, Knowledge Retriever, Web Research Assistant. The main flow calls them by Run Flow. |
-| Verified Data Analyst dataset | Langflow file storage (`200_sales_data`) | Read by the analyst's Read File and CSV Agent nodes |
+| Sub-flows | Langflow database | Math Tutor Agent and Knowledge Retriever, called by Run Flow; Web Research Assistant, kept as the rollback path for research. Verified Data Analyst was removed in v1.11.0 (a backup is in the flow backups). |
+| Built-in sales dataset | `~/.ciel_ai/builtin_datasets/200_sales_data.csv` on the Langflow host | Read by Ciel Table Analyst (`file_name=200_sales_data`). Copied from Langflow file storage (`200_sales_data (1).csv`, 200 rows); keep a copy with the flow backups. |
 | Knowledge base | `~/.langflow/knowledge_bases` on the Langflow host | Knowledge base `TITANIC_DATA_SCIENCE_SOLUTIONS`, used by Knowledge Retriever |
 | Long-term memory | `~/.ciel_ai/long_term_memory` (Chroma) on the Langflow host | Per-user memories; cannot be rebuilt from Git |
-| ngrok traffic policy | A policy file passed to the ngrok agent (for example `~/ngrok-ciel-policy.yml`) | Contains the Basic Auth credentials and the per-IP rate limit |
+| ngrok traffic policy | A policy file passed to the ngrok agent (default `~/ngrok-ciel-policy.yml`) | Generated from `.env` by `tools/render_ngrok_policy.py`: per-IP rate limits, Basic Auth credentials and the exact path allowlist. Regenerate it instead of restoring it. |
 | Ollama models | Ollama on the Langflow host | `qwen2.5vl:3b` (images), `nomic-embed-text-v2-moe:latest` (memory embeddings); re-pull with `ollama pull` |
 | Flow backups | `~/.ciel_ai/flow_backups/` on the Langflow host | Copies taken before each in-place flow change (see below) |
 | Retention task | Windows Task Scheduler on the Langflow host | Runs `tools/prune_chat_history.py` daily; recreate it after restoring the host (see `README.md`) |
@@ -33,7 +33,7 @@ Before every in-place change to a production flow or sub-flow, the live flow is 
 
 To roll back, replace the flow's `data` with the backup's `data` through `PATCH /api/v1/flows/<id>` (or import the backup in the Langflow UI), then verify with a real request through ngrok.
 
-Because the sub-flows are not versioned in Git, export all four regularly (Langflow UI: Export, or `GET /api/v1/flows/<id>`) to a protected location.
+Because the sub-flows are not versioned in Git, export them regularly (Langflow UI: Export, or `GET /api/v1/flows/<id>`) to a protected location.
 
 ## Recovery Procedure
 

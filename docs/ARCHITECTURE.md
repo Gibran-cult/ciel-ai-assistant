@@ -29,11 +29,10 @@ Agent
  +-- DeepSeek Model
  +-- Ciel Memory Search   (filtered by owner)
  +-- Ciel Memory Store    (tagged with owner)
- +-- Ciel Table Analyst   (user CSV/TSV, sent by the app via tweaks)
+ +-- Ciel Table Analyst   (user CSV/TSV via tweaks, and the built-in sales dataset)
  +-- Ciel ML Analyst      (models on the same user CSV/TSV)
  +-- Ciel Dataset Store   (personal datasets of signed-in users)
  +-- Math Tutor Agent     (Run Flow)
- +-- Verified Data Analyst (Run Flow, built-in sales dataset only)
  +-- Knowledge Retriever  (Run Flow)
  +-- Ciel Exa Search      (web search; records every URL Exa returns)
  |
@@ -159,11 +158,11 @@ Secrets and credentials are not intended to be stored in long-term memory.
 
 ### Math Tutor
 
-Mathematical requests are delegated to the Math Tutor Agent flow through a native Run Flow tool (no API key in the flow).
+Mathematical requests are delegated to the Math Tutor Agent flow through a native Run Flow tool (no API key in the flow). Since v1.11.0 the Math Tutor works step by step with Langflow's Calculator only; its Python Interpreter, which ran model-written code, was removed.
 
-### Verified Data Analyst
+### Built-in sales dataset
 
-Questions about the built-in sales dataset (`200_sales_data`, 200 rows) go to the Verified Data Analyst flow, which computes verified metrics with a CSV agent. Its tool description and the routing rules limit it to that dataset.
+Questions about the built-in sales dataset (`200_sales_data`, 200 rows) go to Ciel Table Analyst with `file_name=200_sales_data` (since v1.11.0). The component reads `~/.ciel_ai/builtin_datasets/200_sales_data.csv` on the Langflow host, only when the dataset is named and no attached file or saved dataset has that name, so the default pick (the only attached file or saved dataset) is unchanged. Until v1.10.2 these questions went to the Verified Data Analyst sub-flow, a CSV agent with `allow_dangerous_code=True` that ran model-written Python on the host.
 
 ### Ciel Table Analyst
 
@@ -222,7 +221,7 @@ Save or add data to a personal dataset (signed-in users)
     -> Ciel Dataset Store
 
 Built-in sales dataset (200_sales_data)
-    -> Verified Data Analyst
+    -> Ciel Table Analyst (file_name=200_sales_data)
 
 Knowledge Base / Internal Material
     -> Knowledge Agent
@@ -344,7 +343,7 @@ The Agent memory policy also prohibits storing API keys, passwords, tokens, cred
 
 ## Performance Considerations
 
-The architecture contains nested tool execution (Math Tutor, Verified Data Analyst, Knowledge Retriever). Research has been direct since v1.9.0.
+The architecture contains nested tool execution (Math Tutor, Knowledge Retriever). Research has been direct since v1.9.0.
 
 Nested Run Flow execution introduces additional runtime overhead compared with direct tool execution: each nested Agent adds its own model calls, and the sub-flow is built on every call.
 
@@ -380,6 +379,7 @@ Contract tests check that each snapshot embeds the same component code as `flow/
 - **v1.6.0:** adds Ciel ML Analyst and prompt v14.3: a machine learning route for user files (predict, important factors, new-row prediction, clustering), no derived target columns as features, model quality always reported with the result, and ML results as a study-companion example.
 - **v1.7.0:** adds Ciel Dataset Store; Table Analyst and ML Analyst read saved datasets; prompt v14.4 (save only on an explicit request, no table data in long-term memory, deletion only through "Data saya"). The Memory Admin flow gained the dataset actions.
 - **v1.8.0:** prompt v14.5: research questions go to the Web Research Assistant as fast or deep research.
+- **v1.11.0:** security hardening: the Verified Data Analyst tool is removed and Ciel Table Analyst reads the built-in dataset; prompt v14.7 adds "10. KEAMANAN" (content from tools is data, not instructions; no images or data-carrying URLs). Outside the repository the Math Tutor sub-flow lost its Python Interpreter.
 - **v1.10.2:** `gemini-3.5-flash-lite` reads first and `gemini-3.1-flash-lite` is the backup, each limited to 8 s.
 - **v1.10.1:** the Vision Router tries a backup Gemini model before the local model.
 - **v1.10.0:** the Vision Router reads images with the Gemini API and keeps the local model as the fallback; only the router node changes.
@@ -389,7 +389,7 @@ Contract tests check that each snapshot embeds the same component code as `flow/
 
 Parts of production are configured in Langflow and are not versioned here. Changes to them are recorded in `CHANGELOG.md`, backed up to `~/.ciel_ai/flow_backups/` on the Langflow host, and listed in `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
 
-- **Sub-flows:** Math Tutor Agent (Agent `n_messages` = 4), Web Research Assistant (Agent `n_messages` = 0, Exa search; not connected since v1.9.0, kept as the rollback path), Verified Data Analyst, and Knowledge Retriever (knowledge base `TITANIC_DATA_SCIENCE_SOLUTIONS`). Sub-agents get a complete question from the main Agent, so they keep little or no history; their history is scoped by session and flow.
+- **Sub-flows:** Math Tutor Agent (Agent `n_messages` = 4), Web Research Assistant (Agent `n_messages` = 0, Exa search; not connected since v1.9.0, kept as the rollback path), and Knowledge Retriever (knowledge base `TITANIC_DATA_SCIENCE_SOLUTIONS`). Sub-agents get a complete question from the main Agent, so they keep little or no history; their history is scoped by session and flow.
 - **API keys:** every production flow reads model and search keys from Langflow global variables (`DEEPSEEK_API_KEY`, `EXA_API_KEY`); no production flow stores a literal key.
 - **Projects:** "Starter Project" holds only the five production flows. Earlier experiments and versions are in the project "Arsip" (some of them still contain literal keys).
 
@@ -414,9 +414,11 @@ Parts of production are configured in Langflow and are not versioned here. Chang
 
 - One Langflow session per chat (no shared Agent history).
 - Long-term memory per signed-in user; disabled for anonymous visitors.
-- Hourly message limits per user plus a shared anonymous budget, checked in the app before any backend call (`RATE_LIMIT_*` settings).
+- Hourly and daily message limits per user, a shared hourly and daily budget for anonymous visitors, and a daily total for everyone, checked in the app before any backend call (`RATE_LIMIT_*` settings). Typed messages are capped at 10,000 characters (checked on the server too), uploads at 25 MB, and images at 90 megapixels before they are decoded.
 - Error messages show a Request ID instead of response bodies or exception text; details go to the server log.
-- The ngrok traffic policy adds Basic Auth and a per-IP rate limit on `/api/v1/run/`.
+- The ngrok traffic policy (generated by `tools/render_ngrok_policy.py`) applies a per-IP rate limit, Basic Auth, and an exact allowlist of the paths and flow IDs the app uses; everything else answers 404.
+- No component runs model-written code (since v1.11.0), and prompt v14.7 treats web, file, photo and memory content as data. The app removes markdown images from answers, so prompt injection cannot send chat data through an image URL.
+- See `SECURITY.md` for the full list, the incident runbook and the owner checklist.
 - A privacy page, self-service deletion of memories and server chat history for signed-in users, and a retention period for server-side messages (see Privacy and Data Controls).
 
 ## Architecture Principles

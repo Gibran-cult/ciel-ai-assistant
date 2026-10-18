@@ -1,12 +1,14 @@
 import ast
 import io
 import unittest
+import warnings
 from pathlib import Path
 
 from PIL import Image, ImageOps
 
 
 APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
+SECURITY_EVENTS = []
 SOURCE = APP_PATH.read_text(encoding="utf-8")
 
 
@@ -28,6 +30,8 @@ def load():
             if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) == "MAX_IMAGE_BYTES"
         )), "MAX_IMAGE_BYTES", "eval")),
         "IMAGE_MIME": app_constant("IMAGE_MIME"),
+        "MAX_IMAGE_PIXELS": app_constant("MAX_IMAGE_PIXELS"),
+        "security_event": lambda kind, **fields: SECURITY_EVENTS.append((kind, fields)),
     }
     for node in ast.parse(SOURCE).body:
         if isinstance(node, ast.FunctionDef) and node.name in ("read_image", "fit_for_vision", "file_extension"):
@@ -93,9 +97,29 @@ class FitForVisionTest(unittest.TestCase):
             self.assertEqual(img.convert("RGB").getpixel((10, 10)), (255, 255, 255))
         self.assertEqual(image["name"], "layar.jpg")
 
-    def test_unreadable_file_is_left_as_is(self):
+    def test_unreadable_file_is_refused(self):
+        # Sent as is before: a broken or hostile file reached Langflow and the vision models.
         image = {"name": "rusak.png", "data": b"not an image", "mime": "image/png"}
-        self.assertIs(self.app["fit_for_vision"](image), image)
+        self.assertIsNone(self.app["fit_for_vision"](image))
+        SECURITY_EVENTS.clear()
+        image, error = self.app["read_image"](Upload("rusak.png", b"not an image"))
+        self.assertIsNone(image)
+        self.assertIn("bukan gambar yang bisa dibaca", error)
+        self.assertEqual(SECURITY_EVENTS, [("image_rejected", {"reason": "unreadable"})])
+
+    def test_huge_image_is_refused_before_it_is_decoded(self):
+        # A small PNG can declare a huge canvas (decompression bomb).
+        SECURITY_EVENTS.clear()
+        out = io.BytesIO()
+        Image.new("1", (10_000, 9_001)).save(out, format="PNG")
+        data = out.getvalue()
+        self.assertLess(len(data), self.app["MAX_IMAGE_BYTES"])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+            image, error = self.app["read_image"](Upload("bom.png", data))
+        self.assertIsNone(image)
+        self.assertIn("resolusi gambar terlalu besar (maks. 90 megapiksel)", error)
+        self.assertEqual(SECURITY_EVENTS, [("image_rejected", {"reason": "pixels"})])
 
     def test_size_limit_still_applies(self):
         too_big = Upload("besar.jpg", b"0" * (self.app["MAX_IMAGE_BYTES"] + 1))

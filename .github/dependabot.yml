@@ -1,0 +1,12 @@
+# Weekly update PRs for the app's Python packages and the pinned GitHub
+# Actions (ci.yml and keep-awake.yml pin actions to commit SHAs).
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
