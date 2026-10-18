@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fastest Gemini model first (flow v1.10.2)
+- Image questions in production still took 30-32 s. The image itself took 9.9-21.7 s to read, while the Agent took about 8 s. Timing both models on 8 new photos showed `gemini-3.5-flash-lite` reading every one in 1.3-2.7 s. `gemini-3.1-flash-lite` took up to 10 s when it answered and timed out at 20 s three times, and every timeout delayed the answer by 20 s before the backup ran.
+- Ciel Vision Router now reads with `gemini-3.5-flash-lite` first, uses `gemini-3.1-flash-lite` as the backup, and limits each model to 8 s (`api_timeout`). The cost per photo stays about the same.
+- Through ngrok on a test copy, four new phone photos took 7.6-13.8 s per question, with the image read in 1.9-3.7 s. All answers were correct, and the local model was not used.
+- Production was patched in place after a backup (`main_v1.10.1_before_v1.10.2_20261017_211114.json`). Two photo questions through ngrok took 11.6 s (image read in 2.7 s) and 25.0 s (image read in 15.4 s, likely one 8 s timeout before the backup answered). Both answers were correct, so Gemini's response time can still vary.
+- New `tests/test_flow_v1102_contract.py` (in CI). `tests/test_flow_v1101_contract.py` treats v1.10.1's router as historical.
+
 ### Backup Gemini model for image reading (flow v1.10.1)
 - Right after flow v1.10.0 went live, `gemini-3.1-flash-lite` answered HTTP 503 for a while. The router fell back to the local model, which took 136.5 s to read one photo (153.6 s for the whole question) and filled the PC's memory. A probe showed `gemini-3.5-flash-lite` still answering at the same time.
 - Ciel Vision Router now tries `api_fallback_model` (`gemini-3.5-flash-lite`) when the main model fails, and only then the local model. The status lists each model's error. The same model in both fields is tried once.

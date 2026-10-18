@@ -380,6 +380,7 @@ Contract tests check that each snapshot embeds the same component code as `flow/
 - **v1.6.0:** adds Ciel ML Analyst and prompt v14.3: a machine learning route for user files (predict, important factors, new-row prediction, clustering), no derived target columns as features, model quality always reported with the result, and ML results as a study-companion example.
 - **v1.7.0:** adds Ciel Dataset Store; Table Analyst and ML Analyst read saved datasets; prompt v14.4 (save only on an explicit request, no table data in long-term memory, deletion only through "Data saya"). The Memory Admin flow gained the dataset actions.
 - **v1.8.0:** prompt v14.5: research questions go to the Web Research Assistant as fast or deep research.
+- **v1.10.2:** `gemini-3.5-flash-lite` reads first and `gemini-3.1-flash-lite` is the backup, each limited to 8 s.
 - **v1.10.1:** the Vision Router tries a backup Gemini model before the local model.
 - **v1.10.0:** the Vision Router reads images with the Gemini API and keeps the local model as the fallback; only the router node changes.
 - **v1.9.0:** the main Agent searches with Ciel Exa Search itself and Ciel Source Guard checks the answer's sources (prompt v14.6); the Web Research Assistant tool is removed. The memory components keep the embedding model loaded for an hour (`keep_alive`), because reloading it after Ollama's 5-minute default took up to 14 s.
