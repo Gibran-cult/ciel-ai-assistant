@@ -77,11 +77,11 @@ class VisionRouterTest(unittest.TestCase):
             uninstall()
         FakeOllama.calls = 0
 
-    def router(self, key="", images=(IMAGE,)):
+    def router(self, key="", images=(IMAGE,), fallback="gemini-3.5-flash-lite"):
         router = self.ns["CielVisionRouter"](
             message=self.Message("Hitung limitnya"), model_name="qwen2.5vl:3b", base_url="http://127.0.0.1:11434",
             system_prompt="SYS", instruction="Baca gambar", num_ctx=4096,
-            vision_api_key=key, api_model="gemini-3.1-flash-lite", api_timeout=20,
+            vision_api_key=key, api_model="gemini-3.1-flash-lite", api_fallback_model=fallback, api_timeout=20,
         )
         router._image_contents = lambda message: list(images)
         return router
@@ -115,8 +115,26 @@ class VisionRouterTest(unittest.TestCase):
             result = self.run_route(router)
         self.assertIn("bacaan model lokal", result.text)
         self.assertEqual(FakeOllama.calls, 1)
-        self.assertIn("Vision API gagal (RuntimeError: HTTP 403)", router.status)
+        self.assertIn("gemini-3.1-flash-lite: RuntimeError: HTTP 403", router.status)
+        self.assertIn("gemini-3.5-flash-lite: RuntimeError: HTTP 403", router.status)
         self.assertNotIn(KEY, router.status + result.text)
+
+    def test_backup_model_reads_the_image_when_the_main_model_is_unavailable(self):
+        # Production 2026-10-18: the main model answered HTTP 503 for a while.
+        with patch.object(self.ns["requests"], "post", side_effect=[gemini_response(status=503), gemini_response()]) as post:
+            router = self.router(key=KEY)
+            result = self.run_route(router)
+        self.assertIn("bacaan Gemini", result.text)
+        self.assertEqual(FakeOllama.calls, 0)
+        self.assertEqual([c.args[0].split("/models/")[1] for c in post.call_args_list],
+                         ["gemini-3.1-flash-lite:generateContent", "gemini-3.5-flash-lite:generateContent"])
+        self.assertEqual(router.status, "1 gambar dibaca lewat gemini-3.5-flash-lite.")
+
+    def test_same_main_and_backup_model_is_tried_once(self):
+        with patch.object(self.ns["requests"], "post", return_value=gemini_response(status=503)) as post:
+            self.run_route(self.router(key=KEY, fallback="gemini-3.1-flash-lite"))
+        self.assertEqual(post.call_count, 1)
+        self.assertEqual(FakeOllama.calls, 1)
 
     def test_api_timeout_falls_back_to_the_local_model(self):
         with patch.object(self.ns["requests"], "post", side_effect=requests.Timeout("lambat")):

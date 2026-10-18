@@ -9,7 +9,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FLOW_V190 = ROOT / "flow" / "v1.9.0" / "Ciel_AI_Long-Term_Memory_Master.json"
 FLOW_V1100 = ROOT / "flow" / "v1.10.0" / "Ciel_AI_Long-Term_Memory_Master.json"
-ROUTER_SOURCE = ROOT / "flow" / "components" / "ciel_vision_router.py"
 
 
 def router(flow):
@@ -38,8 +37,11 @@ class FlowV1100ContractTest(unittest.TestCase):
         self.assertEqual(router(self.flow)["id"], router(self.base)["id"])
 
     def test_router_code_matches_repository_source(self):
+        # Snapshot historis: sejak v1.10.1 router juga mencoba model Gemini
+        # cadangan; kode terkini dicek di tests/test_flow_v1101_contract.py.
         code = self.template["code"]["value"]
-        self.assertEqual(code.splitlines(), ROUTER_SOURCE.read_text(encoding="utf-8").splitlines())
+        self.assertIn("def _read_with_api(self, images) -> str:", code)
+        self.assertNotIn("api_fallback_model", code)
         self.assertEqual(self.node["metadata"]["code_hash"], hashlib.sha256(code.encode()).hexdigest()[:12])
 
     def test_gemini_reads_images_with_the_key_from_a_global_variable(self):
