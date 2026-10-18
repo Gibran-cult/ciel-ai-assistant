@@ -63,11 +63,18 @@ class FlowV141ContractTest(unittest.TestCase):
         return self.nodes[node_id]["data"]["node"]["template"]
 
     def test_memory_code_matches_repository_source(self):
+        # Snapshot historis: sejak v1.9.0 permintaan embedding memakai
+        # keep_alive 1 jam; kode terkini dicek di tests/test_flow_v190_contract.py.
+        def without_keep_alive(source):
+            lines = source.splitlines()
+            keep_alive = next(i for i, line in enumerate(lines) if '"keep_alive": "1h",' in line)
+            return "\n".join(lines[:keep_alive - 2] + lines[keep_alive + 1:])
+
         for node_id, filename in SOURCES.items():
             with self.subTest(node=node_id):
                 self.assertEqual(
                     normalize(self.template(node_id)["code"]["value"]),
-                    normalize((COMPONENTS / filename).read_text(encoding="utf-8")),
+                    normalize(without_keep_alive((COMPONENTS / filename).read_text(encoding="utf-8"))),
                 )
 
     def test_inputs_do_not_shadow_langflow_attributes(self):
