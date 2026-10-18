@@ -64,6 +64,18 @@ The previous run (2026-10-14, v1.5.1) had 17.4 s, 14.6 s, 14.6 s and 16.7 s.
 
 For comparison, the v1.1.0 baseline recorded a median of 36.2 s and a P95 of 51.1 s. The main contributors to the drop: v1.2.0 stopped sending every message through the local vision model, and v1.5.2 removed the shared test session and shortened sub-agent history. Runs through local Langflow skip ngrok, so public latency is slightly higher. These are observed benchmarks, not service-level guarantees.
 
+### Image questions (2026-10-18, flow v1.10.0)
+
+Measured on the Langflow PC with new images each time (Ollama caches a repeated image, which made earlier runs look faster):
+
+| Setup | Reading the image | Notes |
+|---|---|---|
+| Local `qwen2.5vl:3b`, original phone photo (3024x4032) | fails | 4,283 tokens, more than the model's 4,096-token context; the Agent was told the image could not be read |
+| Local, photo shrunk to 1024 px | 66-68 s | all four problems read correctly |
+| Gemini API, photo shrunk to 1024 px | 2.8-9.7 s | all answers correct (limit 6, median 5, derivative 9x² - 2) |
+
+Whole image questions on a test copy of v1.10.0 took 11.1-33.1 s; the slow ones spent time before Chat Input (Langflow on a PC with about 700 MB free memory), not in the router.
+
 ### Flow v1.9.0: research by the main Agent (2026-10-18, through ngrok)
 
 Ciel's own browser test on v1.8.0 still took 31.8-40.5 s on the Langflow side: research answers were written twice (research sub-agent, then the main Agent), the first memory call after 5 idle minutes reloaded the embedding model (14 s), and analysis ran 3 search rounds in the sub-flow. Same questions as the table below, measured end to end like the app:

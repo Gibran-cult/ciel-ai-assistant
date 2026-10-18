@@ -281,8 +281,16 @@ class PrivacyPageTest(unittest.TestCase):
     def test_third_parties_are_disclosed_without_brand_names(self):
         text = self.text(retention_days=30, memory_enabled=True, data_controls=True)
         self.assertIn("penyedia model AI dan layanan pencarian web pihak ketiga", text)
-        for name in ("DeepSeek", "Exa", "Langflow", "ngrok"):
+        for name in ("DeepSeek", "Exa", "Langflow", "ngrok", "Gemini", "Google AI"):
             self.assertNotIn(name, text)
+
+    def test_photos_are_disclosed_as_read_by_a_paid_third_party_model(self):
+        # Since flow v1.10.0 photos are read through a hosted model (paid tier)
+        # with the local model as fallback.
+        text = self.text(retention_days=30, memory_enabled=True, data_controls=True)
+        self.assertIn("dibaca oleh layanan model AI pihak ketiga dengan paket berbayar yang tidak memakai data untuk melatih model", text)
+        self.assertIn("foto dibaca oleh model di server Ciel sendiri", text)
+        self.assertNotIn("Foto dan embedding memory diproses oleh model yang berjalan di server Ciel sendiri", text)
 
     def test_app_passes_the_operator_name(self):
         self.assertIn("operator=OPERATOR_NAME", APP_PATH.read_text(encoding="utf-8"))
