@@ -130,12 +130,19 @@ class CielVisionRouter(Component):
             value="gemini-3.1-flash-lite",
             advanced=True,
         ),
+        MessageTextInput(
+            name="api_fallback_model",
+            display_name="Vision API Model Cadangan",
+            value="gemini-3.5-flash-lite",
+            advanced=True,
+            info="Dicoba jika model utama gagal (misalnya HTTP 503), sebelum model lokal.",
+        ),
         IntInput(
             name="api_timeout",
             display_name="Vision API Timeout (detik)",
             value=20,
             advanced=True,
-            info="Lewat dari ini, gambar dibaca model lokal.",
+            info="Batas per model API; setelah semua gagal, gambar dibaca model lokal.",
         ),
     ]
 
@@ -166,23 +173,28 @@ class CielVisionRouter(Component):
             self.status = "Tanpa gambar: pesan diteruskan langsung."
             return Message(text=text)
 
-        api_error = None
+        # Production 2026-10-18: gemini-3.1-flash-lite answered HTTP 503 for a
+        # while; the local model then took 136 s. Another Gemini model usually
+        # still works, so try it before the local model.
+        api_errors = []
         if self.vision_api_key:
-            try:
-                reading = await asyncio.to_thread(self._read_with_api, images)
-                self.status = f"{len(images)} gambar dibaca lewat {self.api_model}."
-                return Message(text=f"{text}\n\n{IMAGE_HEADER}\n{reading}")
-            except Exception as error:  # noqa: BLE001 - model lokal sebagai cadangan
-                api_error = f"{type(error).__name__}: {error}"[:300]
+            models = [m for m in dict.fromkeys((self.api_model, self.api_fallback_model)) if m]
+            for model in models:
+                try:
+                    reading = await asyncio.to_thread(self._read_with_api, images, model)
+                    self.status = f"{len(images)} gambar dibaca lewat {model}."
+                    return Message(text=f"{text}\n\n{IMAGE_HEADER}\n{reading}")
+                except Exception as error:  # noqa: BLE001 - coba model berikutnya
+                    api_errors.append(f"{model}: {type(error).__name__}: {error}"[:200])
 
         reading = await self._read_locally(images)
-        if api_error:
-            self.status = f"Vision API gagal ({api_error}); {self.status}"
+        if api_errors:
+            self.status = f"Vision API gagal ({'; '.join(api_errors)}); {self.status}"
         return Message(text=f"{text}\n\n{IMAGE_HEADER}\n{reading}")
 
-    def _read_with_api(self, images) -> str:
+    def _read_with_api(self, images, model) -> str:
         response = requests.post(
-            GEMINI_URL.format(model=self.api_model),
+            GEMINI_URL.format(model=model),
             headers={"x-goog-api-key": str(self.vision_api_key)},
             json={
                 "system_instruction": {"parts": [{"text": self.system_prompt}]},

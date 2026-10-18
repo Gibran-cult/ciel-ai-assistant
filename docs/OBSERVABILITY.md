@@ -74,6 +74,8 @@ Measured on the Langflow PC with new images each time (Ollama caches a repeated 
 | Local, photo shrunk to 1024 px | 66-68 s | all four problems read correctly |
 | Gemini API, photo shrunk to 1024 px | 2.8-9.7 s | all answers correct (limit 6, median 5, derivative 9x² - 2) |
 
+In production after the switch, `gemini-3.1-flash-lite` answered HTTP 503 for a while: the router fell back to the local model, and one image question took 153.6 s (136.5 s reading the image). `gemini-3.5-flash-lite` still answered, so v1.10.1 tries it before the local model. After that, image questions through ngrok took 31.2 and 33.1 s with the image read in 10.0 and 21.8 s, and the local model was not used; the rest of the time is the Agent writing a step-by-step solution. On a test copy of v1.10.1, three new photos took 16.8-23.5 s.
+
 Whole image questions on a test copy of v1.10.0 took 11.1-33.1 s; the slow ones spent time before Chat Input (Langflow on a PC with about 700 MB free memory), not in the router.
 
 ### Flow v1.9.0: research by the main Agent (2026-10-18, through ngrok)

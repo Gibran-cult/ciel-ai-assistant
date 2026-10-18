@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Backup Gemini model for image reading (flow v1.10.1)
+- Right after flow v1.10.0 went live, `gemini-3.1-flash-lite` answered HTTP 503 for a while. The router fell back to the local model, which took 136.5 s to read one photo (153.6 s for the whole question) and filled the PC's memory. A probe showed `gemini-3.5-flash-lite` still answering at the same time.
+- Ciel Vision Router now tries `api_fallback_model` (`gemini-3.5-flash-lite`) when the main model fails, and only then the local model. The status lists each model's error. The same model in both fields is tried once.
+- Production was patched in place after a backup (`main_v1.10.0_before_v1.10.1_20261017_205804.json`). Image questions through ngrok then took 31.2 and 33.1 s, with the image read in 10.0 and 21.8 s and no local fallback.
+- Tests: `tests/test_vision_router.py` covers the backup model and the single try. New `tests/test_flow_v1101_contract.py` (in CI) checks that only the router changes and that the embedded code matches the repository. `tests/test_flow_v1100_contract.py` treats v1.10.0's router as historical.
+
 ### Faster and working image questions (flow v1.10.0)
 - Photos from a phone camera (about 3024x4032) were never read: the local vision model needed 4,283 tokens for them, more than its 4,096-token context, so the Agent only got "Gambar tidak dapat dibaca". The app now shrinks every photo to 1024 px on the longest side, turns it upright from its EXIF orientation, and puts transparent images on white before uploading (`fit_for_vision`). Small upright images are sent unchanged; the 5 MB limit is unchanged.
 - Reading a new 1024 px photo with the local model took 66-68 s on the laptop CPU (prompt processing about 22 tokens/s). Ciel Vision Router now reads images with the Gemini API (`gemini-3.1-flash-lite`, paid tier, key in the Langflow global variable `GEMINI_API_KEY`) in 2.8-9.7 s, and falls back to the local model when the key is empty, the API fails or it takes more than 20 s. The API key never appears in the router's status or answer.
