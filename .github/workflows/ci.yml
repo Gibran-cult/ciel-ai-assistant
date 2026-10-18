@@ -50,6 +50,7 @@ jobs:
           python -m json.tool flow/v1.7.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
           python -m json.tool flow/v1.8.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
           python -m json.tool flow/v1.9.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
+          python -m json.tool flow/v1.10.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
           python -m json.tool flow/subflows/Web_Research_Assistant.json > /dev/null
           python -m json.tool flow/memory_admin/Ciel_Memory_Admin.json > /dev/null
 
@@ -68,7 +69,10 @@ jobs:
             tests.test_flow_v170_contract \
             tests.test_flow_v180_contract \
             tests.test_flow_v190_contract \
+            tests.test_flow_v1100_contract \
             tests.test_source_guard \
+            tests.test_vision_images \
+            tests.test_vision_router \
             tests.test_personal_datasets \
             tests.test_resilience \
             tests.test_rate_limit \

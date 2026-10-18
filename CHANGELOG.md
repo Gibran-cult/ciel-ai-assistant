@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Faster and working image questions (flow v1.10.0)
+- Photos from a phone camera (about 3024x4032) were never read: the local vision model needed 4,283 tokens for them, more than its 4,096-token context, so the Agent only got "Gambar tidak dapat dibaca". The app now shrinks every photo to 1024 px on the longest side, turns it upright from its EXIF orientation, and puts transparent images on white before uploading (`fit_for_vision`). Small upright images are sent unchanged; the 5 MB limit is unchanged.
+- Reading a new 1024 px photo with the local model took 66-68 s on the laptop CPU (prompt processing about 22 tokens/s). Ciel Vision Router now reads images with the Gemini API (`gemini-3.1-flash-lite`, paid tier, key in the Langflow global variable `GEMINI_API_KEY`) in 2.8-9.7 s, and falls back to the local model when the key is empty, the API fails or it takes more than 20 s. The API key never appears in the router's status or answer.
+- Privacy page (updated 18 Oktober 2026): photos are shrunk and read by a third-party AI model on a paid plan that does not use the data for training, possibly outside Indonesia, with the local model as fallback. Following the page's own rule, the production flow switches only after this page is live.
+- Tests (in CI): `tests/test_vision_images.py` (shrinking, EXIF rotation, transparency, unreadable files, size limit), `tests/test_vision_router.py` (API reading, fallback on HTTP errors and timeouts, no key, data URL parsing), `tests/test_flow_v1100_contract.py` (only the router changes from v1.9.0, embedded code, key from the global variable, local settings kept). `tests/test_flow_v120_contract.py` now treats v1.2.0's router as historical (unchanged through v1.9.0).
+
 ### Research by the main Agent (flow v1.9.0)
 - Ciel's own browser test after PR #33 still took 31.8-40.5 s on the Langflow side. Research answers were written twice: the Web Research Assistant's Agent planned, searched and wrote notes, then the main Agent rewrote them, which cost about 8-14 s per research question. The first memory call after 5 idle minutes reloaded the embedding model (14 s), and analysis ran 3 search rounds inside the sub-flow.
 - The main Agent now searches itself with Ciel Exa Search (5 results, highlights capped at 1,500 characters, key from the global variable), and Ciel Source Guard sits between the Agent and Chat Output. The Web Research Assistant tool is removed from the main flow; the sub-flow stays in Langflow as the rollback path and runs the same guard code.

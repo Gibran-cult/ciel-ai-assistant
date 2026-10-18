@@ -13,7 +13,7 @@ import uuid
 import requests
 import streamlit as st
 from dotenv import load_dotenv
-from PIL import Image
+from PIL import Image, ImageOps
 from pypdf import PdfReader
 
 from chat_store import ChatStore
@@ -1984,6 +1984,9 @@ IMAGE_MIME = {
 }
 MAX_IMAGES_PER_MESSAGE = 4
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
+# The vision model reads a 1024 px photo as well as the original; a phone photo
+# (~3000x4000) needed 4283 tokens and failed the model's 4096-token context.
+VISION_IMAGE_PX = 1024
 THUMBNAIL_PX = 360
 MAX_FILES_PER_MESSAGE = 5
 MAX_FILE_CHARS = 40_000
@@ -2278,11 +2281,36 @@ def read_image(uploaded):
             f"{MAX_IMAGE_BYTES // (1024 * 1024)} MB."
         )
 
-    return {
+    return fit_for_vision({
         "name": uploaded.name,
         "data": raw,
         "mime": IMAGE_MIME.get(file_extension(uploaded.name), "image/png"),
-    }, None
+    }), None
+
+
+def fit_for_vision(image):
+    """
+    Upright the photo (EXIF orientation) and shrink it to VISION_IMAGE_PX on
+    the longest side. Small upright images and unreadable files are sent as is.
+    """
+    try:
+        with Image.open(io.BytesIO(image["data"])) as img:
+            rotated = img.getexif().get(0x0112, 1) not in (0, 1)  # EXIF Orientation
+            if not rotated and max(img.size) <= VISION_IMAGE_PX:
+                return image
+            upright = ImageOps.exif_transpose(img)
+            upright.thumbnail((VISION_IMAGE_PX, VISION_IMAGE_PX))
+            if upright.mode in ("RGBA", "LA", "P"):
+                rgba = upright.convert("RGBA")
+                upright = Image.new("RGB", rgba.size, "white")
+                upright.paste(rgba, mask=rgba.getchannel("A"))
+            out = io.BytesIO()
+            upright.convert("RGB").save(out, format="JPEG", quality=88)
+    except Exception:
+        return image
+
+    stem = str(image["name"]).rsplit(".", 1)[0]
+    return {"name": f"{stem}.jpg", "data": out.getvalue(), "mime": "image/jpeg"}
 
 
 def make_thumbnail(image):

@@ -16,13 +16,42 @@ Perilaku baru:
   hasil bacaannya digabung dengan pertanyaan asli untuk Agent.
 - Jika model vision gagal, Agent tetap menerima pertanyaan beserta
   keterangan bahwa gambar tidak terbaca (tidak menjatuhkan seluruh flow).
+
+Sejak v1.10.0: jika Vision API Key diisi, gambar dibaca lewat Gemini API
+(cepat), dan model lokal hanya dipakai bila API gagal atau terlalu lama.
+Model lokal di CPU laptop butuh ~66 dtk per foto baru (uji 2026-10-18).
 """
 
+import asyncio
+
+import requests
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 from langflow.custom import Component
-from langflow.io import IntInput, MessageInput, MessageTextInput, MultilineInput, Output
+from langflow.io import IntInput, MessageInput, MessageTextInput, MultilineInput, Output, SecretStrInput
 from langflow.schema.message import Message
+
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+
+def gemini_parts(images):
+    """Gemini inline_data parts from Langflow image dicts ({"image_url": {"url": "data:<mime>;base64,<data>"}})."""
+    parts = []
+    for item in images:
+        url = (item.get("image_url") or {}).get("url") or item.get("url") or ""
+        header, _, data = url.partition(",")
+        if not header.startswith("data:") or ";base64" not in header or not data:
+            raise ValueError("gambar bukan data URL base64")
+        parts.append({"inline_data": {"mime_type": header[5:].split(";")[0], "data": data}})
+    return parts
+
+
+def gemini_text(response_json):
+    parts = ((response_json.get("candidates") or [{}])[0].get("content") or {}).get("parts") or []
+    text = "".join(part.get("text", "") for part in parts if not part.get("thought")).strip()
+    if not text:
+        raise ValueError("Gemini tidak mengembalikan teks")
+    return text
 
 DEFAULT_SYSTEM_PROMPT = """Kamu adalah Vision Preprocessor universal.
 
@@ -88,6 +117,26 @@ class CielVisionRouter(Component):
             advanced=True,
             info="Cukup untuk gambar + instruksi; teks pesan tidak dikirim ke model vision.",
         ),
+        SecretStrInput(
+            name="vision_api_key",
+            display_name="Vision API Key (Gemini)",
+            value="",
+            required=False,
+            info="Kosong = selalu pakai model lokal. Pakai key dari project berbayar: tier gratis memakai data untuk melatih model.",
+        ),
+        MessageTextInput(
+            name="api_model",
+            display_name="Vision API Model",
+            value="gemini-3.1-flash-lite",
+            advanced=True,
+        ),
+        IntInput(
+            name="api_timeout",
+            display_name="Vision API Timeout (detik)",
+            value=20,
+            advanced=True,
+            info="Lewat dari ini, gambar dibaca model lokal.",
+        ),
     ]
 
     outputs = [
@@ -117,6 +166,37 @@ class CielVisionRouter(Component):
             self.status = "Tanpa gambar: pesan diteruskan langsung."
             return Message(text=text)
 
+        api_error = None
+        if self.vision_api_key:
+            try:
+                reading = await asyncio.to_thread(self._read_with_api, images)
+                self.status = f"{len(images)} gambar dibaca lewat {self.api_model}."
+                return Message(text=f"{text}\n\n{IMAGE_HEADER}\n{reading}")
+            except Exception as error:  # noqa: BLE001 - model lokal sebagai cadangan
+                api_error = f"{type(error).__name__}: {error}"[:300]
+
+        reading = await self._read_locally(images)
+        if api_error:
+            self.status = f"Vision API gagal ({api_error}); {self.status}"
+        return Message(text=f"{text}\n\n{IMAGE_HEADER}\n{reading}")
+
+    def _read_with_api(self, images) -> str:
+        response = requests.post(
+            GEMINI_URL.format(model=self.api_model),
+            headers={"x-goog-api-key": str(self.vision_api_key)},
+            json={
+                "system_instruction": {"parts": [{"text": self.system_prompt}]},
+                "contents": [{"role": "user", "parts": [{"text": self.instruction}, *gemini_parts(images)]}],
+                "generationConfig": {"temperature": 0.1},
+            },
+            timeout=self.api_timeout,
+        )
+        if response.status_code != 200:
+            # Isi error tanpa key; status cukup untuk melacak masalah billing/kuota.
+            raise RuntimeError(f"HTTP {response.status_code}")
+        return gemini_text(response.json())
+
+    async def _read_locally(self, images) -> str:
         llm = ChatOllama(
             base_url=self.base_url,
             model=self.model_name,
@@ -138,4 +218,4 @@ class CielVisionRouter(Component):
             reading = f"(Gambar tidak dapat dibaca oleh model vision: {type(error).__name__}: {error})"
             self.status = reading
 
-        return Message(text=f"{text}\n\n{IMAGE_HEADER}\n{reading}")
+        return reading

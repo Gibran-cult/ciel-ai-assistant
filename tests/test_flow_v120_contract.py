@@ -44,15 +44,18 @@ class FlowV120ContractTest(unittest.TestCase):
         self.assertFalse(any("ChatOllamaComponent" in i for i in self.nodes))
 
     def test_router_code_matches_repository_source(self):
+        # Snapshot historis: sejak v1.10.0 router juga bisa membaca gambar lewat
+        # Gemini API. Kode v1.2.0 tidak berubah sampai v1.9.0; kode terkini
+        # dicek di tests/test_vision_router.py.
         code = self.nodes[self.router_id()]["data"]["node"]["template"]["code"]["value"]
+        v190 = json.loads((ROOT / "flow" / "v1.9.0" / "Ciel_AI_Long-Term_Memory_Master.json").read_text(encoding="utf-8"))
+        later = next(n for n in v190["data"]["nodes"] if n["id"].startswith("CielVisionRouter-"))
         # Bandingkan tanpa beda CRLF/LF (checkout Windows vs JSON flow).
         def normalize(text):
             return text.replace("\r\n", "\n").strip()
 
-        self.assertEqual(
-            normalize(code),
-            normalize(COMPONENT_PATH.read_text(encoding="utf-8")),
-        )
+        self.assertEqual(normalize(code), normalize(later["data"]["node"]["template"]["code"]["value"]))
+        self.assertNotIn("vision_api_key", code)
 
     def test_math_tutor_runs_as_native_run_flow_tool(self):
         # Dulu Math Tutor dipanggil lewat HTTP dengan API key tertanam di kode.

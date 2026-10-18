@@ -18,7 +18,7 @@ import streamlit as st
 
 
 # Ubah tanggal ini setiap kali isi halaman berubah (Pasal 21 ayat 2).
-PRIVACY_UPDATED = "16 Oktober 2026"
+PRIVACY_UPDATED = "18 Oktober 2026"
 
 
 PRIVACY_CSS = """
@@ -87,8 +87,11 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
         "dan layanan pencarian web pihak ketiga. Server mereka bisa berada di "
         "<strong>luar Indonesia</strong>. Dengan memakai Ciel, kamu menyetujui "
         "pemrosesan ini.",
-        "Foto dan embedding memory diproses oleh model yang berjalan di server "
-        "Ciel sendiri.",
+        "Foto yang kamu kirim diperkecil, lalu dibaca oleh layanan model AI "
+        "pihak ketiga dengan paket berbayar yang tidak memakai data untuk "
+        "melatih model; servernya juga bisa berada di luar Indonesia. Jika "
+        "layanan itu tidak tersedia, foto dibaca oleh model di server Ciel sendiri.",
+        "Embedding memory diproses oleh model yang berjalan di server Ciel sendiri.",
     ]
 
     stored = [

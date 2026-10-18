@@ -54,7 +54,9 @@ It provides the incoming message and session-related information to the flow.
 
 ### Ciel Vision Router
 
-Text-only messages pass straight to the Agent. When a message has images, only the images go to the local vision model (`qwen2.5vl:3b`), and its reading is appended to the original message. Source: `flow/components/ciel_vision_router.py`.
+Text-only messages pass straight to the Agent. When a message has images, only the images go to a vision model, and its reading is appended to the original message. Source: `flow/components/ciel_vision_router.py`.
+
+Since v1.10.0 the router reads images with the Gemini API (`gemini-3.1-flash-lite`, key from the Langflow global variable `GEMINI_API_KEY`, paid tier so the images are not used for training) and falls back to the local model (`qwen2.5vl:3b` on Ollama) when the key is empty, the API fails or it takes longer than `api_timeout` (20 s). The HTTP call runs in a thread so it does not block Langflow's event loop. The app shrinks every photo to 1024 px on the longest side and turns it upright (EXIF) before uploading (`fit_for_vision` in `app.py`).
 
 ### Sessions
 
@@ -378,6 +380,7 @@ Contract tests check that each snapshot embeds the same component code as `flow/
 - **v1.6.0:** adds Ciel ML Analyst and prompt v14.3: a machine learning route for user files (predict, important factors, new-row prediction, clustering), no derived target columns as features, model quality always reported with the result, and ML results as a study-companion example.
 - **v1.7.0:** adds Ciel Dataset Store; Table Analyst and ML Analyst read saved datasets; prompt v14.4 (save only on an explicit request, no table data in long-term memory, deletion only through "Data saya"). The Memory Admin flow gained the dataset actions.
 - **v1.8.0:** prompt v14.5: research questions go to the Web Research Assistant as fast or deep research.
+- **v1.10.0:** the Vision Router reads images with the Gemini API and keeps the local model as the fallback; only the router node changes.
 - **v1.9.0:** the main Agent searches with Ciel Exa Search itself and Ciel Source Guard checks the answer's sources (prompt v14.6); the Web Research Assistant tool is removed. The memory components keep the embedding model loaded for an hour (`keep_alive`), because reloading it after Ollama's 5-minute default took up to 14 s.
 
 ## Langflow Configuration Outside the Repository
