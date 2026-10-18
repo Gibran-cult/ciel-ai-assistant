@@ -64,6 +64,41 @@ The previous run (2026-10-14, v1.5.1) had 17.4 s, 14.6 s, 14.6 s and 16.7 s.
 
 For comparison, the v1.1.0 baseline recorded a median of 36.2 s and a P95 of 51.1 s. The main contributors to the drop: v1.2.0 stopped sending every message through the local vision model, and v1.5.2 removed the shared test session and shortened sub-agent history. Runs through local Langflow skip ngrok, so public latency is slightly higher. These are observed benchmarks, not service-level guarantees.
 
+### Flow v1.12.0: thinking off and the Calculator (2026-10-18)
+
+Measured on the Langflow PC (no ngrok), own session per request with app tweaks, one run per question. "Before" is production with thinking on, earlier the same day:
+
+| Question | Before | v1.12.0 |
+|---|---|---|
+| halo namamu siapa? | 3.9 s | 3.8 s |
+| Apa itu overfitting? | 5.9 s | 5.5 s |
+| bapak lu orang mana? | 3.9 s | 3.9 s |
+| Buatkan saya soal limit | 8.0 s | 4.8 s |
+| Ajari aku limit fungsi dari dasar, lalu kasih 2 soal latihan | 21.0 s | 8.6 s |
+| Berapa total Sales_Amount pada dataset? | 7.3 s | 4.7 s |
+| Makanan penurun kolestrol (research) | 12.2 s | 13.3 s |
+| Rangkum perkembangan terbaru model bahasa open-source (research) | 14.3 s | 13.4 s |
+| Analisis: ... layak dipakai untuk riset skripsi? (analysis) | 25.1 s | 15.5 s |
+
+Every research and analysis answer listed sources.
+
+Accuracy was checked with 26 questions that have one exact answer: arithmetic, percentages, compound interest, instalments, probability, combinations, median, population and sample variance, limits, derivatives, integrals, sets, linear and quadratic equations, and two built-in dataset questions. A regex had to find the right value in the final text.
+
+| Setup (test copies) | Correct | Median | Max |
+|---|---|---|---|
+| Production, thinking on (first 16 questions) | 16/16 | 8.5 s | 13.3 s |
+| Thinking off, every math question through the Math Tutor | 26/26 | 8.6 s | 28.9 s |
+| Thinking off in the Math Tutor too | 26/26 | 8.1 s | 13.6 s |
+| v1.12.0 (Calculator on the main Agent, prompt v14.8) | 26/26 | 6.3 s | 12.8 s |
+
+In the Math Tutor path the sub-flow itself took 3-4 s; the rest was the main Agent deciding and then rewriting the tutor's answer. With the Calculator a calculation is one DeepSeek call to choose the expression and one to write the answer, and the Calculator itself answers in a few milliseconds.
+
+Research routing was checked with 8 questions that must be searched (health, medicine, current office holders, prices, scholarships, minimum wage, news) and 3 that must not (greeting, concepts). Prompt v14.7 with thinking off answered "Berapa dosis paracetamol untuk orang dewasa?" without a search (10/11); v14.8 routed 11/11. The response quality suite passed 9/9 on the v1.12.0 test copy, run against local Langflow, because the ngrok gateway only allows the production flow IDs.
+
+In the public app (Streamlit Cloud, guest, through ngrok), right after the deploy: greeting 5.6 s, "Hitung 1234 x 5678" 6.7 s, sample variance 8.2 s, practice problems 7.1 s, paracetamol dose 16.3 s with sources, and analysis 19.4 s with sources. All answers were correct. These are single runs, measured from pressing Enter until the answer stopped changing.
+
+During the tests the DeepSeek balance ran out: every request, production included, failed with HTTP 402 "Insufficient Balance", which Langflow returns as a 500 error. Answers came back about a minute after the top-up.
+
 ### Image questions (2026-10-18, flow v1.10.0)
 
 Measured on the Langflow PC with new images each time (Ollama caches a repeated image, which made earlier runs look faster):
