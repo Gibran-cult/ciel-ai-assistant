@@ -56,10 +56,16 @@ class FlowV170ContractTest(unittest.TestCase):
         self.assertEqual(edges[0]["data"]["sourceHandle"]["dataType"], "CielDatasetStore")
 
     def test_embedded_code_matches_repository_sources(self):
+        # Snapshot historis untuk Table Analyst: sejak v1.11.0 ia juga membaca
+        # dataset bawaan. Kodenya tidak berubah sampai v1.10.2; kode terkini
+        # dicek di tests/test_flow_v1110_contract.py.
+        v1102 = json.loads((ROOT / "flow" / "v1.10.2" / "Ciel_AI_Long-Term_Memory_Master.json").read_text(encoding="utf-8"))
+        later = {n["id"]: n["data"]["node"]["template"]["code"]["value"] for n in v1102["data"]["nodes"]}
         for node_id, filename in SOURCES.items():
             with self.subTest(node=node_id):
                 code = self.template(node_id)["code"]["value"]
-                self.assertEqual(normalize(code), normalize((COMPONENTS / filename).read_text(encoding="utf-8")))
+                expected = later[node_id] if node_id == TABLE_ID else (COMPONENTS / filename).read_text(encoding="utf-8")
+                self.assertEqual(normalize(code), normalize(expected))
                 metadata = self.nodes[node_id]["data"]["node"]["metadata"]
                 self.assertEqual(metadata["code_hash"], hashlib.sha256(code.encode()).hexdigest()[:12])
 

