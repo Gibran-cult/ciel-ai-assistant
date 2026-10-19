@@ -85,6 +85,22 @@ class ThemeTokensTest(unittest.TestCase):
         # The menu's email is HTML, so markdown cannot turn it into a mailto link.
         self.assertIn('<div class="ciel-account-email">', APP_PATH.read_text(encoding="utf-8"))
 
+    def test_download_buttons_links_and_answer_headings_follow_the_tokens(self):
+        # Found in the browser on 2026-10-19 with a Riset Skripsi answer in dark
+        # mode: "Unduh DOCX" was light on light (.stDownloadButton is not
+        # .stButton), source links were the light theme's navy (~3:1), and the
+        # "#" title rendered at 44 px in Streamlit's own font.
+        scope = ':is(.stApp, [data-testid="stPopoverBody"])'
+        self.assertIn(f"{scope} .stDownloadButton > button {{", self.css)
+        self.assertIn(f"{scope} .stDownloadButton > button:hover {{", self.css)
+        self.assertIn('.stApp [data-testid="stMarkdownContainer"] a { color: var(--c-accent); }', self.css)
+        self.assertIn('.stApp [data-testid="stBaseLinkButton-primary"] {', self.css)
+        heading = '[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] h1 {'
+        self.assertIn(heading, self.css)
+        rule = self.css[self.css.index(heading):].split("}", 1)[0]
+        self.assertIn("font-family: var(--font-serif);", rule)
+        self.assertIn("font-size: 1.6rem;", rule)
+
     def test_widget_rules_reach_popover_content(self):
         # Popovers (account menu, "Proyek baru") render outside .stApp, so
         # rules scoped to .stApp left their buttons and expander light in dark

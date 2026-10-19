@@ -20,7 +20,7 @@ Paket Pro berisi satu fitur khusus, **Riset Skripsi**, plus batas pesan lebih ti
 | `RATE_LIMIT_PER_HOUR_PRO` | tidak | 150 | Pesan per jam untuk akun Pro. |
 | `RATE_LIMIT_PER_DAY_PRO` | tidak | 800 | Pesan per hari untuk akun Pro. |
 | `RISET_SKRIPSI_PER_DAY` | tidak | 5 | Riset Skripsi per hari per akun. |
-| `MIDTRANS_SERVER_KEY` | ya, untuk pembelian | – | Server key Midtrans (sandbox `SB-Mid-server-…` atau produksi). Tanpa ini Pro tampil sebagai "sedang disiapkan". |
+| `MIDTRANS_SERVER_KEY` | ya, untuk pembelian | – | Server key Midtrans. Akun baru memakai awalan `Mid-server-` di sandbox maupun produksi (akun lama: `SB-Mid-server-` untuk sandbox); lingkungannya ditentukan `MIDTRANS_PRODUCTION`. Tanpa ini Pro tampil sebagai "sedang disiapkan". |
 | `MIDTRANS_PRODUCTION` | tidak | `false` | `true` memakai akun produksi Midtrans. |
 | `APP_URL` | disarankan | alamat yang sedang dibuka | Alamat publik app, tujuan kembali setelah bayar (`<APP_URL>/?page=pricing`). |
 
@@ -49,18 +49,19 @@ Midtrans -> Supabase Edge Function midtrans-notify
 
 ### Menyiapkan (sekali, sandbox dulu)
 
-1. Daftar di dashboard.midtrans.com. Pindah ke mode **Sandbox** dan salin **Server Key** dari halaman kunci akses (Access Keys).
+1. Daftar di dashboard.midtrans.com sebagai **Merchant**. Pindah ke mode **Sandbox** dan salin **Server Key** dari halaman kunci akses (Access Keys) ke `MIDTRANS_SERVER_KEY` di `.streamlit/secrets.toml`, di atas bagian `[auth]` (di bawahnya, TOML membacanya sebagai `auth.MIDTRANS_SERVER_KEY`).
 2. Jalankan bagian `pro_orders` dan `ciel_settle_order` dari `docs/chat_store.sql` di Supabase → SQL Editor.
 3. Deploy Edge Function dari folder repo:
    ```bash
    npx supabase login
-   npx supabase secrets set --project-ref <ref> MIDTRANS_SERVER_KEY=<server key> MIDTRANS_PRODUCTION=false
+   python -c "import toml,subprocess; k=toml.load('.streamlit/secrets.toml')['MIDTRANS_SERVER_KEY']; subprocess.run(['npx','supabase','secrets','set','--project-ref','<ref>','MIDTRANS_SERVER_KEY='+k,'MIDTRANS_PRODUCTION=false'],check=True,shell=True)"
    npx supabase functions deploy midtrans-notify --project-ref <ref> --no-verify-jwt
    ```
+   Perintah kedua mengambil key dari `secrets.toml`, jadi tidak ada key atau placeholder yang disalin tangan. Pada tes pertama (2026-10-19), secret function sempat berisi teks placeholder sehingga setiap notifikasi ditolak 403. Cek kecocokannya tanpa membuka nilai: digest `MIDTRANS_SERVER_KEY` di `npx supabase secrets list --project-ref <ref>` harus sama dengan `python -c "import toml,hashlib;print(hashlib.sha256(toml.load('.streamlit/secrets.toml')['MIDTRANS_SERVER_KEY'].encode()).hexdigest())"`.
    `<ref>` adalah bagian depan `SUPABASE_URL` (`https://<ref>.supabase.co`). `--no-verify-jwt` wajib karena Midtrans tidak mengirim token Supabase; keamanannya ada di signature dan Status API.
 4. Di pengaturan dashboard Midtrans, isi **Payment Notification URL** dengan `https://<ref>.supabase.co/functions/v1/midtrans-notify`.
 5. Tambah secrets app: `MIDTRANS_SERVER_KEY`, `APP_URL` (dan `MIDTRANS_PRODUCTION = "true"` hanya setelah produksi siap).
-6. Tes sandbox: beli Pro dengan akun tes, bayar dengan simulator Midtrans (sandbox), lalu pastikan Pricing menampilkan "Pembayaran diterima" dan menu akun menampilkan Pro. Cek juga bahwa log function (`npx supabase functions logs midtrans-notify --project-ref <ref>`) menulis `settle … paid`.
+6. Tes sandbox: beli Pro dengan akun tes, lalu bayar di **simulator.sandbox.midtrans.com** (pilih metode yang sama, tempel nomor VA atau QR). Jangan pakai aplikasi bank asli: nomor VA sandbox tidak terdaftar di bank ("Kode Perusahaan Tidak Ada"). Pricing harus menampilkan "Pembayaran diterima. Ciel Pro aktif sampai …" dan `pro_orders` berstatus `paid`.
 
 Pindah ke produksi: ulangi langkah 3–5 dengan server key produksi dan `MIDTRANS_PRODUCTION=true` di kedua tempat (secrets function dan secrets app).
 
