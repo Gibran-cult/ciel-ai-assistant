@@ -125,7 +125,14 @@ class RateLimitTest(unittest.TestCase):
         ))
         self.assertIn('limits["all:total:day"] = (RATE_LIMIT_TOTAL_PER_DAY, DAY)', source)
         self.assertIn('"anon:total:day": (RATE_LIMIT_ANON_TOTAL_PER_DAY, DAY)', source)
-        self.assertIn('f"user:{user_key()}:day": (RATE_LIMIT_PER_DAY_LOGIN, DAY)', source)
+        self.assertIn('f"user:{user_key()}:day": (RATE_LIMIT_PER_DAY_PRO if pro else RATE_LIMIT_PER_DAY_LOGIN, DAY)', source)
+
+    def test_pro_defaults_are_higher_but_still_capped(self):
+        self.assertEqual(default_limit("RATE_LIMIT_PER_HOUR_PRO"), 150)
+        self.assertEqual(default_limit("RATE_LIMIT_PER_DAY_PRO"), 800)
+        self.assertEqual(default_limit("RISET_SKRIPSI_PER_DAY"), 5)
+        # Pro traffic still counts toward the emergency daily total.
+        self.assertLess(default_limit("RATE_LIMIT_PER_DAY_PRO"), default_limit("RATE_LIMIT_TOTAL_PER_DAY"))
 
 
 if __name__ == "__main__":

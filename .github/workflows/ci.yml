@@ -36,7 +36,7 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install requests python-dotenv chromadb "streamlit>=1.45" "pypdf>=6"
+          python -m pip install requests python-dotenv chromadb "streamlit>=1.45" "pypdf>=6" "python-docx>=1.1"
 
       - name: Audit app dependencies for known vulnerabilities
         run: |
@@ -62,6 +62,7 @@ jobs:
           python -m json.tool flow/v1.10.2/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
           python -m json.tool flow/v1.11.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
           python -m json.tool flow/subflows/Web_Research_Assistant.json > /dev/null
+          python -m json.tool flow/riset_skripsi/v1.0.0/Ciel_Riset_Skripsi.json > /dev/null
           python -m json.tool flow/memory_admin/Ciel_Memory_Admin.json > /dev/null
 
       - name: Run offline test suite
@@ -84,6 +85,8 @@ jobs:
             tests.test_flow_v1102_contract \
             tests.test_flow_v1110_contract \
             tests.test_flow_v1120_contract \
+            tests.test_flow_riset_v100_contract \
+            tests.test_riset_components \
             tests.test_gateway_policy \
             tests.test_app_security \
             tests.test_source_guard \
@@ -100,6 +103,7 @@ jobs:
             tests.test_privacy \
             tests.test_login \
             tests.test_chat_store \
+            tests.test_ciel_pro \
             tests.test_keep_alive \
             tests.test_theme \
             tests.test_pdf_attachments

@@ -3,12 +3,13 @@
 Data paket dipisah dari tampilan supaya harga dan fitur bisa diubah
 tanpa menyentuh layout, dan bisa dites tanpa menjalankan app.py.
 
-Belum ada sistem pembayaran dan pembatasan per paket, jadi semua fitur
-yang ada saat ini gratis. Halaman hanya menampilkan satu paket yang
-benar-benar bisa dipakai (Gratis); paket berbayar tampil sebagai daftar
-rencana tanpa tombol beli, toggle tagihan, atau kartu tiruan. Batas pesan
-dan status memory dikirim oleh app.py agar halaman selalu sesuai
-konfigurasi.
+Belum ada sistem pembayaran. Fitur inti gratis; satu-satunya fitur khusus
+Pro adalah Riset Skripsi, yang untuk sementara hanya aktif untuk akun yang
+diberi status Pro oleh pengelola (tabel pro_members). Halaman hanya
+menampilkan satu paket yang benar-benar bisa dipakai (Gratis); paket
+berbayar tampil sebagai daftar rencana tanpa tombol beli, toggle tagihan,
+atau kartu tiruan. Batas pesan dan status memory dikirim oleh app.py agar
+halaman selalu sesuai konfigurasi.
 """
 
 import html
@@ -42,9 +43,11 @@ PLANS = (
         "name": "Pro",
         "monthly": 79_000,
         "available": False,
-        "blurb": "Untuk pelajar, peneliti, dan profesional yang riset tiap hari.",
+        "blurb": "Untuk mahasiswa yang sedang menyusun skripsi.",
         "features": (
             "Semua di paket Gratis",
+            "Riset Skripsi: peta sumber per tema, celah riset, dan daftar pustaka APA 7",
+            "Unduh hasil Riset Skripsi sebagai DOCX",
             "Batas pesan per jam lebih tinggi",
         ),
     },
@@ -94,8 +97,17 @@ def faq_items(memory_enabled):
     return (
         (
             "Apakah Ciel gratis?",
-            "Ya. Semua fitur yang ada saat ini gratis, dengan batas pesan per "
-            "jam. Paket berbayar masih disiapkan dan belum bisa dibeli.",
+            "Ya. Chat, riset web dengan sumber, analisis file, dan proyek "
+            "gratis dengan batas pesan per jam. Riset Skripsi khusus paket Pro, "
+            "yang masih disiapkan dan belum bisa dibeli.",
+        ),
+        (
+            "Apakah Riset Skripsi menuliskan skripsi saya?",
+            "Tidak. Riset Skripsi menyusun peta sumber: ringkasan tiap sumber per "
+            "tema, celah riset, dan pertanyaan untuk dosen pembimbing. Daftar "
+            "pustaka disusun dari data sumber yang benar-benar ditemukan, bukan "
+            "ditulis bebas oleh AI. Kamu tetap membaca sumbernya dan menulis "
+            "skripsimu sendiri.",
         ),
         ("Apa bedanya riwayat chat dan long-term memory?", memory_answer),
         (
@@ -280,9 +292,10 @@ def render_pricing(contact_url=None, on_start_chat=None, rate_limits=(20, 60), m
 
     st.markdown(
         '<div class="ciel-pricehead">'
-        "<h1>Semua fitur Ciel saat ini gratis.</h1>"
+        "<h1>Fitur inti Ciel gratis.</h1>"
         "<p>Pemakaian dibatasi per jam agar Ciel tetap lancar untuk semua "
-        "orang. Paket berbayar baru akan dibuka setelah siap.</p>"
+        "orang. Paket Pro dengan Riset Skripsi baru bisa dibeli setelah "
+        "pembayarannya siap.</p>"
         "</div>",
         unsafe_allow_html=True,
     )

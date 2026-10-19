@@ -19,6 +19,7 @@ from pypdf import PdfReader
 from chat_store import ChatStore
 from login import render_login
 from pricing import render_pricing, safe_contact_url
+from riset_export import report_docx, report_filename
 from privacy import render_privacy
 
 # ============================================================
@@ -450,9 +451,43 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 [data-testid="stSidebar"] [data-testid="stExpander"] summary { font-size: 0.86rem; }
 .ciel-note { font-size: 0.82rem; line-height: 1.65; color: var(--c-muted); }
 .ciel-note p { margin: 0 0 0.6rem; }
+.ciel-note b { font-weight: 600; color: var(--c-text); }
+
+/* ---------- Dialog (Riset Skripsi) ---------- */
+/* Like popovers, st.dialog renders outside .stApp, so it gets its own
+   colour rules; button rules below include [data-testid="stDialog"]. */
+[data-testid="stDialog"] [role="dialog"] {
+    background: var(--c-surface);
+    color: var(--c-text);
+    border: 1px solid var(--c-line);
+    border-radius: var(--r-lg);
+    font-family: var(--font-sans);
+}
+[data-testid="stDialog"] [role="dialog"] :is(h1, h2, h3, p, label, textarea, input, button) { font-family: var(--font-sans); }
+/* The dialog title is a plain <p> that Streamlit colours from the light
+   theme; button labels (also <p>) keep their own colour. */
+[data-testid="stDialog"] [role="dialog"] [data-testid="stMarkdownContainer"] p:not([class]):not(button p) { color: var(--c-text); }
+[data-testid="stDialog"] [role="dialog"] > button[aria-label="Close"] { color: var(--c-muted); }
+[data-testid="stDialog"] :is(input, textarea) { color: var(--c-text); caret-color: var(--c-text); }
+[data-testid="stDialog"] :is(input, textarea)::placeholder { color: var(--c-faint); }
+[data-testid="stDialog"] [data-testid="stCaptionContainer"] { color: var(--c-faint); }
+[data-testid="stDialog"] [data-testid="stButtonGroup"] button {
+    border: 1px solid var(--c-line-strong);
+    background: transparent;
+    color: var(--c-text);
+}
+[data-testid="stDialog"] [data-testid="stButtonGroup"] button:hover { background: var(--c-raised); }
+[data-testid="stDialog"] [data-testid="stButtonGroup"] button[kind$="Active"] {
+    border-color: var(--c-accent);
+    background: var(--c-accent-soft);
+    color: var(--c-accent);
+}
+.ciel-riset-lead { margin: 0 0 1rem; font-size: 0.92rem; line-height: 1.65; color: var(--c-muted); }
+.ciel-riset-lead b, .ciel-riset-lock b { font-weight: 600; color: var(--c-text); }
+.ciel-riset-lock { margin: 0 0 0.9rem; font-size: 0.92rem; color: var(--c-text); }
 
 /* ---------- Buttons ---------- */
-:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button,
+:is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button,
 [data-testid="stSidebar"] [data-testid="stPopover"] > button {
     border-radius: var(--r-md);
     border: 1px solid var(--c-line-strong);
@@ -461,33 +496,33 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     font-weight: 500;
     transition: transform 0.4s var(--ease), background-color 0.4s var(--ease), border-color 0.4s var(--ease);
 }
-:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button:hover,
+:is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button:hover,
 [data-testid="stSidebar"] [data-testid="stPopover"] > button:hover {
     background: var(--c-raised);
     border-color: var(--c-faint);
 }
 [data-testid="stSidebar"] [data-testid="stPopover"] button { background: transparent; }
 [data-testid="stSidebar"] [data-testid="stPopover"] button:hover { background: var(--c-raised); }
-:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button:active { transform: translateY(1px); }
-:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button[kind="primary"] {
+:is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button:active { transform: translateY(1px); }
+:is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button[kind="primary"] {
     background: var(--c-accent);
     border-color: var(--c-accent);
     color: var(--c-accent-ink);
     font-weight: 600;
 }
-:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button[kind="primary"]:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); }
+:is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button[kind="primary"]:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); }
 /* Disabled buttons (e.g. "Hapus semua memoriku" until its checkbox is
    ticked) look muted and stay the same on hover; otherwise the hover
    background met Streamlit's light-theme disabled text and hid the label. */
-:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button:disabled,
-:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button:disabled:hover {
+:is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button:disabled,
+:is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button:disabled:hover {
     background: transparent;
     border-color: var(--c-line);
     color: var(--c-faint);
     cursor: not-allowed;
     transform: none;
 }
-:is(.stApp, [data-testid="stPopoverBody"]) .stButton > button:disabled :is(p, [data-testid="stIconMaterial"]) { color: inherit; }
+:is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button:disabled :is(p, [data-testid="stIconMaterial"]) { color: inherit; }
 .stButton:is([class*="st-key-delchat_"], [class*="st-key-delproj_"]) > button:not(:disabled):hover {
     color: var(--c-err);
     border-color: rgba(163, 59, 44, 0.4);
@@ -791,7 +826,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     [data-testid="stChatMessage"] { gap: 0.65rem; }
     [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) { padding: 0.75rem 0.85rem; }
     [data-testid="stBottomBlockContainer"] { padding-left: 0.7rem; padding-right: 0.7rem; padding-bottom: 1rem; }
-    :is(.stApp, [data-testid="stPopoverBody"]) .stButton > button,
+    :is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button,
     [data-testid="stSidebar"] [data-testid="stPopover"] > button { min-height: 2.75rem; }
 }
 
@@ -1056,6 +1091,10 @@ RATE_LIMIT_PER_DAY_LOGIN = get_int_config("RATE_LIMIT_PER_DAY_LOGIN", 300)
 RATE_LIMIT_ANON_TOTAL_PER_HOUR = get_int_config("RATE_LIMIT_ANON_TOTAL_PER_HOUR", 60)
 RATE_LIMIT_ANON_TOTAL_PER_DAY = get_int_config("RATE_LIMIT_ANON_TOTAL_PER_DAY", 300)
 RATE_LIMIT_TOTAL_PER_DAY = get_int_config("RATE_LIMIT_TOTAL_PER_DAY", 1500)
+# Ciel Pro (status di tabel pro_members, docs/chat_store.sql).
+RATE_LIMIT_PER_HOUR_PRO = get_int_config("RATE_LIMIT_PER_HOUR_PRO", 150)
+RATE_LIMIT_PER_DAY_PRO = get_int_config("RATE_LIMIT_PER_DAY_PRO", 800)
+RISET_SKRIPSI_PER_DAY = get_int_config("RISET_SKRIPSI_PER_DAY", 5)
 
 AUTH_ENABLED = auth_configured()
 
@@ -1086,6 +1125,16 @@ CHAT_STORE = (
     if AUTH_ENABLED and SUPABASE_URL and SUPABASE_SERVICE_KEY
     else None
 )
+
+# Opsional: flow "Ciel Riset Skripsi" (Pro). Fitur hanya tampil jika flow ini
+# dan penyimpanan Supabase (tempat status Pro) sama-sama aktif; menghapus
+# secret ini adalah rollback-nya. App mengirim tanggal terbit minimum sumber
+# (start_published_date, diterapkan Exa) ke komponen pencarian lewat tweaks.
+RESEARCH_FLOW_ID = get_config("RESEARCH_FLOW_ID")
+RESEARCH_SEARCH_ID = get_config("RESEARCH_SEARCH_ID") or "CielScholarSearch-r1s3t"
+RISET_ENABLED = bool(RESEARCH_FLOW_ID and CHAT_STORE)
+# Beberapa putaran pencarian plus laporan panjang; diukur ulang saat uji live.
+RESEARCH_TIMEOUT = 420
 
 # Bersihkan URL
 if NGROK_URL:
@@ -1253,6 +1302,70 @@ sync_chat_owner()
 
 
 # ============================================================
+# CIEL PRO
+# ============================================================
+
+# Status Pro untuk tampilan dibaca ulang paling lama tiap 5 menit. Saat
+# Riset Skripsi dikirim, status selalu dibaca langsung dari database.
+PRO_STATUS_TTL = 300
+
+
+def pro_until(refresh=False):
+    """Akhir masa Pro (epoch detik); 0.0 jika bukan Pro, None jika gagal dibaca."""
+
+    owner = chat_owner()
+
+    if not owner:
+        return 0.0
+
+    cached = st.session_state.get("pro_status")
+    now = time.time()
+
+    if refresh or not cached or cached[0] != owner or now - cached[1] > PRO_STATUS_TTL:
+        cached = (owner, now, CHAT_STORE.load_pro_until(owner))
+        st.session_state.pro_status = cached
+
+    return cached[2]
+
+
+def is_pro(refresh=False):
+    until = pro_until(refresh)
+    return bool(until) and until > time.time()
+
+
+def pro_status_html():
+    """Baris paket di menu akun; kosong jika status Pro tidak dipakai di deployment ini."""
+
+    if not CHAT_STORE:
+        return ""
+
+    until = pro_until()
+
+    if until is None:
+        text = "Paket: status belum bisa dimuat."
+    elif until > time.time():
+        text = f"Paket: <b>Pro</b>, aktif sampai {format_date_id(until)}."
+    elif until:
+        text = f"Paket: Gratis. Masa Pro berakhir {format_date_id(until)}."
+    else:
+        text = "Paket: Gratis."
+
+    return f"<p>{text}</p>"
+
+
+MONTHS_ID = (
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+)
+
+
+def format_date_id(epoch):
+    """1795132800 -> "17 November 2026" (WIB, zona pengguna Ciel)."""
+    day = time.gmtime(epoch + 7 * 3600)
+    return f"{day.tm_mday} {MONTHS_ID[day.tm_mon - 1]} {day.tm_year}"
+
+
+# ============================================================
 # ERRORS
 # ============================================================
 
@@ -1319,14 +1432,21 @@ def rate_limit_state():
     return {"lock": threading.Lock(), "hits": {}}
 
 
-def rate_limits_for_request():
-    """{key: (batas, jendela)} untuk pengirim pesan ini, plus batas harian semua pengguna."""
+def rate_limits_for_request(riset=False):
+    """
+    {key: (batas, jendela)} untuk pengirim pesan ini, plus batas harian semua
+    pengguna. Riset Skripsi juga punya kuota hariannya sendiri.
+    """
 
     if logged_in():
+        pro = is_pro()
         limits = {
-            f"user:{user_key()}:hour": (RATE_LIMIT_PER_HOUR_LOGIN, HOUR),
-            f"user:{user_key()}:day": (RATE_LIMIT_PER_DAY_LOGIN, DAY),
+            f"user:{user_key()}:hour": (RATE_LIMIT_PER_HOUR_PRO if pro else RATE_LIMIT_PER_HOUR_LOGIN, HOUR),
+            f"user:{user_key()}:day": (RATE_LIMIT_PER_DAY_PRO if pro else RATE_LIMIT_PER_DAY_LOGIN, DAY),
         }
+
+        if riset:
+            limits[f"riset:{user_key()}:day"] = (RISET_SKRIPSI_PER_DAY, DAY)
     else:
         limits = {
             f"visitor:{user_key()}:hour": (RATE_LIMIT_PER_HOUR, HOUR),
@@ -1344,6 +1464,9 @@ def rate_limit_message(key, limit):
 
     period = "jam" if key.endswith(":hour") else "hari"
 
+    if key.startswith("riset:"):
+        return f"Riset Skripsi bisa dipakai {limit} kali per hari per akun. Kuota hari ini sudah habis, coba lagi besok."
+
     if key.startswith("user:"):
         return f"Ciel menerima hingga {limit} pesan per {period} per akun. Silakan coba lagi nanti."
 
@@ -1359,10 +1482,10 @@ def rate_limit_message(key, limit):
     return "Ciel sedang menerima terlalu banyak pesan hari ini. Silakan coba lagi besok."
 
 
-def check_rate_limit():
+def check_rate_limit(riset=False):
     """Kembalikan None jika boleh lanjut, atau CielError yang menyebut batas yang tercapai."""
 
-    limits = rate_limits_for_request()
+    limits = rate_limits_for_request(riset)
     state = rate_limit_state()
 
     with state["lock"]:
@@ -1434,14 +1557,16 @@ def strip_markdown_images(text):
     return MARKDOWN_IMAGE.subn(IMAGE_REMOVED, str(text))
 
 
-def ask_langflow(message, tweaks=None, session_id=None):
+def ask_langflow(message, tweaks=None, session_id=None, flow_id=None, timeout=240):
+
+    flow_id = flow_id or FLOW_ID
 
     request_id = uuid.uuid4().hex[:8]
     start_time = time.perf_counter()
 
     url = (
         f"{NGROK_URL}"
-        f"/api/v1/run/{FLOW_ID}"
+        f"/api/v1/run/{flow_id}"
     )
 
     headers = {
@@ -1467,7 +1592,7 @@ def ask_langflow(message, tweaks=None, session_id=None):
     logger.info(
         "request_start id=%s flow=%s input_length=%d",
         request_id,
-        FLOW_ID,
+        flow_id,
         len(message),
     )
 
@@ -1485,7 +1610,7 @@ def ask_langflow(message, tweaks=None, session_id=None):
                 "stream": "false"
             },
             # Pesan bergambar + beberapa tool bisa > 2 menit di backend CPU.
-            timeout=240,
+            timeout=timeout,
         )
 
         elapsed = time.perf_counter() - start_time
@@ -1557,7 +1682,7 @@ def ask_langflow(message, tweaks=None, session_id=None):
             "Pertanyaan riset bisa memakan waktu lama. Silakan coba lagi, "
             "atau persempit pertanyaannya.\n\n"
             f"Request ID: `{request_id}`\n"
-            "Penyebab: request timeout setelah 240 detik."
+            f"Penyebab: request timeout setelah {timeout} detik."
         )
 
     except requests.exceptions.ConnectionError:
@@ -2091,6 +2216,12 @@ THINKING_HTML = (
     "</div>"
 )
 
+RISET_THINKING_HTML = THINKING_HTML.replace(
+    "Permintaan riset dapat memakan waktu hingga dua menit.",
+    "Riset Skripsi membaca banyak sumber dan bisa memakan waktu beberapa menit. "
+    "Biarkan tab ini tetap terbuka.",
+)
+
 # File yang dilampirkan dibaca sebagai teks lalu disisipkan ke prompt.
 # Backend Langflow hanya menerima teks, jadi hanya format teks yang didukung;
 # PDF diubah menjadi teks dulu di sini (tanpa OCR, jadi PDF hasil scan ditolak).
@@ -2587,7 +2718,9 @@ def make_pending(text, uploaded_files):
         text = DEFAULT_IMAGE_QUESTION if images else DEFAULT_FILE_QUESTION
 
     chat = active_chat()
-    project_files = project_files_for(context_project_id())
+    # Di chat Riset Skripsi, peta sumbernya ikut seperti file proyek supaya
+    # pertanyaan lanjutan ("sumber nomor 3 tadi apa?") bisa dijawab flow utama.
+    project_files = project_files_for(context_project_id()) + riset_report(chat)
     user_turn = sum(1 for m in (chat or {}).get("messages", []) if m["role"] == "user")
     send_project = project_context_due(chat, project_files, user_turn)
 
@@ -2809,6 +2942,169 @@ def queue_prompt(text):
     st.session_state.pending = make_pending(text, [])
 
 
+# ------------------------------------------------------------
+# RISET SKRIPSI (PRO)
+# ------------------------------------------------------------
+
+RISET_KIND = "riset_skripsi"
+RISET_YEAR_SPANS = (3, 5, 10)
+MAX_RISET_TOPIC_CHARS = 300
+MAX_RISET_FIELD_CHARS = 80
+
+
+def riset_payload(topic, field, min_year):
+    """Teks permintaan untuk flow Ciel Riset Skripsi."""
+
+    lines = [f"Topik skripsi: {topic}"]
+
+    if field:
+        lines.append(f"Bidang ilmu: {field}")
+
+    lines.append(f"Rentang sumber: tahun {min_year} sampai sekarang.")
+    return "\n".join(lines)
+
+
+def riset_start_date(riset):
+    """Awal rentang sumber untuk filter tanggal terbit Exa: 2021 -> "2021-01-01"."""
+    return f"{int(riset['min_year'])}-01-01"
+
+
+def make_riset_pending(topic, field, years):
+    # Semua input disimpan di "riset" (ikut tersimpan di pesan pengguna), jadi
+    # payload bisa disusun ulang untuk Coba lagi setelah halaman dimuat ulang.
+    riset = {"topic": topic, "field": field, "min_year": time.gmtime().tm_year - years}
+
+    return {
+        "text": f"Riset Skripsi: {topic}",
+        "files": [],
+        "images": [],
+        "payload": riset_payload(**riset),
+        "riset": riset,
+    }
+
+
+def riset_report(chat):
+    """Peta sumber terakhir di chat ini sebagai file konteks untuk pertanyaan lanjutan."""
+
+    reports = [
+        m for m in (chat or {}).get("messages", [])
+        if m.get("kind") == RISET_KIND and not m.get("error")
+    ]
+
+    if not reports:
+        return []
+
+    text = str(reports[-1]["content"])
+    return [{"name": "Peta sumber (Riset Skripsi).md", "text": text, "size": len(text.encode("utf-8"))}]
+
+
+def riset_refusal():
+    """None jika akun ini boleh menjalankan Riset Skripsi, atau CielError penjelasannya."""
+
+    if not RISET_ENABLED:
+        return CielError("Riset Skripsi belum aktif.\n\nFitur ini belum tersedia di deployment ini.")
+
+    if not logged_in():
+        return CielError("Riset Skripsi khusus Ciel Pro.\n\nMasuk dengan akun Google yang sudah Pro, lalu coba lagi.")
+
+    # Dibaca langsung dari database, bukan dari cache tampilan.
+    until = pro_until(refresh=True)
+
+    if until is None:
+        return CielError(
+            "Status Pro belum bisa diperiksa.\n\n"
+            "Silakan coba lagi sebentar lagi.\n\n"
+            "Penyebab: database status Pro tidak bisa dihubungi."
+        )
+
+    if until <= time.time():
+        security_event("pro_required", feature=RISET_KIND)
+        return CielError(
+            "Riset Skripsi khusus Ciel Pro.\n\n"
+            + (
+                f"Masa Pro akunmu berakhir {format_date_id(until)}."
+                if until
+                else "Akun ini belum Pro. Lihat halaman Pricing untuk paket Pro."
+            )
+        )
+
+    return None
+
+
+def open_riset_dialog():
+    show_chat()
+    st.session_state.open_riset = True
+
+
+def start_riset(topic, field, years):
+    """Tombol "Mulai riset" di dialog: buka chat baru berisi permintaan riset."""
+
+    show_chat()
+    st.session_state.active_chat = None
+    st.session_state.pending = make_riset_pending(topic, field, years)
+
+
+@st.dialog("Riset Skripsi")
+def riset_dialog():
+
+    st.markdown(
+        '<p class="ciel-riset-lead">Ciel mencari dan membaca sumber untuk topik '
+        "skripsimu, lalu menyusun <b>peta sumber</b>: ringkasan tiap sumber per "
+        "tema, celah riset, pertanyaan untuk dosen pembimbing, dan daftar pustaka "
+        "APA 7 yang bisa diunduh sebagai DOCX. Ciel tidak menulis babmu; setiap "
+        "sumber bisa kamu buka dan cek.</p>",
+        unsafe_allow_html=True,
+    )
+
+    if not is_pro():
+
+        st.markdown(
+            '<p class="ciel-riset-lock">Fitur ini khusus <b>Ciel Pro</b>.</p>',
+            unsafe_allow_html=True,
+        )
+
+        if st.button("Lihat paket Pro", type="primary", icon=":material/sell:"):
+            show_pricing()
+            st.rerun()
+
+        return
+
+    topic = st.text_area(
+        "Topik atau judul skripsi",
+        max_chars=MAX_RISET_TOPIC_CHARS,
+        placeholder="Contoh: Pengaruh literasi digital terhadap kinerja UMKM kuliner",
+    )
+
+    field = st.text_input(
+        "Bidang ilmu (opsional)",
+        max_chars=MAX_RISET_FIELD_CHARS,
+        placeholder="Contoh: Manajemen",
+    )
+
+    years = st.segmented_control(
+        "Sumber dari",
+        RISET_YEAR_SPANS,
+        default=5,
+        format_func=lambda span: f"{span} tahun terakhir",
+    )
+
+    st.caption(
+        f"Bisa sampai beberapa menit. Kuota {RISET_SKRIPSI_PER_DAY} riset per hari."
+    )
+
+    if st.button("Mulai riset", type="primary", icon=":material/travel_explore:"):
+
+        topic = " ".join((topic or "").split())[:MAX_RISET_TOPIC_CHARS]
+        field = " ".join((field or "").split())[:MAX_RISET_FIELD_CHARS]
+
+        if not topic:
+            st.error("Tulis topik atau judul skripsimu dulu.")
+            return
+
+        start_riset(topic, field, years if years in RISET_YEAR_SPANS else 5)
+        st.rerun()
+
+
 def retry_last():
     messages = current_messages()
 
@@ -2825,6 +3121,7 @@ def retry_last():
             "files": user.get("files", []),
             "images": user.get("images", []),
             "payload": user.get("payload", user["content"]),
+            "riset": user.get("riset"),
         }
 
         del messages[-2:]
@@ -2966,6 +3263,19 @@ with st.sidebar:
         icon=":material/add:",
         on_click=new_chat,
     )
+
+    if RISET_ENABLED:
+
+        # Terlihat juga untuk akun gratis; dialognya menjelaskan paket Pro.
+        # Dialog dibuka dari area utama (di bawah HEADER), bukan dari sidebar.
+        st.button(
+            "Riset Skripsi" if is_pro() else "Riset Skripsi · Pro",
+            key="riset_open",
+            icon=":material/school:",
+            # Tanpa help=: tooltip membungkus tombol sehingga aturan
+            # ".stButton > button" (warna mode gelap) tidak lagi berlaku.
+            on_click=open_riset_dialog,
+        )
 
     # --------------------------------------------------------
     # PROJECTS
@@ -3155,6 +3465,7 @@ with st.sidebar:
                     "<p>Long-term memory aktif dan hanya milik akunmu. Ciel bisa "
                     "mengingat konteks penting lintas percakapan.</p>"
                     f"<p>ID memory: <code>{memory_owner_id()}</code></p>"
+                    f"{pro_status_html()}"
                     "</div>",
                     unsafe_allow_html=True,
                 )
@@ -3373,6 +3684,12 @@ with st.container(
             )
 
 
+# Dialog Riset Skripsi (tombol di sidebar). Rerun di dalam dialog tidak
+# menjalankan ulang baris ini, jadi dialog tetap terbuka sampai ditutup.
+if st.session_state.pop("open_riset", False) and RISET_ENABLED:
+    riset_dialog()
+
+
 # ============================================================
 # PRICING PAGE
 # ============================================================
@@ -3512,9 +3829,23 @@ for index, message in enumerate(messages):
         else:
 
             # Riwayat lama (Supabase) dibersihkan lagi saat ditampilkan.
-            st.markdown(
-                strip_markdown_images(message["content"])[0]
-            )
+            content = strip_markdown_images(message["content"])[0]
+            st.markdown(content)
+
+            if message.get("kind") == RISET_KIND:
+
+                topic = message.get("topic") or "Riset Skripsi"
+
+                # DOCX baru dibuat saat tombol diklik (data berupa fungsi).
+                st.download_button(
+                    "Unduh DOCX",
+                    data=lambda content=content, topic=topic: report_docx(content, topic),
+                    file_name=report_filename(topic),
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key=f"rsdocx_{st.session_state.active_chat}_{index}",
+                    icon=":material/download:",
+                    on_click="ignore",
+                )
 
 
 # ============================================================
@@ -3556,6 +3887,11 @@ if pending_request:
         "payload": pending_request["payload"],
     }
 
+    riset = pending_request.get("riset")
+
+    if riset:
+        user_message["riset"] = riset
+
     chat["messages"].append(user_message)
     chat["updated"] = time.time()
 
@@ -3572,7 +3908,7 @@ if pending_request:
         working_slot = st.empty()
 
         working_slot.markdown(
-            THINKING_HTML,
+            RISET_THINKING_HTML if riset else THINKING_HTML,
             unsafe_allow_html=True,
         )
 
@@ -3589,9 +3925,25 @@ if pending_request:
 
         tables = chat_tables(chat)
 
-        answer = check_rate_limit()
+        # Riset Skripsi: status Pro dicek di server sebelum kuota dipakai, jadi
+        # permintaan buatan sendiri tanpa Pro tidak pernah sampai ke flow riset.
+        answer = (
+            riset_refusal() or check_rate_limit(riset=True)
+            if riset
+            else check_rate_limit()
+        )
 
-        if answer is None and pending_request["images"]:
+        if answer is None and riset:
+
+            answer = ask_langflow(
+                riset_payload(**riset),
+                tweaks={RESEARCH_SEARCH_ID: {"start_published_date": riset_start_date(riset)}},
+                session_id=session_id,
+                flow_id=RESEARCH_FLOW_ID,
+                timeout=RESEARCH_TIMEOUT,
+            )
+
+        elif answer is None and pending_request["images"]:
 
             image_paths, upload_error = upload_images(
                 pending_request["images"]
@@ -3630,13 +3982,18 @@ if pending_request:
             make_thumbnail(image) for image in user_message["images"]
         ]
 
-    chat["messages"].append(
-        {
-            "role": "assistant",
-            "content": answer,
-            "error": failed,
-        }
-    )
+    reply = {
+        "role": "assistant",
+        "content": answer,
+        "error": failed,
+    }
+
+    # Penanda hasil Riset Skripsi: tombol Unduh DOCX dan konteks pertanyaan lanjutan.
+    if riset and not failed:
+        reply["kind"] = RISET_KIND
+        reply["topic"] = riset["topic"]
+
+    chat["messages"].append(reply)
     chat["updated"] = time.time()
     persist_chat(chat)
 

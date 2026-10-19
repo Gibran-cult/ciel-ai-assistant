@@ -15,6 +15,7 @@ mengembalikan None/False dan mencatatnya di log, supaya chat tetap jalan.
 import base64
 import logging
 import re
+from datetime import datetime, timezone
 
 import requests
 
@@ -226,3 +227,67 @@ class ChatStore:
 
     def delete_project(self, owner, project_id):
         return self._request("DELETE", "delete_project", owner, "projects", row_id=project_id) is not None
+
+    def load_pro_until(self, owner):
+        """
+        Akhir masa Pro akun ini (epoch detik), 0.0 jika tidak pernah Pro,
+        atau None jika gagal dibaca. Tabel `pro_members` hanya diisi admin
+        (SQL) atau webhook pembayaran, tidak pernah oleh app.
+        """
+
+        response = self._request(
+            "GET",
+            "load_pro_until",
+            owner,
+            "pro_members",
+            params={"select": "expires_at"},
+        )
+
+        if response is None:
+            return None
+
+        try:
+            rows = response.json()
+            return pro_until_from_rows(rows)
+        except (ValueError, KeyError, TypeError) as error:
+            logger.error("chat_store_error action=load_pro_until type=%s error=%s", type(error).__name__, error)
+            return None
+
+
+# timestamptz dari PostgREST: pecahan detik 0-6 digit dan zona "+00:00" atau
+# "Z". datetime.fromisoformat di Python 3.10 hanya menerima 3 atau 6 digit.
+TIMESTAMP_PATTERN = re.compile(
+    r"^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}(?::?\d{2})?)?$"
+)
+
+
+def parse_timestamp(text):
+    """Teks timestamptz -> epoch detik. Tanpa zona dianggap UTC."""
+
+    match = TIMESTAMP_PATTERN.match(str(text).strip())
+
+    if not match:
+        raise ValueError(f"timestamp tidak dikenali: {text!r}")
+
+    day, clock, fraction, zone = match.groups()
+    moment = datetime.fromisoformat(f"{day}T{clock}").replace(
+        microsecond=int((fraction or "0").ljust(6, "0")),
+        tzinfo=timezone.utc,
+    )
+
+    if zone and zone != "Z":
+        sign = -1 if zone[0] == "-" else 1
+        digits = zone[1:].replace(":", "")
+        offset = int(digits[:2]) * 3600 + int(digits[2:4] or 0) * 60
+        return moment.timestamp() - sign * offset
+
+    return moment.timestamp()
+
+
+def pro_until_from_rows(rows):
+    """[{"expires_at": "2026-11-17T00:00:00+00:00"}] -> epoch detik; [] -> 0.0."""
+
+    if not rows:
+        return 0.0
+
+    return parse_timestamp(rows[0]["expires_at"])

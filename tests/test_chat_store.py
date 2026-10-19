@@ -290,8 +290,9 @@ class SidebarHistoryTest(unittest.TestCase):
             "projects": [chat_store.to_project_row(ALICE, p) for p in projects],
             "chats": [chat_store.to_row(ALICE, c) for c in chats],
         }
+        # Other tables (pro_members for the account menu's plan line) are empty.
         return Mock(side_effect=lambda method, url, **kw: Response(
-            rows[url.rsplit("/", 1)[1]] if method == "GET" else None
+            rows.get(url.rsplit("/", 1)[1], []) if method == "GET" else None
         ))
 
     def test_signed_in_history_loads_and_saves_through_the_store(self):
@@ -316,7 +317,9 @@ class SidebarHistoryTest(unittest.TestCase):
             at = self.run_app(user=SIGNED_IN, secrets=self.SECRETS)
 
         self.assertFalse(at.exception)
-        self.assertEqual([c.args[1].rsplit("/", 1)[1] for c in request.call_args_list], ["projects", "chats"])
+        tables = [c.args[1].rsplit("/", 1)[1] for c in request.call_args_list]
+        self.assertEqual(tables[:2], ["projects", "chats"])
+        self.assertLessEqual(set(tables[2:]), {"pro_members"})
         self.assertEqual(at.session_state["projects"]["p1"]["files"][0]["name"], "data.csv")
         self.assertEqual(at.session_state["chats"]["c1"]["project_id"], "p1")
         self.assertTrue(at.button(key="proj_p1"))

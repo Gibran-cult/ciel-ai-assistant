@@ -34,3 +34,27 @@ create table if not exists public.projects (
 );
 
 alter table public.projects enable row level security;
+
+-- Status Ciel Pro per akun. App hanya membaca (ChatStore.load_pro_until);
+-- yang menulis adalah admin lewat SQL di bawah, atau nanti webhook pembayaran.
+-- owner = "ID memory" yang tampil di menu akun Ciel (memory_owner_id).
+create table if not exists public.pro_members (
+    owner text primary key,
+    expires_at timestamptz not null,
+    source text not null default 'manual',
+    updated_at timestamptz not null default now()
+);
+
+alter table public.pro_members enable row level security;
+
+-- Beri atau perpanjang Pro 30 hari (ganti ID memory). Perpanjangan dihitung
+-- dari masa aktif yang tersisa, bukan dari hari ini:
+--
+-- insert into public.pro_members (owner, expires_at, source)
+-- values ('<ID memory>', now() + interval '30 days', 'manual')
+-- on conflict (owner) do update set
+--     expires_at = greatest(pro_members.expires_at, now()) + interval '30 days',
+--     source = excluded.source,
+--     updated_at = now();
+--
+-- Cabut Pro: update public.pro_members set expires_at = now() where owner = '<ID memory>';
