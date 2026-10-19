@@ -237,7 +237,7 @@ class CheckoutAppTest(unittest.TestCase):
         at = self.run_pricing(SIGNED_IN, self.database(order=paid, pro_until=time.time() + 30 * 86400), at=at)
 
         self.assertFalse(at.exception)
-        self.assertIn("Pembayaran diterima. Ciel Pro aktif. Aktif sampai", at.success[0].value)
+        self.assertIn("Pembayaran diterima. Ciel Pro aktif sampai", at.success[0].value)
         self.assertEqual(at.button(key="pro_buy").label, "Perpanjang 30 hari")
 
     def test_pending_order_offers_a_recheck_and_never_grants_pro(self):

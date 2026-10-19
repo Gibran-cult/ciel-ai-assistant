@@ -1460,7 +1460,7 @@ def render_pro_action():
     if message:
         kind, text = message
         if kind == "ok" and until and until > time.time():
-            text += f" Aktif sampai {format_date_id(until)}."
+            text = f"Pembayaran diterima. Ciel Pro aktif sampai {format_date_id(until)}."
         {"ok": st.success, "wait": st.info, "fail": st.error}[kind](text)
 
         if kind == "wait":

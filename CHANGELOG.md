@@ -19,7 +19,11 @@
   - `tests/test_payments.py` (in CI) covers the Snap payload and environments, order storage, the SQL contract, and Pricing/Privacy with and without payments.
   - AppTest runs cover buying (order and Snap call), a Snap failure, a paid return with a forged URL, a pending order, an old order, and payments off.
   - `node --test` on the Edge Function logic (now a CI step) covers the signature, Status API over the notification body, idempotent settling, failed and reversed payments, and retry codes.
-- Not yet run against Midtrans: there is no Midtrans account yet. Setup and the sandbox test are in `docs/PRO.md`.
+- Sandbox test (2026-10-19) on the real Supabase project and the Midtrans sandbox, with the app running locally:
+  - Order `bb949ace…` was paid by BCA virtual account through the sandbox simulator. The Edge Function answered `paid`, then `already_paid` to a repeated notification. `pro_members` got 30 days (until 18 November 2026, source `midtrans`), and Pricing showed "Pembayaran diterima. Ciel Pro aktif sampai 18 November 2026." with "Perpanjang 30 hari".
+  - Four unpaid orders stayed `pending`.
+  - First attempt: the function's `MIDTRANS_SERVER_KEY` secret held the literal placeholder from the setup command, so every notification was refused with 403. That is correct behaviour for a wrong signature, but it is easy to miss. `docs/PRO.md` now sets the secret from `secrets.toml` and checks it by digest.
+  - Also learned: new Midtrans accounts use `Mid-server-` keys in sandbox too (no `SB-` prefix); the key line must sit above `[auth]` in `secrets.toml`; sandbox numbers are paid in the Midtrans simulator, not a real bank app.
 
 ### Ciel Pro: Pro status and Riset Skripsi (Riset Skripsi flow v1.0.0)
 - New Pro-only feature **Riset Skripsi** for thesis students. The output is a source map, not a written chapter: sources summarized per theme, research gaps, questions for the supervisor, and an APA 7 reference list. It comes from a separate Langflow flow (`RESEARCH_FLOW_ID`); the main flow is unchanged.
