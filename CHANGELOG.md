@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Ciel Pro in production (2026-10-19)
+- **Riset Skripsi** is live on the public app.
+  - The production Langflow flow is `c6ac7acc-5af8-43a9-a589-e91a27da88f8`. `RESEARCH_FLOW_ID` was added to the host `.env` and to the Streamlit Cloud secrets.
+  - The ngrok policy was re-rendered: only the two run paths of that flow were added, under the 20-a-minute limit, and `tools/check_gateway.py` passed 11/11.
+  - One run through the tunnel took 35 s and returned 20 sources, all within the requested range.
+- **Buying Pro with Midtrans production** is live.
+  - The same production server key sits in the Streamlit Cloud secrets and the `midtrans-notify` secrets (matching sha256 digests), with `MIDTRANS_PRODUCTION=true` in both. The key was set with a hidden-input command that checks it against Midtrans production first.
+  - The Payment Notification URL is set in the Midtrans Production dashboard, and the function was redeployed.
+  - On the web, "Perpanjang 30 hari" created a production Snap transaction (`app.midtrans.com`) and a `pending` order.
+- Trap: a key copied from the Midtrans dashboard while it was in Sandbox mode was pasted twice as the "production" key. New accounts use the `Mid-server-` prefix in both modes, so only a Status API check tells them apart. `docs/PRO.md` now includes that check.
+
 ### Ciel Pro: buying Pro with Midtrans
 - Signed-in users can buy **Pro for 30 days** (Rp79.000) from the Pricing page through Midtrans Snap: QRIS, e-wallet or virtual account. It is a one-time payment with no automatic billing, and buying again adds 30 days to what is left.
   - The Pro card appears only when `MIDTRANS_SERVER_KEY` is set. Without it, Pro stays "sedang disiapkan".

@@ -63,7 +63,15 @@ Midtrans -> Supabase Edge Function midtrans-notify
 5. Tambah secrets app: `MIDTRANS_SERVER_KEY`, `APP_URL` (dan `MIDTRANS_PRODUCTION = "true"` hanya setelah produksi siap).
 6. Tes sandbox: beli Pro dengan akun tes, lalu bayar di **simulator.sandbox.midtrans.com** (pilih metode yang sama, tempel nomor VA atau QR). Jangan pakai aplikasi bank asli: nomor VA sandbox tidak terdaftar di bank ("Kode Perusahaan Tidak Ada"). Pricing harus menampilkan "Pembayaran diterima. Ciel Pro aktif sampai …" dan `pro_orders` berstatus `paid`.
 
-Pindah ke produksi: ulangi langkah 3–5 dengan server key produksi dan `MIDTRANS_PRODUCTION=true` di kedua tempat (secrets function dan secrets app).
+Pindah ke produksi (dilakukan 2026-10-19): ulangi langkah 3–5 dengan server key produksi dan `MIDTRANS_PRODUCTION=true` di kedua tempat (secrets function dan secrets app). Isi juga Payment Notification URL di dashboard mode **Production**, karena pengaturan sandbox dan produksi terpisah.
+
+Akun Midtrans baru memakai awalan `Mid-server-` di sandbox maupun produksi, jadi pastikan key-nya benar-benar produksi sebelum dipasang. Perintah di bawah meminta key tanpa menampilkannya, mengeceknya ke Status API produksi, lalu memasangnya di function hanya jika produksi menerimanya:
+
+```bash
+python -c "import getpass,requests,subprocess,hashlib; k=getpass.getpass('Server key produksi: ').strip(); st=lambda h: requests.get(h+'/v2/'+'0'*32+'/status',auth=(k,''),timeout=20).json().get('status_code'); p=st('https://api.midtrans.com'); print('production:', 'OK' if p=='404' else 'DITOLAK ('+str(p)+')', '| digest', hashlib.sha256(k.encode()).hexdigest()[:12]); assert p=='404', 'bukan key produksi, berhenti'; r=subprocess.run(['npx','--yes','supabase','secrets','set','--project-ref','<ref>','MIDTRANS_SERVER_KEY='+k,'MIDTRANS_PRODUCTION=true'],shell=True); print('exit', r.returncode)"
+```
+
+Lalu redeploy function, dan pastikan digest `MIDTRANS_SERVER_KEY` di `npx supabase secrets list` sama dengan digest key di secrets Streamlit Cloud.
 
 ```sql
 -- Order 7 hari terakhir.
