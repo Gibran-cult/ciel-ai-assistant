@@ -17,6 +17,7 @@ Sekali bayar = Pro 30 hari. Tidak ada tagihan otomatis.
 """
 
 import logging
+import time
 import uuid
 
 import requests
@@ -103,10 +104,20 @@ ORDER_MESSAGES = {
 }
 
 
-def order_message(order):
+def order_message(order, now=None):
     """(jenis, teks) untuk status order dari database, atau None jika order tidak dikenal."""
 
     if not order:
         return None
 
-    return ORDER_MESSAGES.get(order.get("status"), ORDER_MESSAGES["pending"])
+    status = order.get("status")
+
+    # Midtrans hanya mengirim notifikasi "expire" untuk transaksi yang halaman
+    # bayarnya sudah dibuka dan metodenya dipilih. Order yang tidak pernah
+    # dibuka tetap "pending" selamanya di database, padahal transaksi Snap-nya
+    # sudah kedaluwarsa (live 2026-10-19: tanpa notifikasi apa pun).
+    created = order.get("created_at")
+    if status == "pending" and created and (now or time.time()) - created > EXPIRY_MINUTES * 60:
+        status = "expire"
+
+    return ORDER_MESSAGES.get(status, ORDER_MESSAGES["pending"])

@@ -12,6 +12,7 @@
   - The Payment Notification URL is set in the Midtrans Production dashboard, and the function was redeployed.
   - On the web, "Perpanjang 30 hari" created a production Snap transaction (`app.midtrans.com`) and a `pending` order.
 - Dark mode fix found on the web (Streamlit 1.65): typing in the Riset Skripsi topic box was invisible. Streamlit 1.65 draws the text area box on `stTextAreaRootElement`, which kept the light theme's background (`rgb(233,231,225)`) under the light dark-mode text. The input rule now covers that element as well. Checked by injecting the rule into the live page first: dark background `rgb(42,40,36)`, with readable text, caret and placeholder.
+- An unopened Snap link never gets an `expire` notification. Midtrans only creates the transaction once a payment method is chosen: production had 0 transactions and an empty notification history for the test order. The row stays `pending`, so Pricing kept saying "Menunggu konfirmasi pembayaran" for up to 2 hours. `order_message` now treats a `pending` order older than the 60-minute Snap expiry as expired; paid orders are never rewritten. The Midtrans account is still in business review (registration done) as of 2026-10-19.
 - Trap: a key copied from the Midtrans dashboard while it was in Sandbox mode was pasted twice as the "production" key. New accounts use the `Mid-server-` prefix in both modes, so only a Status API check tells them apart. `docs/PRO.md` now includes that check.
 
 ### Ciel Pro: buying Pro with Midtrans

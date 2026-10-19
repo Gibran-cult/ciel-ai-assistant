@@ -78,6 +78,17 @@ class SnapTest(unittest.TestCase):
         self.assertIsNone(payments.order_message({}))
         self.assertIsNone(payments.order_message(None))
 
+    def test_pending_orders_past_the_snap_expiry_count_as_expired(self):
+        # A Snap page that was never opened sends no "expire" notification, so
+        # the row stays pending; after the 60-minute expiry it can't be paid.
+        now = 1_000_000.0
+        fresh = {"status": "pending", "created_at": now - 59 * 60}
+        stale = {"status": "pending", "created_at": now - 61 * 60}
+        self.assertEqual(payments.order_message(fresh, now=now)[0], "wait")
+        self.assertEqual(payments.order_message(stale, now=now), payments.ORDER_MESSAGES["expire"])
+        # Paid orders are never rewritten, however old.
+        self.assertEqual(payments.order_message({"status": "paid", "created_at": now - 86400}, now=now)[0], "ok")
+
 
 class OrderStoreTest(unittest.TestCase):
 
@@ -245,6 +256,17 @@ class CheckoutAppTest(unittest.TestCase):
         at = self.run_pricing(SIGNED_IN, self.database(order=pending))
         self.assertIn("Menunggu konfirmasi", at.info[0].value)
         self.assertTrue(at.button(key="pro_recheck"))
+        self.assertEqual(at.button(key="pro_buy").label, "Beli Pro 30 hari")
+
+    def test_unopened_order_past_expiry_is_not_left_waiting(self):
+        # Live case 2026-10-19: a production Snap link was created but never
+        # opened, so no notification came and the row stayed pending.
+        stale = {"id": ORDER, "status": "pending", "created_at": iso(time.time() - 90 * 60)}
+        at = self.run_pricing(SIGNED_IN, self.database(order=stale))
+        self.assertFalse(at.exception)
+        self.assertEqual(len(at.info), 0)
+        self.assertNotIn("pro_recheck", [b.key for b in at.button])
+        self.assertIn("Waktu pembayaran habis", at.error[0].value)
         self.assertEqual(at.button(key="pro_buy").label, "Beli Pro 30 hari")
 
     def test_old_orders_are_not_shown(self):
