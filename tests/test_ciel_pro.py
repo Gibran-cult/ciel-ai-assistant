@@ -352,7 +352,10 @@ class RisetAppTest(unittest.TestCase):
     def test_feature_is_hidden_without_the_research_flow(self):
         from streamlit.testing.v1 import AppTest
 
-        with patch.dict(os.environ, ENV), patch.object(streamlit, "user", SIGNED_IN), \
+        # app.py calls load_dotenv(), which finds a parent .env such as the
+        # host's (it has RESEARCH_FLOW_ID since the production launch). An
+        # empty variable wins over it, so the flow is really unset here.
+        with patch.dict(os.environ, {**ENV, "RESEARCH_FLOW_ID": ""}), patch.object(streamlit, "user", SIGNED_IN), \
                 patch("requests.request", self.database(None)):
             at = AppTest.from_file(str(APP_PATH), default_timeout=60)
             for key, value in self.SECRETS.items():

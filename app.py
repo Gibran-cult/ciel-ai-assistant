@@ -209,6 +209,7 @@ header[data-testid="stHeader"] button,
 [role="tooltip"] > div { background: var(--c-surface); }
 [data-testid="stTooltipContent"] { color: var(--c-text); }
 [data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="textarea"],
+[data-testid="stTextAreaRootElement"],
 [data-testid="stTextInputRootElement"] {
     background: var(--c-raised);
     border-color: var(--c-line-strong);

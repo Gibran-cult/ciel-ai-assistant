@@ -115,6 +115,10 @@ class ThemeTokensTest(unittest.TestCase):
         self.assertIn('[data-testid="stDialog"] :is(input, textarea) { color: var(--c-text);', self.css)
         # Streamlit 1.65 draws the text input box on this element.
         self.assertIn('[data-testid="stTextInputRootElement"] {', self.css)
+        # ...and the text area box on this one. Without it the Riset Skripsi
+        # topic field kept the light theme's background under light dark-mode
+        # text, so typing was invisible (seen on the web, 2026-10-19).
+        self.assertIn('[data-testid="stTextAreaRootElement"],\n[data-testid="stTextInputRootElement"] {', self.css)
         # Disabled buttons ("Hapus semua memoriku" before its checkbox) must
         # not pick up the hover background: it met Streamlit's light-theme
         # disabled text and hid the label. The rule must come after the

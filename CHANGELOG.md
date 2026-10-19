@@ -11,6 +11,7 @@
   - The same production server key sits in the Streamlit Cloud secrets and the `midtrans-notify` secrets (matching sha256 digests), with `MIDTRANS_PRODUCTION=true` in both. The key was set with a hidden-input command that checks it against Midtrans production first.
   - The Payment Notification URL is set in the Midtrans Production dashboard, and the function was redeployed.
   - On the web, "Perpanjang 30 hari" created a production Snap transaction (`app.midtrans.com`) and a `pending` order.
+- Dark mode fix found on the web (Streamlit 1.65): typing in the Riset Skripsi topic box was invisible. Streamlit 1.65 draws the text area box on `stTextAreaRootElement`, which kept the light theme's background (`rgb(233,231,225)`) under the light dark-mode text. The input rule now covers that element as well. Checked by injecting the rule into the live page first: dark background `rgb(42,40,36)`, with readable text, caret and placeholder.
 - Trap: a key copied from the Midtrans dashboard while it was in Sandbox mode was pasted twice as the "production" key. New accounts use the `Mid-server-` prefix in both modes, so only a Status API check tells them apart. `docs/PRO.md` now includes that check.
 
 ### Ciel Pro: buying Pro with Midtrans
