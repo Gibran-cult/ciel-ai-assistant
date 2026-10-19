@@ -104,6 +104,12 @@ jobs:
             tests.test_login \
             tests.test_chat_store \
             tests.test_ciel_pro \
+            tests.test_payments \
             tests.test_keep_alive \
             tests.test_theme \
             tests.test_pdf_attachments
+
+      # Node that comes with the runner (no extra setup): the Edge Function's
+      # logic is plain JavaScript so it can be tested here too.
+      - name: Run Edge Function tests
+        run: node --test supabase/functions/midtrans-notify/notification.test.mjs

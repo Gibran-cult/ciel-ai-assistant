@@ -28,7 +28,7 @@ PLANS = (
         "monthly": 0,
         "available": True,
         "tag": "Tersedia sekarang",
-        "blurb": "Semua fitur Ciel yang ada saat ini, dengan batas pesan per jam.",
+        "blurb": "Fitur inti Ciel untuk riset dan belajar, dengan batas pesan per jam.",
         "features": (
             "Chat, riset web dengan sumber, dan matematika",
             "Analisis angka dari file CSV/TSV",
@@ -82,7 +82,7 @@ def free_plan_extras(rate_limits, memory_enabled):
     return tuple(extras)
 
 
-def faq_items(memory_enabled):
+def faq_items(memory_enabled, pro_for_sale=False):
     memory_answer = (
         "Riwayat chat di sidebar hanya bertahan selama sesi browser. "
         "Long-term memory menyimpan konteks penting di backend Ciel sehingga "
@@ -94,13 +94,29 @@ def faq_items(memory_enabled):
         "di deployment ini."
     )
 
+    pro_answer = (
+        "Riset Skripsi khusus paket Pro."
+        if pro_for_sale
+        else "Riset Skripsi khusus paket Pro, yang masih disiapkan dan belum bisa dibeli."
+    )
+
+    payment = (
+        (
+            "Bagaimana cara membayar Pro?",
+            "Sekali bayar Rp79.000 lewat Midtrans (QRIS, e-wallet, atau virtual "
+            "account) untuk Pro 30 hari. Tidak ada tagihan otomatis; Pro berhenti "
+            "sendiri setelah 30 hari kecuali kamu membeli lagi, dan pembelian "
+            "berikutnya menambah 30 hari dari sisa masa aktif.",
+        ),
+    ) if pro_for_sale else ()
+
     return (
         (
             "Apakah Ciel gratis?",
             "Ya. Chat, riset web dengan sumber, analisis file, dan proyek "
-            "gratis dengan batas pesan per jam. Riset Skripsi khusus paket Pro, "
-            "yang masih disiapkan dan belum bisa dibeli.",
+            f"gratis dengan batas pesan per jam. {pro_answer}",
         ),
+        *payment,
         (
             "Apakah Riset Skripsi menuliskan skripsi saya?",
             "Tidak. Riset Skripsi menyusun peta sumber: ringkasan tiap sumber per "
@@ -161,13 +177,15 @@ PRICING_CSS = """
 }
 .stApp .ciel-pricehead p { margin: 0 0 1.6rem; max-width: 34rem; color: var(--c-muted); line-height: 1.65; }
 
-.st-key-plan_free {
+:is(.st-key-plan_free, .st-key-plan_pro) {
     padding: 1.3rem 1.3rem 1.2rem;
     border: 1px solid var(--c-line);
     border-radius: var(--r-lg);
     background: var(--c-surface);
     box-shadow: var(--shadow-sm);
 }
+.st-key-plan_pro { margin-top: 1rem; }
+.stApp .ciel-paynote { margin: 0.5rem 0 0; font-size: 0.82rem; line-height: 1.55; color: var(--c-muted); }
 .ciel-plan-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .ciel-plan-name { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; color: var(--c-text); }
 .ciel-plan-tag {
@@ -257,6 +275,18 @@ def _free_plan_html(plan, extras):
     )
 
 
+def _pro_plan_html(plan):
+    features = "".join(f"<li>{html.escape(item)}</li>" for item in plan["features"])
+
+    return (
+        f'<div class="ciel-plan-top"><span class="ciel-plan-name">{html.escape(plan["name"])}</span>'
+        '<span class="ciel-plan-tag">Sekali bayar, tanpa langganan</span></div>'
+        f'<div class="ciel-plan-price"><strong>{format_idr(plan["monthly"])}</strong><span>untuk 30 hari</span></div>'
+        f'<p class="ciel-plan-blurb">{html.escape(plan["blurb"])}</p>'
+        f'<ul class="ciel-plan-feats">{features}</ul>'
+    )
+
+
 def _as_sentence(items):
     """("Semua di paket Pro", "Minimal 3 pengguna") -> "Semua di paket Pro, minimal 3 pengguna."."""
     first, *rest = items
@@ -279,13 +309,16 @@ def _planned_html(plans):
     )
 
 
-def render_pricing(contact_url=None, on_start_chat=None, rate_limits=(20, 60), memory_enabled=False):
+def render_pricing(contact_url=None, on_start_chat=None, rate_limits=(20, 60), memory_enabled=False, pro_action=None):
     """Render halaman harga.
 
     contact_url: tautan https/mailto untuk yang tertarik dengan paket berbayar.
     on_start_chat: callback tombol paket Gratis (kembali ke chat).
     rate_limits: (batas pesan/jam tanpa login, batas setelah login) dari app.py.
     memory_enabled: True jika login (dan long-term memory) aktif.
+    pro_action: fungsi dari app.py yang menggambar tombol beli dan status
+        pembayaran di kartu Pro. None selama pembayaran belum aktif: Pro
+        tetap tampil sebagai paket yang sedang disiapkan.
     """
 
     st.markdown(PRICING_CSS, unsafe_allow_html=True)
@@ -294,9 +327,13 @@ def render_pricing(contact_url=None, on_start_chat=None, rate_limits=(20, 60), m
         '<div class="ciel-pricehead">'
         "<h1>Fitur inti Ciel gratis.</h1>"
         "<p>Pemakaian dibatasi per jam agar Ciel tetap lancar untuk semua "
-        "orang. Paket Pro dengan Riset Skripsi baru bisa dibeli setelah "
-        "pembayarannya siap.</p>"
-        "</div>",
+        + (
+            "orang. Untuk skripsi, paket Pro menambahkan Riset Skripsi.</p>"
+            if pro_action
+            else "orang. Paket Pro dengan Riset Skripsi baru bisa dibeli setelah "
+            "pembayarannya siap.</p>"
+        )
+        + "</div>",
         unsafe_allow_html=True,
     )
 
@@ -309,7 +346,14 @@ def render_pricing(contact_url=None, on_start_chat=None, rate_limits=(20, 60), m
         )
         st.button(free["cta"], key="cta_free", type="primary", on_click=on_start_chat)
 
-    planned = [plan for plan in PLANS if not plan["available"]]
+    pro = next(plan for plan in PLANS if plan["id"] == "pro")
+
+    if pro_action:
+        with st.container(key="plan_pro"):
+            st.markdown(_pro_plan_html(pro), unsafe_allow_html=True)
+            pro_action()
+
+    planned = [plan for plan in PLANS if not plan["available"] and not (pro_action and plan is pro)]
     contact = safe_contact_url(contact_url)
     note = (
         'Tertarik atau punya pertanyaan? '
@@ -326,7 +370,7 @@ def render_pricing(contact_url=None, on_start_chat=None, rate_limits=(20, 60), m
 
     faq_html = "".join(
         f"<div><strong>{html.escape(q)}</strong><span>{html.escape(a)}</span></div>"
-        for q, a in faq_items(memory_enabled)
+        for q, a in faq_items(memory_enabled, pro_for_sale=bool(pro_action))
     )
 
     st.markdown(

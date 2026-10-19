@@ -1,6 +1,6 @@
 # Ciel Pro
 
-Paket Pro saat ini berisi satu fitur khusus, **Riset Skripsi**, plus batas pesan lebih tinggi. Pembayaran belum ada; status Pro diberikan pengelola lewat SQL. Rencana berikutnya: pembayaran Midtrans yang menulis tabel yang sama lewat webhook.
+Paket Pro berisi satu fitur khusus, **Riset Skripsi**, plus batas pesan lebih tinggi. Pengguna membelinya sendiri lewat Midtrans (sekali bayar Rp79.000 = Pro 30 hari, tanpa tagihan otomatis), atau pengelola memberikannya lewat SQL.
 
 ## Cara kerja
 
@@ -20,10 +20,55 @@ Paket Pro saat ini berisi satu fitur khusus, **Riset Skripsi**, plus batas pesan
 | `RATE_LIMIT_PER_HOUR_PRO` | tidak | 150 | Pesan per jam untuk akun Pro. |
 | `RATE_LIMIT_PER_DAY_PRO` | tidak | 800 | Pesan per hari untuk akun Pro. |
 | `RISET_SKRIPSI_PER_DAY` | tidak | 5 | Riset Skripsi per hari per akun. |
+| `MIDTRANS_SERVER_KEY` | ya, untuk pembelian | – | Server key Midtrans (sandbox `SB-Mid-server-…` atau produksi). Tanpa ini Pro tampil sebagai "sedang disiapkan". |
+| `MIDTRANS_PRODUCTION` | tidak | `false` | `true` memakai akun produksi Midtrans. |
+| `APP_URL` | disarankan | alamat yang sedang dibuka | Alamat publik app, tujuan kembali setelah bayar (`<APP_URL>/?page=pricing`). |
 
 Fitur ini juga butuh login Google (`[auth]`) dan Supabase (`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`), karena status Pro tersimpan di sana. Flow riset juga harus diizinkan di policy ngrok (`tools/render_ngrok_policy.py`).
 
 Catatan: penghitung batas ada di memori proses app dan kembali ke nol saat app restart, sama seperti batas chat biasa.
+
+## Pembelian lewat Midtrans
+
+```
+Pricing: "Beli Pro 30 hari"
+  -> app: baris pro_orders (pending) + transaksi Snap (server key, nominal Rp79.000)
+  -> pengguna membayar di halaman Midtrans (QRIS, e-wallet, VA), lalu kembali ke Pricing
+Midtrans -> Supabase Edge Function midtrans-notify
+  -> cek signature (sha512 order_id + status_code + gross_amount + server key)
+  -> ambil ulang status dari Status API Midtrans
+  -> lunas: ciel_settle_order (sekali per order, nominal harus sama) -> pro_members +30 hari
+  -> gagal/kedaluwarsa: status order dicatat
+```
+
+- App **tidak pernah** memberi Pro dari parameter URL saat pengguna kembali. Halaman Pricing membaca order terakhir akun itu dari database (2 jam terakhir) dan status Pro yang dibaca ulang.
+- Order yang belum dibayar kedaluwarsa setelah 60 menit.
+- Pembelian berikutnya menambah 30 hari dari sisa masa aktif.
+- Refund atau chargeback hanya dicatat di `pro_orders.midtrans_status`. Pencabutan Pro diputuskan pengelola (SQL di bawah).
+- Logika notifikasi ada di `supabase/functions/midtrans-notify/notification.js` dan dites dengan `node --test supabase/functions/midtrans-notify/notification.test.mjs`.
+
+### Menyiapkan (sekali, sandbox dulu)
+
+1. Daftar di dashboard.midtrans.com. Pindah ke mode **Sandbox** dan salin **Server Key** dari halaman kunci akses (Access Keys).
+2. Jalankan bagian `pro_orders` dan `ciel_settle_order` dari `docs/chat_store.sql` di Supabase → SQL Editor.
+3. Deploy Edge Function dari folder repo:
+   ```bash
+   npx supabase login
+   npx supabase secrets set --project-ref <ref> MIDTRANS_SERVER_KEY=<server key> MIDTRANS_PRODUCTION=false
+   npx supabase functions deploy midtrans-notify --project-ref <ref> --no-verify-jwt
+   ```
+   `<ref>` adalah bagian depan `SUPABASE_URL` (`https://<ref>.supabase.co`). `--no-verify-jwt` wajib karena Midtrans tidak mengirim token Supabase; keamanannya ada di signature dan Status API.
+4. Di pengaturan dashboard Midtrans, isi **Payment Notification URL** dengan `https://<ref>.supabase.co/functions/v1/midtrans-notify`.
+5. Tambah secrets app: `MIDTRANS_SERVER_KEY`, `APP_URL` (dan `MIDTRANS_PRODUCTION = "true"` hanya setelah produksi siap).
+6. Tes sandbox: beli Pro dengan akun tes, bayar dengan simulator Midtrans (sandbox), lalu pastikan Pricing menampilkan "Pembayaran diterima" dan menu akun menampilkan Pro. Cek juga bahwa log function (`npx supabase functions logs midtrans-notify --project-ref <ref>`) menulis `settle … paid`.
+
+Pindah ke produksi: ulangi langkah 3–5 dengan server key produksi dan `MIDTRANS_PRODUCTION=true` di kedua tempat (secrets function dan secrets app).
+
+```sql
+-- Order 7 hari terakhir.
+select id, owner, amount, status, midtrans_status, created_at, paid_at
+from public.pro_orders where created_at > now() - interval '7 days' order by created_at desc;
+```
 
 ## Memberi, memperpanjang, dan mencabut Pro
 
@@ -49,4 +94,6 @@ Perubahan terlihat di menu akun paling lambat 5 menit kemudian, dan langsung ber
 
 ## Rollback
 
-Hapus secret `RESEARCH_FLOW_ID`. Tombol dan dialog hilang, dan chat biasa tidak terpengaruh. Tabel `pro_members` boleh tetap ada. Batas Pro tetap berlaku untuk akun yang ada di tabel itu; kosongkan tabelnya kalau batas Pro juga mau dimatikan.
+Pembelian: hapus secret `MIDTRANS_SERVER_KEY` dari app. Pro kembali tampil sebagai "sedang disiapkan", dan Pro yang sudah dibeli tetap berlaku sampai masanya habis. Notifikasi Midtrans yang tertunda tetap diproses oleh Edge Function.
+
+Riset Skripsi: hapus secret `RESEARCH_FLOW_ID`. Tombol dan dialog hilang, dan chat biasa tidak terpengaruh. Tabel `pro_members` boleh tetap ada. Batas Pro tetap berlaku untuk akun yang ada di tabel itu; kosongkan tabelnya kalau batas Pro juga mau dimatikan.

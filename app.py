@@ -18,7 +18,8 @@ from pypdf import PdfReader
 
 from chat_store import ChatStore
 from login import render_login
-from pricing import render_pricing, safe_contact_url
+from payments import create_snap_transaction, finish_url, new_order_id, order_message, snap_payload
+from pricing import PLANS, render_pricing, safe_contact_url
 from riset_export import report_docx, report_filename
 from privacy import render_privacy
 
@@ -511,6 +512,17 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     font-weight: 600;
 }
 :is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button[kind="primary"]:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); }
+/* Link buttons ("Bayar di Midtrans" on Pricing) are <a>, not <button>, so
+   the rules above do not reach them. */
+.stApp [data-testid="stBaseLinkButton-primary"] {
+    border-radius: var(--r-md);
+    border: 1px solid var(--c-accent);
+    background: var(--c-accent);
+    color: var(--c-accent-ink);
+    font-weight: 600;
+}
+.stApp [data-testid="stBaseLinkButton-primary"]:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); color: var(--c-accent-ink); }
+.stApp [data-testid="stBaseLinkButton-primary"] :is(p, span, [data-testid="stIconMaterial"]) { color: inherit; }
 /* Disabled buttons (e.g. "Hapus semua memoriku" until its checkbox is
    ticked) look muted and stay the same on hover; otherwise the hover
    background met Streamlit's light-theme disabled text and hid the label. */
@@ -1136,6 +1148,15 @@ RISET_ENABLED = bool(RESEARCH_FLOW_ID and CHAT_STORE)
 # Beberapa putaran pencarian plus laporan panjang; diukur ulang saat uji live.
 RESEARCH_TIMEOUT = 420
 
+# Opsional: pembelian Pro lewat Midtrans Snap (payments.py, docs/PRO.md).
+# Server key hanya dipakai di server; MIDTRANS_PRODUCTION=true memakai akun
+# produksi, selain itu sandbox. APP_URL adalah alamat publik app untuk tujuan
+# kembali setelah bayar (default: alamat yang sedang dibuka).
+MIDTRANS_SERVER_KEY = get_config("MIDTRANS_SERVER_KEY")
+MIDTRANS_PRODUCTION = (get_config("MIDTRANS_PRODUCTION") or "").lower() == "true"
+APP_URL = get_config("APP_URL")
+PAYMENTS_ENABLED = bool(MIDTRANS_SERVER_KEY and CHAT_STORE)
+
 # Bersihkan URL
 if NGROK_URL:
     NGROK_URL = NGROK_URL.rstrip("/")
@@ -1363,6 +1384,104 @@ def format_date_id(epoch):
     """1795132800 -> "17 November 2026" (WIB, zona pengguna Ciel)."""
     day = time.gmtime(epoch + 7 * 3600)
     return f"{day.tm_mday} {MONTHS_ID[day.tm_mon - 1]} {day.tm_year}"
+
+
+# ------------------------------------------------------------
+# PEMBELIAN PRO (MIDTRANS)
+# ------------------------------------------------------------
+
+PRO_PRICE = next(plan["monthly"] for plan in PLANS if plan["id"] == "pro")
+# Status order terakhir ditampilkan di Pricing selama ini setelah dibuat,
+# yaitu saat pengguna kembali dari halaman bayar Midtrans.
+RECENT_ORDER_SECONDS = 2 * 3600
+
+
+def start_pro_checkout():
+    """Tombol "Beli Pro": buat order lalu transaksi Snap untuk akun yang login."""
+
+    owner = chat_owner()
+
+    if not (PAYMENTS_ENABLED and owner):
+        return
+
+    order_id = new_order_id()
+
+    if not CHAT_STORE.create_order(owner, order_id, PRO_PRICE):
+        st.session_state.checkout = {"error": "Order belum bisa dibuat. Silakan coba lagi."}
+        return
+
+    url = create_snap_transaction(
+        MIDTRANS_SERVER_KEY,
+        MIDTRANS_PRODUCTION,
+        snap_payload(
+            order_id,
+            PRO_PRICE,
+            finish_url(APP_URL or st.context.url),
+            email=st.user.get("email"),
+            name=st.user.get("name"),
+        ),
+    )
+
+    if not url:
+        st.session_state.checkout = {"error": "Halaman pembayaran belum bisa dibuka. Silakan coba lagi."}
+        return
+
+    logger.info("checkout_created order=%s", order_id)
+    st.session_state.checkout = {"order_id": order_id, "url": url}
+
+
+def render_pro_action():
+    """Isi kartu Pro di Pricing: status bayar terakhir dan tombol beli."""
+
+    if not logged_in():
+        st.button("Masuk untuk membeli", key="pro_login", type="primary", on_click=show_login)
+        return
+
+    checkout = st.session_state.get("checkout") or {}
+
+    if checkout.get("url"):
+        st.link_button("Bayar di Midtrans", checkout["url"], type="primary", icon=":material/payments:")
+        st.markdown(
+            '<p class="ciel-paynote">Halaman bayar berlaku 60 menit. Setelah membayar, '
+            "kembali ke halaman ini; Pro aktif begitu Midtrans mengonfirmasi.</p>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    if checkout.get("error"):
+        st.error(checkout["error"])
+
+    # Status dari database, bukan dari parameter URL Midtrans.
+    order = CHAT_STORE.load_latest_order(chat_owner())
+    recent = bool(order) and time.time() - order["created_at"] < RECENT_ORDER_SECONDS
+    message = order_message(order) if recent else None
+    until = pro_until(refresh=bool(message and message[0] == "ok"))
+
+    if message:
+        kind, text = message
+        if kind == "ok" and until and until > time.time():
+            text += f" Aktif sampai {format_date_id(until)}."
+        {"ok": st.success, "wait": st.info, "fail": st.error}[kind](text)
+
+        if kind == "wait":
+            st.button("Cek lagi", key="pro_recheck", icon=":material/refresh:")
+
+    active = bool(until) and until > time.time()
+
+    if active and not message:
+        st.markdown(
+            f'<p class="ciel-paynote">Pro aktif sampai {format_date_id(until)}. '
+            "Membeli lagi menambah 30 hari dari tanggal itu.</p>",
+            unsafe_allow_html=True,
+        )
+
+    st.button(
+        "Perpanjang 30 hari" if active else "Beli Pro 30 hari",
+        key="pro_buy",
+        type="primary",
+        icon=":material/shopping_cart:",
+        on_click=start_pro_checkout,
+    )
 
 
 # ============================================================
@@ -2752,7 +2871,9 @@ def unpack_chat_input(value):
 
 def current_view():
     # Disimpan di URL (?page=pricing, ?page=privacy, ?page=login) agar halaman bisa dibagikan.
-    page = st.query_params.get("page")
+    # Midtrans menambahkan parameternya sendiri ke URL kembali, kadang dengan
+    # "?" kedua ("pricing?order_id=..."), jadi hanya bagian depannya yang dipakai.
+    page = (st.query_params.get("page") or "").split("?", 1)[0]
     return page if page in ("pricing", "privacy", "login") else "chat"
 
 
@@ -3701,6 +3822,7 @@ if current_view() == "pricing":
         on_start_chat=show_chat,
         rate_limits=(RATE_LIMIT_PER_HOUR, RATE_LIMIT_PER_HOUR_LOGIN),
         memory_enabled=AUTH_ENABLED,
+        pro_action=render_pro_action if PAYMENTS_ENABLED else None,
     )
     st.stop()
 
@@ -3712,6 +3834,7 @@ if current_view() == "privacy":
         contact_url=safe_contact_url(CONTACT_URL),
         operator=OPERATOR_NAME,
         history_saved=CHAT_STORE is not None,
+        payments=PAYMENTS_ENABLED,
     )
     st.stop()
 

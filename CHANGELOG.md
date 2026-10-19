@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Ciel Pro: buying Pro with Midtrans
+- Signed-in users can buy **Pro for 30 days** (Rp79.000) from the Pricing page through Midtrans Snap: QRIS, e-wallet or virtual account. It is a one-time payment with no automatic billing, and buying again adds 30 days to what is left.
+  - The Pro card appears only when `MIDTRANS_SERVER_KEY` is set. Without it, Pro stays "sedang disiapkan".
+  - Guests see "Masuk untuk membeli".
+- The app creates a `pro_orders` row (pending) and a Snap transaction with the server key, then shows "Bayar di Midtrans". The transaction expires after 60 minutes.
+  - When the buyer comes back, the Pricing page reads that account's latest order and its Pro status from the database. It ignores the parameters Midtrans adds to the URL, including the "pricing?order_id=…" form that `current_view` now tolerates.
+- New Supabase Edge Function `midtrans-notify` (`supabase/functions/`, deployed with `--no-verify-jwt`):
+  1. Checks the sha512 signature.
+  2. Re-reads the status from Midtrans's Status API.
+  3. Settles through the SQL function `ciel_settle_order`. In one transaction it locks the order, settles it once, requires the amount to match, and adds 30 days to `pro_members`.
+  - Failed and expired payments are recorded. Refunds and chargebacks are only noted, and the operator decides whether to revoke Pro.
+  - Response codes make Midtrans retry only temporary failures.
+- Privacy page: when payments are on, it says that Midtrans processes payments, which data goes to Midtrans (email and name for the receipt), and that Ciel never sees card, bank or e-wallet details.
+- Tests:
+  - `tests/test_payments.py` (in CI) covers the Snap payload and environments, order storage, the SQL contract, and Pricing/Privacy with and without payments.
+  - AppTest runs cover buying (order and Snap call), a Snap failure, a paid return with a forged URL, a pending order, an old order, and payments off.
+  - `node --test` on the Edge Function logic (now a CI step) covers the signature, Status API over the notification body, idempotent settling, failed and reversed payments, and retry codes.
+- Not yet run against Midtrans: there is no Midtrans account yet. Setup and the sandbox test are in `docs/PRO.md`.
+
 ### Ciel Pro: Pro status and Riset Skripsi (Riset Skripsi flow v1.0.0)
 - New Pro-only feature **Riset Skripsi** for thesis students. The output is a source map, not a written chapter: sources summarized per theme, research gaps, questions for the supervisor, and an APA 7 reference list. It comes from a separate Langflow flow (`RESEARCH_FLOW_ID`); the main flow is unchanged.
 - Flow `flow/riset_skripsi/v1.0.0/Ciel_Riset_Skripsi.json`, cloned from the Web Research Assistant. Architecture: `docs/ARCHITECTURE.md`; first deployment: `RELEASE_CHECKLIST.md`.

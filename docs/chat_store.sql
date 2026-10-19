@@ -58,3 +58,69 @@ alter table public.pro_members enable row level security;
 --     updated_at = now();
 --
 -- Cabut Pro: update public.pro_members set expires_at = now() where owner = '<ID memory>';
+
+-- Pembelian Pro lewat Midtrans (docs/PRO.md). App membuat satu baris per
+-- transaksi Snap (status 'pending'). Hanya Edge Function midtrans-notify
+-- yang menandainya lunas, setelah signature dan Status API Midtrans dicek,
+-- lewat ciel_settle_order di bawah.
+create table if not exists public.pro_orders (
+    id text primary key,
+    owner text not null,
+    amount integer not null,
+    status text not null default 'pending',
+    midtrans_status text,
+    created_at timestamptz not null default now(),
+    paid_at timestamptz,
+    updated_at timestamptz not null default now()
+);
+
+create index if not exists pro_orders_owner on public.pro_orders (owner, created_at desc);
+
+alter table public.pro_orders enable row level security;
+
+-- Lunasi satu order dan tambah Pro 30 hari, dalam satu transaksi database.
+-- Idempoten: notifikasi Midtrans yang dikirim ulang untuk order yang sudah
+-- lunas tidak menambah masa Pro lagi. Nominal harus sama dengan order.
+create or replace function public.ciel_settle_order(
+    p_order_id text,
+    p_gross_amount numeric,
+    p_midtrans_status text
+) returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    paid_order public.pro_orders%rowtype;
+begin
+    select * into paid_order from public.pro_orders where id = p_order_id for update;
+
+    if not found then
+        return 'unknown_order';
+    end if;
+
+    if paid_order.status = 'paid' then
+        return 'already_paid';
+    end if;
+
+    if p_gross_amount is distinct from paid_order.amount then
+        return 'amount_mismatch';
+    end if;
+
+    update public.pro_orders
+    set status = 'paid', midtrans_status = p_midtrans_status, paid_at = now(), updated_at = now()
+    where id = p_order_id;
+
+    insert into public.pro_members (owner, expires_at, source)
+    values (paid_order.owner, now() + interval '30 days', 'midtrans')
+    on conflict (owner) do update set
+        expires_at = greatest(pro_members.expires_at, now()) + interval '30 days',
+        source = 'midtrans',
+        updated_at = now();
+
+    return 'paid';
+end;
+$$;
+
+-- Hanya service key (Edge Function) yang boleh memanggilnya.
+revoke execute on function public.ciel_settle_order(text, numeric, text) from public, anon, authenticated;

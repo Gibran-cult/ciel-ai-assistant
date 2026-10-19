@@ -253,6 +253,42 @@ class ChatStore:
             logger.error("chat_store_error action=load_pro_until type=%s error=%s", type(error).__name__, error)
             return None
 
+    def create_order(self, owner, order_id, amount):
+        """Order Pro baru (status 'pending'). Hanya Edge Function yang menandainya lunas."""
+        return self._upsert(
+            "create_order",
+            "pro_orders",
+            {"owner": owner, "id": order_id, "amount": int(amount), "status": "pending"},
+        )
+
+    def load_latest_order(self, owner):
+        """
+        Order Pro terakhir akun ini ({id, status, created_at}), {} jika belum
+        pernah membeli, None jika gagal dibaca. Dipakai saat pengguna kembali
+        dari halaman bayar Midtrans, tanpa mempercayai parameter URL.
+        """
+
+        response = self._request(
+            "GET",
+            "load_latest_order",
+            owner,
+            "pro_orders",
+            params={"select": "id,status,created_at", "order": "created_at.desc", "limit": "1"},
+        )
+
+        if response is None:
+            return None
+
+        try:
+            rows = response.json()
+            if not rows:
+                return {}
+            row = rows[0]
+            return {"id": row["id"], "status": row["status"], "created_at": parse_timestamp(row["created_at"])}
+        except (ValueError, KeyError, TypeError) as error:
+            logger.error("chat_store_error action=load_latest_order type=%s error=%s", type(error).__name__, error)
+            return None
+
 
 # timestamptz dari PostgREST: pecahan detik 0-6 digit dan zona "+00:00" atau
 # "Z". datetime.fromisoformat di Python 3.10 hanya menerima 3 atau 6 digit.
