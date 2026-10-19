@@ -276,6 +276,33 @@ The main Agent starts every question for the Research Agent with a mode marker:
 
 The Research Agent never calls `get_contents`, has `max_iterations` 6, and Exa returns 5 results with at most 1,500 highlight characters each. Every source and URL in the notes must come from a search result in the same run; the agent may not add sources from memory. Ciel Exa Search (`flow/components/ciel_exa_search.py`) replaces the official Exa node and records every URL Exa returns in the graph context. Ciel Source Guard (`flow/components/ciel_source_guard.py`), between the Agent and Chat Output, removes sources whose URL Exa did not return, along with their markers and findings, and says how many it removed. Its DeepSeek model runs with thinking off (`model_kwargs = {"extra_body": {"thinking": {"type": "disabled"}}}`); the main Agent keeps thinking on. It hands back notes (findings + sources), not an essay; the main Agent writes the answer and its "Sumber:" section. The sub-flow snapshot is `flow/subflows/Web_Research_Assistant.json`.
 
+### Riset Skripsi (Ciel Pro, `flow/riset_skripsi/v1.0.0`)
+
+A separate flow, not a tool of the main Agent: the app calls it directly (`RESEARCH_FLOW_ID`) only for Pro accounts (`docs/PRO.md`). It was cloned from the Web Research Assistant.
+
+```
+Chat Input -> Agent (DeepSeek, thinking off) -> Ciel Source Guard -> Ciel Reference Builder -> Chat Output
+                 ^ tool: Ciel Scholar Search
+```
+
+- **Ciel Scholar Search** (`flow/components/ciel_scholar_search.py`):
+  - Takes the Exa toolkit's inputs and gives the Agent only `search`; `get_contents` is left out.
+  - Returns 10 results with at most 1,000 highlight characters each.
+  - The app sets `start_published_date` per request (tweak, e.g. `2021-01-01` for "5 tahun terakhir"), and Exa applies it.
+  - Besides the URL list for the guard, it records each result's title, author and published date in the graph context.
+- **Agent:** `max_iterations` 10, `n_messages` 0, date tool on, no calculator.
+  - The prompt asks for a fixed source map (`# Peta Sumber`, `## Tema: …` with `[n]` markers, `## Celah riset`, `## Pertanyaan untuk dosen pembimbing`).
+  - It also asks for at most 4 searches, and ends with a "Sumber:" list of `[n] URL` lines only.
+  - The model never writes authors, years or a reference list.
+- **Ciel Source Guard:** the same component as the main flow; it drops source lines whose URL no search returned.
+- **Ciel Reference Builder** (`flow/components/ciel_reference_builder.py`):
+  - Replaces the "Sumber:" list with `## Daftar Pustaka` in APA 7 style: `[n] Penulis. (Tahun). *Judul*. domain. URL`.
+  - Everything in an entry comes from the recorded Exa metadata. With no author, the title goes first. With no date, it writes "(t.t.)".
+  - Entries without metadata are dropped, numbers are compacted to 1..n, and the `[n]` markers in the text follow.
+  - A note asks the student to check names and years in the original source.
+
+The app shows the result as one chat message with an "Unduh DOCX" button (`riset_export.py`). Follow-up questions in that chat go to the main flow with the source map as context. Time is bounded by the app's 420 s timeout for this flow.
+
 
 ## Model Architecture
 

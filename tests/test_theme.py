@@ -89,11 +89,14 @@ class ThemeTokensTest(unittest.TestCase):
         # Popovers (account menu, "Proyek baru") render outside .stApp, so
         # rules scoped to .stApp left their buttons and expander light in dark
         # mode, with light text on top.
-        scope = ':is(.stApp, [data-testid="stPopoverBody"])'
+        # The Riset Skripsi dialog (st.dialog) renders outside .stApp too.
+        scope = ':is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"])'
         self.assertNotIn(".stApp .stButton > button", self.css)
         self.assertIn(f"{scope} .stButton > button,", self.css)
         self.assertIn(f'{scope} .stButton > button[kind="primary"]', self.css)
-        self.assertIn(f'{scope} [data-testid="stExpander"] summary', self.css)
+        self.assertIn(':is(.stApp, [data-testid="stPopoverBody"]) [data-testid="stExpander"] summary', self.css)
+        self.assertIn('[data-testid="stDialog"] [role="dialog"] {', self.css)
+        self.assertIn('[data-testid="stDialog"] :is(input, textarea) { color: var(--c-text);', self.css)
         # Streamlit 1.65 draws the text input box on this element.
         self.assertIn('[data-testid="stTextInputRootElement"] {', self.css)
         # Disabled buttons ("Hapus semua memoriku" before its checkbox) must

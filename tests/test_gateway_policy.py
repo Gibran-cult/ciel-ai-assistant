@@ -83,6 +83,22 @@ class BuildPolicyTest(unittest.TestCase):
             policy(),
         )
 
+    def test_research_flow_is_allowed_only_when_configured(self):
+        research = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        with_research = policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, research.replace("-", ""))
+        deny = with_research["on_http_request"][2]["expressions"][0]
+        costly = with_research["on_http_request"][3]["expressions"][0]
+        for form in (research, research.replace("-", "")):
+            self.assertIn(f"(req.method == 'POST' && {path_check(f'/api/v1/run/{form}')})", deny)
+            self.assertIn(path_check(f"/api/v1/run/{form}"), costly)
+        # Run only: no image upload for the research flow.
+        self.assertNotIn(f"/api/v1/files/upload/{research}", deny)
+        # Without it (and with an empty value) the policy is unchanged.
+        self.assertEqual(policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, None), policy())
+        self.assertEqual(policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, ""), policy())
+        with self.assertRaises(policy_tool.PolicyError):
+            policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, "riset-flow")
+
     def test_refuses_weak_or_missing_settings(self):
         cases = {
             "no user": ("", PASSWORD, FLOW, ADMIN),
@@ -127,6 +143,18 @@ class RenderMainTest(unittest.TestCase):
         written = self.out.read_text(encoding="utf-8")
         self.assertNotIn("FLOW_ID", written)
         self.assertIn(FLOW, written)  # the ID from .env, lowercased
+
+    def test_research_flow_id_comes_from_env(self):
+        research = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        code, _ = self.render(
+            f"NGROK_USER={USER}\nNGROK_PASSWORD={PASSWORD}\nFLOW_ID={FLOW}\n"
+            f"MEMORY_ADMIN_FLOW_ID={ADMIN}\nRESEARCH_FLOW_ID={research.upper()}\n"
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            json.loads(self.out.read_text(encoding="utf-8")),
+            policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, research),
+        )
 
     def test_nothing_is_written_when_a_setting_is_missing(self):
         code, output = self.render(f"NGROK_USER={USER}\nNGROK_PASSWORD={PASSWORD}\nFLOW_ID={FLOW}\n")

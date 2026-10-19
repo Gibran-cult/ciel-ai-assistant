@@ -2,3 +2,4 @@ streamlit[auth]>=1.54
 requests
 python-dotenv
 pypdf>=6.20.1
+python-docx>=1.1

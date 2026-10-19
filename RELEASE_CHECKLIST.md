@@ -23,6 +23,19 @@ The production flow is updated in place, so `FLOW_ID` and the app's secrets stay
 5. Verify the live graph equals the snapshot, then send real requests through the ngrok tunnel (the path the public app uses) for the changed behavior and for anonymous memory isolation (memory count must not change).
 6. If anything fails, restore the backup with the same `PATCH`.
 
+### First deployment of the Riset Skripsi flow (Ciel Pro)
+
+This is a new flow with its own ID, not an update of the main flow. The main flow is not touched.
+
+1. Run the `pro_members` SQL from `docs/chat_store.sql` in Supabase (additive; existing tables are unchanged).
+2. Import `flow/riset_skripsi/v1.0.0/Ciel_Riset_Skripsi.json` into Langflow. The global variables `DEEPSEEK_API_KEY` and `EXA_API_KEY` are the ones the main flow already uses. Note the new flow ID.
+3. Try it directly in Langflow with 2-3 real topics and a `start_published_date` tweak on `CielScholarSearch-r1s3t`. Check the run time (it must stay well under the app's 420 s), that every URL under "Daftar Pustaka" came from that run's search, and that no year is older than the range unless it says "(t.t.)". DeepSeek is prepaid: check the balance first.
+4. Add `RESEARCH_FLOW_ID=<new ID>` to `.env`, run `python tools/render_ngrok_policy.py`, stop ngrok (the watchdog restarts it with the new policy; never start ngrok as admin), then run `python tools/check_gateway.py`.
+5. Add `RESEARCH_FLOW_ID` to the Streamlit Cloud secrets. The "Riset Skripsi" button appears for signed-in users.
+6. Grant Pro to a test account (`docs/PRO.md`), then run one Riset Skripsi through the public app: result, "Unduh DOCX", and a follow-up question in the same chat. A free account must see "· Pro" and get refused.
+
+Rollback: remove `RESEARCH_FLOW_ID` from the Streamlit secrets (the button disappears), then from `.env`, and re-render the policy.
+
 Sub-flows (Math Tutor Agent, Verified Data Analyst, Knowledge Retriever, Web Research Assistant) are not in this repository. Back them up the same way before changing them, record the change in `CHANGELOG.md`, and verify through ngrok.
 
 ## Release

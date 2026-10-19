@@ -50,7 +50,7 @@ PRIVACY_CSS = """
 """
 
 
-def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=None, operator=None, history_saved=False):
+def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=None, operator=None, history_saved=False, payments=False):
     """Kembalikan daftar (judul, [paragraf HTML]) untuk halaman privasi."""
 
     days = int(retention_days)
@@ -138,6 +138,16 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
             "jadi Ciel tidak menyimpan memory jangka panjang."
         )
 
+    if payments:
+        stored.append(
+            "<strong>Pembelian Ciel Pro:</strong> pembayaran diproses oleh "
+            "<strong>Midtrans</strong>, penyedia pembayaran pihak ketiga. "
+            "Ciel mengirim email dan namamu ke Midtrans untuk bukti bayar, dan "
+            "menyimpan nomor order, nominal, status bayar, serta masa aktif Pro "
+            "dengan kode akunmu. Ciel tidak pernah menerima atau menyimpan data "
+            "kartu, rekening, atau PIN e-wallet-mu."
+        )
+
     stored.append(
         "<strong>Catatan teknis:</strong> saat terjadi error, server mencatat "
         "kode permintaan (Request ID) dan detail error untuk perbaikan."
@@ -204,7 +214,7 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
     ]
 
 
-def render_privacy(retention_days=30, memory_enabled=False, data_controls=False, contact_url=None, operator=None, history_saved=False):
+def render_privacy(retention_days=30, memory_enabled=False, data_controls=False, contact_url=None, operator=None, history_saved=False, payments=False):
     st.markdown(PRIVACY_CSS, unsafe_allow_html=True)
 
     parts = [
@@ -215,7 +225,7 @@ def render_privacy(retention_days=30, memory_enabled=False, data_controls=False,
         f'<p class="ciel-updated">Terakhir diperbarui: {PRIVACY_UPDATED}</p>',
     ]
 
-    for title, items in privacy_sections(retention_days, memory_enabled, data_controls, contact_url, operator, history_saved):
+    for title, items in privacy_sections(retention_days, memory_enabled, data_controls, contact_url, operator, history_saved, payments):
         parts.append(f"<h2>{html.escape(title)}</h2><ul>")
         parts.extend(f"<li>{item}</li>" for item in items)
         parts.append("</ul>")

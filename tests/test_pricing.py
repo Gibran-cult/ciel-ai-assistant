@@ -47,10 +47,11 @@ class PricingLogicTest(unittest.TestCase):
 
 class PricingHonestyTest(unittest.TestCase):
     # The page used to sell Pro (Rp79.000) for long-term memory, photos and
-    # projects, which every visitor already gets for free. Until plans are
-    # enforced, paid plans are "Segera hadir" and must not claim free features.
+    # projects, which every visitor already gets for free. Paid plans must not
+    # claim free features. "riset web" is free; Riset Skripsi is Pro-only
+    # (enforced in app.py by riset_refusal), so the check names the free one.
 
-    FREE_FEATURE_WORDS = ("memory", "foto", "proyek", "csv", "riset", "lampiran")
+    FREE_FEATURE_WORDS = ("memory", "foto", "proyek", "csv", "riset web", "lampiran")
 
     def test_unavailable_plans_do_not_claim_free_features(self):
         for plan in pricing.PLANS:
@@ -91,7 +92,9 @@ class PricingRenderTest(unittest.TestCase):
         for plan in pricing.PLANS:
             self.assertIn(plan["name"], html)
         self.assertIn("Rp79.000", html)
-        self.assertIn("Semua fitur Ciel saat ini gratis.", html)
+        self.assertIn("Fitur inti Ciel gratis.", html)
+        self.assertIn("Riset Skripsi", html)
+        self.assertIn("Apakah Riset Skripsi menuliskan skripsi saya?", html)
 
         self.assertIn("Rencana Rp149.000/bulan per pengguna", html)
         self.assertIn("Belum bisa dibeli", html)

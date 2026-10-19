@@ -2,6 +2,56 @@
 
 ## Unreleased
 
+### Ciel Pro: buying Pro with Midtrans
+- Signed-in users can buy **Pro for 30 days** (Rp79.000) from the Pricing page through Midtrans Snap: QRIS, e-wallet or virtual account. It is a one-time payment with no automatic billing, and buying again adds 30 days to what is left.
+  - The Pro card appears only when `MIDTRANS_SERVER_KEY` is set. Without it, Pro stays "sedang disiapkan".
+  - Guests see "Masuk untuk membeli".
+- The app creates a `pro_orders` row (pending) and a Snap transaction with the server key, then shows "Bayar di Midtrans". The transaction expires after 60 minutes.
+  - When the buyer comes back, the Pricing page reads that account's latest order and its Pro status from the database. It ignores the parameters Midtrans adds to the URL, including the "pricing?order_id=…" form that `current_view` now tolerates.
+- New Supabase Edge Function `midtrans-notify` (`supabase/functions/`, deployed with `--no-verify-jwt`):
+  1. Checks the sha512 signature.
+  2. Re-reads the status from Midtrans's Status API.
+  3. Settles through the SQL function `ciel_settle_order`. In one transaction it locks the order, settles it once, requires the amount to match, and adds 30 days to `pro_members`.
+  - Failed and expired payments are recorded. Refunds and chargebacks are only noted, and the operator decides whether to revoke Pro.
+  - Response codes make Midtrans retry only temporary failures.
+- Privacy page: when payments are on, it says that Midtrans processes payments, which data goes to Midtrans (email and name for the receipt), and that Ciel never sees card, bank or e-wallet details.
+- Tests:
+  - `tests/test_payments.py` (in CI) covers the Snap payload and environments, order storage, the SQL contract, and Pricing/Privacy with and without payments.
+  - AppTest runs cover buying (order and Snap call), a Snap failure, a paid return with a forged URL, a pending order, an old order, and payments off.
+  - `node --test` on the Edge Function logic (now a CI step) covers the signature, Status API over the notification body, idempotent settling, failed and reversed payments, and retry codes.
+- Not yet run against Midtrans: there is no Midtrans account yet. Setup and the sandbox test are in `docs/PRO.md`.
+
+### Ciel Pro: Pro status and Riset Skripsi (Riset Skripsi flow v1.0.0)
+- New Pro-only feature **Riset Skripsi** for thesis students. The output is a source map, not a written chapter: sources summarized per theme, research gaps, questions for the supervisor, and an APA 7 reference list. It comes from a separate Langflow flow (`RESEARCH_FLOW_ID`); the main flow is unchanged.
+- Flow `flow/riset_skripsi/v1.0.0/Ciel_Riset_Skripsi.json`, cloned from the Web Research Assistant. Architecture: `docs/ARCHITECTURE.md`; first deployment: `RELEASE_CHECKLIST.md`.
+  - New component **Ciel Scholar Search**: the Agent only gets Exa `search` (no `get_contents`), with 10 results per query. The year range is Exa's own `start_published_date`, set by the app per request. Each result's title, author and date are recorded.
+  - New component **Ciel Reference Builder**, after Ciel Source Guard: it replaces the Agent's `[n] URL` list with an APA 7 "Daftar Pustaka" built from that recorded metadata, then renumbers. The model never writes an author or a year. Missing date: "(t.t.)"; missing author: the title goes first.
+  - Agent: `max_iterations` 10, `n_messages` 0, DeepSeek with thinking off, prompt for the fixed source-map format with at most 4 searches.
+- ngrok policy: `RESEARCH_FLOW_ID` (optional, a UUID) allows POST run for that flow under the same 20-a-minute per-IP limit. When it is empty the policy is exactly as before.
+- Live test (2026-10-18). The snapshot was imported into local Langflow as a separate test flow, "Ciel Riset Skripsi (test)". Production and the ngrok policy are unchanged. Three real topics were sent directly to Langflow:
+
+  | Topic (range) | Time | Entries | Outside the range | `[n]` without an entry |
+  |---|---|---|---|---|
+  | Literasi digital, UMKM kuliner (from 2021) | 33.2 s | 15 | 0 | 0 |
+  | Stunting risk factors, rural areas (from 2023) | 30.1 s | 20 | 0 | 0 |
+  | Hoax detection with IndoBERT (from 2016) | 19.9 s | 16 (one "t.t.") | 0 | 0 |
+
+  - All three had every section and mostly journal articles (OJS journals, DOIs). Methods and sample sizes were taken from the highlights, and "not mentioned in the excerpt" was written when they were missing. Ciel Source Guard removed nothing.
+  - After the first run, Ciel Reference Builder learned to split OJS page titles ("Article | Journal") so the journal name replaces the domain, and to leave DOI links without "doi.org" as a site.
+  - Author names are kept as Exa gives them, without converting to "Surname, I.".
+- Pro status lives in the new Supabase table `pro_members` (`docs/chat_store.sql`). The app only reads it (`ChatStore.load_pro_until`); an admin grants Pro with SQL for now, and a payment webhook will write the same table later. How to grant, extend and revoke: `docs/PRO.md`.
+- The gate is on the server. Every Riset Skripsi request reads the status from the database (not the 5-minute display cache) before using any quota, so a hand-made request from a free account never reaches the research flow. If the database can't be read, the request is refused.
+- Limits: Pro accounts get 150 messages an hour and 800 a day (free signed-in: 60 and 300), and Riset Skripsi has its own quota of 5 a day. All of it still counts toward the 1,500-a-day total. Settings: `RATE_LIMIT_PER_HOUR_PRO`, `RATE_LIMIT_PER_DAY_PRO`, `RISET_SKRIPSI_PER_DAY`.
+- UI:
+  - "Riset Skripsi" button in the sidebar. Free accounts see "· Pro", and the dialog explains the plan with a link to Pricing. Pro accounts get topic, field and year range (3/5/10 years).
+  - The result has an "Unduh DOCX" button. The DOCX (`riset_export.py`, new dependency `python-docx`) uses Times New Roman 12, 1.5 spacing and hanging-indent references, and is built only when clicked.
+  - Follow-up questions in that chat send the source map along as context.
+  - The account menu shows the plan and when Pro ends.
+  - Dialogs render outside `.stApp`, so button rules now also cover `[data-testid="stDialog"]`, with dialog colours for dark mode.
+- Pricing: Pro lists Riset Skripsi and DOCX export and stays "not yet for sale" until payments exist. The headline is now "Fitur inti Ciel gratis." A new FAQ says Ciel does not write the thesis.
+- Rollback: remove the `RESEARCH_FLOW_ID` secret and the feature disappears; chat is unaffected.
+- Tests: new `tests/test_flow_riset_v100_contract.py` (nodes, the one chain to Chat Output, embedded code equals `flow/components/`, settings, prompt, no keys) and `tests/test_riset_components.py` (metadata record, APA entries, renumbering, dropped unknown sources, guard note kept), plus `tests/test_gateway_policy.py` cases for the optional research flow. New `tests/test_ciel_pro.py` (all in CI) covers the database read, PostgREST timestamps on Python 3.10, cache vs. server check, limits, refusal messages, retry keeping the riset inputs, follow-up context, DOCX output, and two AppTest runs. In those, a free account is refused without calling Langflow, and a Pro account reaches the research flow with `start_published_date` and a 420 s timeout.
+
 ### Faster answers, same accuracy (flow v1.12.0)
 - The main Agent's DeepSeek model runs with thinking off (`model_kwargs` `extra_body.thinking.type = disabled`), like the research Agent. Analysis answers dropped from 25.1 to 15.5 s and the exact-answer checks stayed correct.
 - Math questions no longer all go through the Math Tutor sub-flow. That path took 8-10 s because the nested agent wrote a full answer and the main Agent rewrote it. The main Agent now has Langflow's Calculator (`evaluate_expression`) as a tool. Prompt v14.8 makes it compute every number with the Calculator and check answer keys with it. Concept explanations, practice problems and quizzes are answered directly, and only worksheets or long multi-part problems still go to the Math Tutor. On 26 exact-answer questions: 26/26 correct, median 8.6 → 6.3 s, max 28.9 → 12.8 s.
