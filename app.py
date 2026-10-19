@@ -512,6 +512,25 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     font-weight: 600;
 }
 :is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button[kind="primary"]:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); }
+/* Download buttons ("Unduh DOCX", "Unduh CSV") sit in .stDownloadButton,
+   not .stButton, and kept Streamlit's light colours in dark mode. */
+:is(.stApp, [data-testid="stPopoverBody"]) .stDownloadButton > button {
+    border-radius: var(--r-md);
+    border: 1px solid var(--c-line-strong);
+    background: transparent;
+    color: var(--c-text);
+    font-weight: 500;
+}
+:is(.stApp, [data-testid="stPopoverBody"]) .stDownloadButton > button:hover {
+    background: var(--c-raised);
+    border-color: var(--c-faint);
+    color: var(--c-text);
+}
+:is(.stApp, [data-testid="stPopoverBody"]) .stDownloadButton > button :is(p, [data-testid="stIconMaterial"]) { color: inherit; }
+/* Links in answers (sources, DOI): Streamlit used the light theme's navy,
+   about 3:1 on dark paper. */
+.stApp [data-testid="stMarkdownContainer"] a { color: var(--c-accent); }
+.stApp [data-testid="stMarkdownContainer"] a:hover { color: var(--c-accent-hover); }
 /* Link buttons ("Bayar di Midtrans" on Pricing) are <a>, not <button>, so
    the rules above do not reach them. */
 .stApp [data-testid="stBaseLinkButton-primary"] {
@@ -622,6 +641,36 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     font-size: 0.98rem;
     line-height: 1.75;
     max-width: 44rem;
+}
+/* Headings inside answers (the Riset Skripsi source map starts with "#").
+   Streamlit's defaults are 44/36 px in its own font; these follow the
+   hero (serif title) and keep sections readable in a chat column. */
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] :is(h1, h2, h3) {
+    padding: 0;
+    color: var(--c-text);
+    text-wrap: balance;
+}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] h1 {
+    margin: 0.1rem 0 0.8rem;
+    font-family: var(--font-serif);
+    font-size: 1.6rem;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] h2 {
+    margin: 1.5rem 0 0.5rem;
+    font-family: var(--font-sans);
+    font-size: 1.1rem;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] h3 {
+    margin: 1.2rem 0 0.4rem;
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    font-weight: 600;
 }
 [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
     background: var(--c-surface);

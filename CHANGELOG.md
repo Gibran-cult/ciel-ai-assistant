@@ -24,6 +24,11 @@
   - Four unpaid orders stayed `pending`.
   - First attempt: the function's `MIDTRANS_SERVER_KEY` secret held the literal placeholder from the setup command, so every notification was refused with 403. That is correct behaviour for a wrong signature, but it is easy to miss. `docs/PRO.md` now sets the secret from `secrets.toml` and checks it by digest.
   - Also learned: new Midtrans accounts use `Mid-server-` keys in sandbox too (no `SB-` prefix); the key line must sit above `[auth]` in `secrets.toml`; sandbox numbers are paid in the Midtrans simulator, not a real bank app.
+- Riset Skripsi live through the dialog as a real Pro account (from the sandbox purchase). "Mulai riset" with "3 tahun terakhir" gave 18 sources, all 2023–2024 (one "t.t."), with every section. The chat was saved with `kind: riset_skripsi` and `min_year: 2023`.
+- Dark mode fixes found in that run:
+  - "Unduh DOCX" and "Unduh CSV" were light on light, because `.stDownloadButton` was not covered by the button rules.
+  - Links in every answer (sources, DOI) used the light theme's navy, about 3:1 on dark paper; they now use the accent token.
+  - The source map's `#` title rendered at 44 px in Streamlit's own font. Answer headings now use Fraunces for h1 (1.6rem) and Geist for h2/h3.
 
 ### Ciel Pro: Pro status and Riset Skripsi (Riset Skripsi flow v1.0.0)
 - New Pro-only feature **Riset Skripsi** for thesis students. The output is a source map, not a written chapter: sources summarized per theme, research gaps, questions for the supervisor, and an APA 7 reference list. It comes from a separate Langflow flow (`RESEARCH_FLOW_ID`); the main flow is unchanged.
