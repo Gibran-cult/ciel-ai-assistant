@@ -304,6 +304,20 @@ Chat Input -> Agent (DeepSeek, thinking off) -> Ciel Source Guard -> Ciel Refere
 The app shows the result as one chat message with an "Unduh DOCX" button (`riset_export.py`). Follow-up questions in that chat go to the main flow with the source map as context. Time is bounded by the app's 420 s timeout for this flow.
 
 
+### Kerangka Bab 1–3 (Ciel Pro, `flow/penulis/v1.0.0`)
+
+A second Pro flow, **Ciel Penulis**, called directly by the app (`WRITER_FLOW_ID`) from the "Susun kerangka Bab 1–3" button under a source map:
+
+```
+Chat Input -> DeepSeek (system prompt, no tools) -> Chat Output
+```
+
+- The app (`writing.py`) sends `[KERANGKA]`, the topic, the approach, an optional object, and the whole source map, including its Daftar Pustaka.
+- The prompt asks for Bab I–III as points (25 words at most) and guiding questions, never ready-to-copy paragraphs. It may cite only `[n]` from the map, with no new sources, and may copy author names and years only from the map's list.
+- After the reply, `writing.finish_kerangka` drops any `[n]` the map doesn't have and any reference list the model wrote, then appends the map's Daftar Pustaka.
+- No web search runs, so a run takes about 15 s. The same flow is meant to take further modes (Review draf) later.
+
+
 ## Model Architecture
 
 The main Agent receives a DeepSeek language model through its model connection.

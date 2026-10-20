@@ -47,6 +47,7 @@ PLANS = (
         "features": (
             "Semua di paket Gratis",
             "Riset Skripsi: peta sumber per tema, celah riset, dan daftar pustaka APA 7",
+            "Kerangka Bab 1–3 dari peta sumber, dengan pertanyaan pemandu",
             "Unduh hasil Riset Skripsi sebagai DOCX",
             "Batas pesan per jam lebih tinggi",
         ),
@@ -122,8 +123,9 @@ def faq_items(memory_enabled, pro_for_sale=False):
             "Tidak. Riset Skripsi menyusun peta sumber: ringkasan tiap sumber per "
             "tema, celah riset, dan pertanyaan untuk dosen pembimbing. Daftar "
             "pustaka disusun dari data sumber yang benar-benar ditemukan, bukan "
-            "ditulis bebas oleh AI. Kamu tetap membaca sumbernya dan menulis "
-            "skripsimu sendiri.",
+            "ditulis bebas oleh AI. Kerangka Bab 1–3 juga hanya berisi poin dan "
+            "pertanyaan pemandu dari peta sumber itu, bukan paragraf. Kamu tetap "
+            "membaca sumbernya dan menulis skripsimu sendiri.",
         ),
         ("Apa bedanya riwayat chat dan long-term memory?", memory_answer),
         (

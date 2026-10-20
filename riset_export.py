@@ -147,13 +147,13 @@ def _write_runs(paragraph, text):
         run.italic = italic or None
 
 
-def report_docx(markdown, topic):
-    """Hasil Riset Skripsi (markdown) -> isi file .docx (bytes)."""
+def report_docx(markdown, topic, label="Peta Sumber", footnote=FOOTNOTE):
+    """Hasil Riset Skripsi atau Kerangka Bab 1-3 (markdown) -> isi file .docx (bytes)."""
 
     document = Document()
     _style_document(document)
-    document.core_properties.title = f"Peta Sumber: {topic}"[:255]
-    document.core_properties.author = "Ciel Riset Skripsi"
+    document.core_properties.title = f"{label}: {topic}"[:255]
+    document.core_properties.author = "Ciel Pro"
 
     for kind, text in parse_blocks(markdown):
 
@@ -171,7 +171,7 @@ def report_docx(markdown, topic):
 
     note = document.add_paragraph()
     note.paragraph_format.space_before = Pt(18)
-    run = note.add_run(FOOTNOTE)
+    run = note.add_run(footnote)
     run.italic = True
     run.font.size = Pt(10)
 
@@ -180,7 +180,7 @@ def report_docx(markdown, topic):
     return buffer.getvalue()
 
 
-def report_filename(topic):
+def report_filename(topic, prefix="Peta Sumber"):
     """Nama file aman untuk unduhan: "Peta Sumber - Literasi Digital UMKM.docx"."""
     name = ""
 
@@ -191,4 +191,4 @@ def report_filename(topic):
         name = f"{name} {word}".strip()[:60]
 
     name = name or "Riset Skripsi"
-    return f"Peta Sumber - {name}.docx"
+    return f"{prefix} - {name}.docx"

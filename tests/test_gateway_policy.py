@@ -99,6 +99,23 @@ class BuildPolicyTest(unittest.TestCase):
         with self.assertRaises(policy_tool.PolicyError):
             policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, "riset-flow")
 
+    def test_writer_flow_is_allowed_only_when_configured(self):
+        research = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        writer = "12345678-1234-1234-1234-123456789abc"
+        both = policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, research, writer.replace("-", ""))
+        deny = both["on_http_request"][2]["expressions"][0]
+        costly = both["on_http_request"][3]["expressions"][0]
+        for form in (research, writer, writer.replace("-", "")):
+            self.assertIn(path_check(f"/api/v1/run/{form}"), deny)
+            self.assertIn(path_check(f"/api/v1/run/{form}"), costly)
+        # The writer flow alone works too, and an empty value changes nothing.
+        writer_only = policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, None, writer)
+        self.assertIn(path_check(f"/api/v1/run/{writer}"), writer_only["on_http_request"][2]["expressions"][0])
+        self.assertNotIn(research, json.dumps(writer_only))
+        self.assertEqual(policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, None, ""), policy())
+        with self.assertRaises(policy_tool.PolicyError):
+            policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, None, "penulis")
+
     def test_refuses_weak_or_missing_settings(self):
         cases = {
             "no user": ("", PASSWORD, FLOW, ADMIN),
@@ -154,6 +171,18 @@ class RenderMainTest(unittest.TestCase):
         self.assertEqual(
             json.loads(self.out.read_text(encoding="utf-8")),
             policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, research),
+        )
+
+    def test_writer_flow_id_comes_from_env(self):
+        writer = "12345678-1234-1234-1234-123456789abc"
+        code, _ = self.render(
+            f"NGROK_USER={USER}\nNGROK_PASSWORD={PASSWORD}\nFLOW_ID={FLOW}\n"
+            f"MEMORY_ADMIN_FLOW_ID={ADMIN}\nWRITER_FLOW_ID={writer}\n"
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            json.loads(self.out.read_text(encoding="utf-8")),
+            policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, None, writer),
         )
 
     def test_nothing_is_written_when_a_setting_is_missing(self):
