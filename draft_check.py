@@ -283,19 +283,26 @@ def map_body(source_map):
     return NUMBERED.sub(" ", text)
 
 
-def similar_sentences(draft, source_map, excerpts):
-    """[(kalimat, skor 0-1, label pembanding)] untuk kalimat yang mirip, skor tertinggi dulu."""
+def similar_sentences(draft, source_map, excerpts, topic=""):
+    """
+    [(kalimat, skor 0-1, label pembanding)] untuk kalimat yang mirip, skor
+    tertinggi dulu. Rangkaian kata dari judul topik tidak dihitung: menyebut
+    judul skripsi sendiri bukan menyalin.
+    """
 
     corpora = [(f"cuplikan sumber [{n}]", shingles(words(" ".join(texts)))) for n, texts in excerpts.items()]
     corpora.append(("ringkasan peta sumber Ciel", shingles(words(map_body(source_map)))))
 
+    topic_shingles = shingles(words(topic))
     flagged = []
     for sentence in sentences(draft):
         # Sitasi tidak ikut dibandingkan: "(Nama, 2024)" bukan bagian dari kalimat yang disalin.
         tokens = words(PARENTHETICAL.sub(" ", NUMBERED.sub(" ", sentence)))
         if len(tokens) < MIN_SENTENCE_WORDS or is_direct_quote(sentence):
             continue
-        own = shingles(tokens)
+        own = shingles(tokens) - topic_shingles
+        if not own:
+            continue
         score, label = max(((len(own & corpus) / len(own), label) for label, corpus in corpora), default=(0, ""))
         if score >= SIMILAR:
             flagged.append((sentence, score, label))
@@ -321,7 +328,7 @@ def check_report(draft, source_map, excerpts, topic):
     body = without_own_references(clean_draft(draft))
     references = parse_references(source_map)
     citations = check_citations(body, references)
-    flagged = similar_sentences(body, source_map, excerpts)
+    flagged = similar_sentences(body, source_map, excerpts, topic)
 
     total_words = word_count(body)
     flagged_words = sum(word_count(sentence) for sentence, _, _ in flagged)

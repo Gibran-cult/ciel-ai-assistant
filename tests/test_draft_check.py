@@ -122,6 +122,17 @@ class SimilarityTest(unittest.TestCase):
         flagged = similar_sentences(draft, SOURCE_MAP, {})
         self.assertEqual([label for _, _, label in flagged], ["ringkasan peta sumber Ciel"])
 
+    def test_words_of_the_topic_do_not_count_as_copying(self):
+        # Seen on the live app: a sentence restating the thesis title scored 44%
+        # against the map, whose heading and summary repeat the same title.
+        source_map = (
+            "# Peta Sumber: Pengaruh Media Sosial terhadap Minat Beli Mahasiswa\n\n"
+            "- Affiliate marketing berpengaruh positif terhadap minat beli mahasiswa di TikTok Shop [6]\n"
+        )
+        draft = "Penelitian ini menguji pengaruh media sosial terhadap minat beli mahasiswa di kampus kami."
+        self.assertEqual(len(similar_sentences(draft, source_map, {})), 1)
+        self.assertEqual(similar_sentences(draft, source_map, {}, "Pengaruh media sosial terhadap minat beli mahasiswa"), [])
+
     def test_direct_quote_and_short_sentences_are_not_flagged(self):
         draft = f"“{EXCERPT}” [1]. Literasi digital berpengaruh."
         self.assertEqual(similar_sentences(draft, SOURCE_MAP, {"1": [EXCERPT]}), [])

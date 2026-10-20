@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Cek kutipan: the thesis title no longer counts as copying
+- On the live app, a draft sentence that restated the thesis title was flagged at 44% against the source map, because the map's heading and summary repeat the same title. Five-word sequences from the topic are now left out of the comparison. A sentence copied from the map is still flagged at 100%.
+
 ### Ciel Pro: Cek kutipan & kemiripan (Riset flow v1.1.0)
 - New Pro feature: **"Cek kutipan & kemiripan"** under every Riset Skripsi source map. The student pastes a draft or uploads `.docx`/`.txt`, and gets a report in the chat.
   - **Citations:** each `[n]`, "(Nama, 2024)" and "Nama dkk. (2024)" is matched with the map's Daftar Pustaka by name and year. The report lists matches, name-matched citations with the wrong year, citations not in the map, unknown numbers, and map sources never cited.
