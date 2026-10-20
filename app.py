@@ -480,7 +480,9 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     color: var(--c-text);
 }
 [data-testid="stDialog"] [data-testid="stButtonGroup"] button:hover { background: var(--c-raised); }
-[data-testid="stDialog"] [data-testid="stButtonGroup"] button[kind$="Active"] {
+/* Streamlit 1.54 marks the chosen segment with kind="...Active"; 1.65 (Cloud)
+   drops kind and uses aria-checked, falling back to the light primary colour. */
+[data-testid="stDialog"] [data-testid="stButtonGroup"] button:is([kind$="Active"], [aria-checked="true"]) {
     border-color: var(--c-accent);
     background: var(--c-accent-soft);
     color: var(--c-accent);
