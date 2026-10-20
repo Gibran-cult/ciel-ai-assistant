@@ -475,15 +475,17 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 [data-testid="stDialog"] :is(input, textarea) { color: var(--c-text); caret-color: var(--c-text); }
 [data-testid="stDialog"] :is(input, textarea)::placeholder { color: var(--c-faint); }
 [data-testid="stDialog"] [data-testid="stCaptionContainer"] { color: var(--c-faint); }
-[data-testid="stDialog"] [data-testid="stButtonGroup"] button {
+[data-testid="stDialog"] [role="dialog"] [data-testid="stButtonGroup"] button {
     border: 1px solid var(--c-line-strong);
     background: transparent;
     color: var(--c-text);
 }
-[data-testid="stDialog"] [data-testid="stButtonGroup"] button:hover { background: var(--c-raised); }
+[data-testid="stDialog"] [role="dialog"] [data-testid="stButtonGroup"] button:hover { background: var(--c-raised); }
 /* Streamlit 1.54 marks the chosen segment with kind="...Active"; 1.65 (Cloud)
-   drops kind and uses aria-checked, falling back to the light primary colour. */
-[data-testid="stDialog"] [data-testid="stButtonGroup"] button:is([kind$="Active"], [aria-checked="true"]) {
+   drops kind and uses aria-checked, falling back to the light primary colour.
+   [role="dialog"] outranks 1.65's hover/focus rule for the chosen segment,
+   .cls[data-selected]:is([data-hovered], [data-focus-visible]):not([data-disabled]). */
+[data-testid="stDialog"] [role="dialog"] [data-testid="stButtonGroup"] button:is([kind$="Active"], [aria-checked="true"]) {
     border-color: var(--c-accent);
     background: var(--c-accent-soft);
     color: var(--c-accent);
