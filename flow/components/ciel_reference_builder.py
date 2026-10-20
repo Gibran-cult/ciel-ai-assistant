@@ -16,8 +16,14 @@ URL (author, year, title). The model never writes an author or a year.
 - Author names are kept as Exa gives them: turning Indonesian names into
   "Surname, I." automatically is too often wrong.
 - The guard's note "(N sumber dihapus ...)" stays, after the list.
+- The Exa highlights of the listed sources go last, as one HTML comment line
+  "<!-- ciel-excerpts:v1 BASE64 -->" (JSON [{n, highlights}]). The app
+  removes that line before showing or saving the map and keeps the excerpts
+  for Cek kutipan & kemiripan (draft_check.split_excerpts).
 """
 
+import base64
+import json
 import re
 from urllib.parse import urlsplit
 
@@ -129,17 +135,20 @@ def build_references(text, sources):
 
     numbers = {}
     entries = []
+    cited = []
     trailing = []
     for line in lines[heading + 1:]:
         entry = SOURCE_ENTRY.match(line)
         if not entry:
-            if line.strip():
+            # Only this component writes the excerpts line; a copy in the answer is dropped.
+            if line.strip() and "ciel-excerpts" not in line:
                 trailing.append(line.strip())
             continue
         source = next((known[normalize_url(url)] for url in cited_urls(line) if normalize_url(url) in known), None)
         if source is None or entry.group(1) in numbers:
             continue
         numbers[entry.group(1)] = str(len(entries) + 1)
+        cited.append((len(entries) + 1, source))
         entries.append(apa_entry(len(entries) + 1, source))
 
     body = [renumber(line, numbers) for line in lines[:heading]]
@@ -155,7 +164,20 @@ def build_references(text, sources):
     if trailing:
         section += ["", *trailing]
 
+    marker = excerpts_marker(cited)
+    if marker:
+        section += ["", marker]
+
     return "\n".join(body + [""] + section), len(entries)
+
+
+def excerpts_marker(cited):
+    """One comment line with the highlights of [(number, source)], or "" when none has any."""
+    items = [{"n": number, "highlights": source["highlights"]} for number, source in cited if source.get("highlights")]
+    if not items:
+        return ""
+    encoded = base64.urlsafe_b64encode(json.dumps(items, ensure_ascii=False).encode("utf-8")).decode("ascii")
+    return f"<!-- ciel-excerpts:v1 {encoded} -->"
 
 
 def text_contents(message):

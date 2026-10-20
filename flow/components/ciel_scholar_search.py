@@ -10,6 +10,9 @@ Ciel Exa Search (main flow):
   (title, author, published date) is kept in the graph context. Ciel Reference
   Builder writes the APA reference list from that record, so authors and
   years come from Exa, never from the model.
+- The Exa highlights (the passages the Agent read) are kept too. The builder
+  hands them to the app, which compares a student's draft against them
+  (Cek kutipan & kemiripan).
 
 The year range comes from the app as a tweak on `start_published_date`
 (YYYY-01-01), which Exa applies on its side.
@@ -25,20 +28,31 @@ from lfx_exa.components.exa.exa_search import ExaSearchToolkit
 RETRIEVED_URLS_KEY = "ciel_retrieved_urls"
 RETRIEVED_SOURCES_KEY = "ciel_retrieved_sources"
 
+MAX_HIGHLIGHTS = 3
+MAX_HIGHLIGHT_CHARS = 1500
+
 
 def result_metadata(response):
-    """[{url, title, author, published_date}] of an Exa search response, in result order."""
+    """[{url, title, author, published_date[, highlights]}] of an Exa search response, in result order."""
     sources = []
     for item in getattr(response, "results", None) or []:
         url = getattr(item, "url", None)
         if not url:
             continue
-        sources.append({
+        source = {
             "url": str(url),
             "title": str(getattr(item, "title", None) or "").strip(),
             "author": str(getattr(item, "author", None) or "").strip(),
             "published_date": str(getattr(item, "published_date", None) or "").strip(),
-        })
+        }
+        highlights = [
+            str(text).strip()[:MAX_HIGHLIGHT_CHARS]
+            for text in getattr(item, "highlights", None) or []
+            if str(text or "").strip()
+        ][:MAX_HIGHLIGHTS]
+        if highlights:
+            source["highlights"] = highlights
+        sources.append(source)
     return sources
 
 

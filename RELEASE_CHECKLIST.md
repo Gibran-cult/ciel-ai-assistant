@@ -45,6 +45,17 @@ Rollback: remove `RESEARCH_FLOW_ID` from the Streamlit secrets (the button disap
 
 Rollback: remove `WRITER_FLOW_ID` from the app secrets; the button disappears.
 
+### Riset Skripsi flow v1.1.0 (source excerpts for Cek kutipan)
+
+The production flow is updated in place, so `RESEARCH_FLOW_ID` stays the same.
+
+1. Merge the app change first and wait for Streamlit Cloud to redeploy. The new app removes the excerpts line; the old app would show it.
+2. Update the local test flow "Ciel Riset Skripsi (test)" with `flow/riset_skripsi/v1.1.0` and run one topic. The answer must end with `<!-- ciel-excerpts:v1 ... -->`, and `draft_check.split_excerpts` must return excerpts for most entries.
+3. Back up the production flow, then `PATCH /api/v1/flows/<RESEARCH_FLOW_ID>` with the snapshot's `data`.
+4. Run one Riset Skripsi through the public app. The map shows no excerpts line, and "Cek kutipan & kemiripan" on it says it compared against the excerpts of N sources.
+
+Rollback: restore the backup with the same `PATCH`. Cek kutipan keeps working on the summary text only.
+
 Sub-flows (Math Tutor Agent, Verified Data Analyst, Knowledge Retriever, Web Research Assistant) are not in this repository. Back them up the same way before changing them, record the change in `CHANGELOG.md`, and verify through ngrok.
 
 ## Release

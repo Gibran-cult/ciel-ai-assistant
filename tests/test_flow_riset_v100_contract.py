@@ -1,6 +1,7 @@
 """Contract for flow/riset_skripsi/v1.0.0 (Ciel Riset Skripsi, Pro)."""
 
 import ast
+import hashlib
 import json
 import re
 import unittest
@@ -19,6 +20,10 @@ EMBEDDED = {
     SEARCH_ID: "ciel_scholar_search.py",
     GUARD_ID: "ciel_source_guard.py",
     BUILDER_ID: "ciel_reference_builder.py",
+}
+SUPERSEDED = {
+    SEARCH_ID: "c1fc5ea5a6c26b0db3b71589e840c97cecd877dd48c429eb091f0337a5284923",
+    BUILDER_ID: "a92c41de66e55f7438aa5a6ff5da0b0144c3b66da87bb44e56a9473dbb3a84ce",
 }
 
 
@@ -71,10 +76,12 @@ class RisetFlowContractTest(unittest.TestCase):
     def test_embedded_component_code_matches_the_component_files(self):
         for node_id, filename in EMBEDDED.items():
             with self.subTest(node=node_id):
-                self.assertEqual(
-                    self.template(node_id)["code"]["value"],
-                    (COMPONENTS / filename).read_text(encoding="utf-8"),
-                )
+                code = self.template(node_id)["code"]["value"]
+                if node_id in SUPERSEDED:
+                    # Changed in v1.1.0 (excerpts); this snapshot keeps the code it shipped with.
+                    self.assertEqual(hashlib.sha256(code.encode("utf-8")).hexdigest(), SUPERSEDED[node_id])
+                else:
+                    self.assertEqual(code, (COMPONENTS / filename).read_text(encoding="utf-8"))
 
     def test_search_settings(self):
         search = self.template(SEARCH_ID)

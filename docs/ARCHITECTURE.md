@@ -301,6 +301,8 @@ Chat Input -> Agent (DeepSeek, thinking off) -> Ciel Source Guard -> Ciel Refere
   - Entries without metadata are dropped, numbers are compacted to 1..n, and the `[n]` markers in the text follow.
   - A note asks the student to check names and years in the original source.
 
+Since v1.1.0, Ciel Scholar Search also records each result's Exa highlights, and Ciel Reference Builder ends the answer with one line `<!-- ciel-excerpts:v1 BASE64 -->` holding the highlights of the listed sources (`[{n, highlights}]`). The app removes that line (`draft_check.split_excerpts`) and stores the excerpts on the source map message for Cek kutipan & kemiripan.
+
 The app shows the result as one chat message with an "Unduh DOCX" button (`riset_export.py`). Follow-up questions in that chat go to the main flow with the source map as context. Time is bounded by the app's 420 s timeout for this flow.
 
 
@@ -316,6 +318,16 @@ Chat Input -> DeepSeek (system prompt, no tools) -> Chat Output
 - The prompt asks for Bab I–III as points (25 words at most) and guiding questions, never ready-to-copy paragraphs. It may cite only `[n]` from the map, with no new sources, and may copy author names and years only from the map's list.
 - After the reply, `writing.finish_kerangka` drops any `[n]` the map doesn't have and any reference list the model wrote, then appends the map's Daftar Pustaka.
 - No web search runs, so a run takes about 15 s. The same flow is meant to take further modes (Review draf) later.
+
+
+### Cek kutipan & kemiripan (Ciel Pro, `draft_check.py`)
+
+A third button under a source map. The student pastes a draft or uploads a `.docx`/`.txt` file. There is no Langflow call and no model: the check runs in the app and is deterministic.
+
+- **Citations.** Every `[n]`, "(Nama, 2024)" and "Nama dkk. (2024)" is matched against the map's Daftar Pustaka by author name tokens (accents and case ignored) and year. Results are "cocok", "nama cocok, tahun beda", "tidak ada di peta sumber", or "nomor tidak ada". Map sources never cited are listed too. The draft's own reference list is ignored.
+- **Similarity.** Each sentence of 10 words or more is compared, as 5-word shingles, with each source's stored Exa excerpts and with the map's own summary text. A sentence is flagged at 40% shared shingles. Citations are left out of the comparison, and sentences that are mostly in quotation marks count as direct quotes.
+- The report says what it compared against, and that it is not Turnitin: only the map's sources are checked, and translations are not detected.
+- The draft is kept on the user message only until the check succeeds (for "Coba lagi"), so it is not stored in chat history. Maps made before Riset flow v1.1.0 have no excerpts and are compared with the summary text only.
 
 
 ## Model Architecture

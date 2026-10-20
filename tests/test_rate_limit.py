@@ -33,6 +33,8 @@ def default_limit(name):
 
 rate_limit_full = load_app_function("rate_limit_full")
 rate_limit_message = load_app_function("rate_limit_message")
+# Pro feature quotas (FEATURE_QUOTAS in app.py) are covered in test_ciel_pro.
+rate_limit_message.__globals__["FEATURE_QUOTAS"] = {}
 
 HOUR, DAY = 3600, 86400
 

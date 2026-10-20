@@ -109,7 +109,8 @@ class ProGateTest(unittest.TestCase):
             (
                 "PRO_STATUS_TTL", "pro_until", "is_pro", "MONTHS_ID", "format_date_id",
                 "rate_limits_for_request", "rate_limit_message", "pro_refusal", "riset_refusal", "RISET_KIND",
-                "kerangka_refusal", "KERANGKA_KIND", "pro_status_html",
+                "kerangka_refusal", "KERANGKA_KIND", "pro_status_html", "FEATURE_QUOTAS",
+                "cek_refusal", "CEK_KIND",
             ),
             st=self.st,
             CHAT_STORE=self.store,
@@ -120,6 +121,7 @@ class ProGateTest(unittest.TestCase):
             CielError=type("CielError", (str,), {}),
             RISET_ENABLED=True,
             WRITER_ENABLED=True,
+            CHECK_ENABLED=True,
             HOUR=3600,
             DAY=86400,
             RATE_LIMIT_PER_HOUR=10,
@@ -129,6 +131,7 @@ class ProGateTest(unittest.TestCase):
             RATE_LIMIT_PER_DAY_PRO=800,
             RISET_SKRIPSI_PER_DAY=5,
             KERANGKA_PER_DAY=10,
+            CEK_KUTIPAN_PER_DAY=20,
             RATE_LIMIT_ANON_TOTAL_PER_HOUR=60,
             RATE_LIMIT_ANON_TOTAL_PER_DAY=300,
             RATE_LIMIT_TOTAL_PER_DAY=1500,
@@ -177,7 +180,7 @@ class ProGateTest(unittest.TestCase):
 
     def test_riset_has_its_own_daily_quota_on_top_of_the_others(self):
         self.pro_for(3600)
-        limits = self.app["rate_limits_for_request"](riset=True)
+        limits = self.app["rate_limits_for_request"]("riset")
         self.assertEqual(limits[f"riset:{ALICE}:day"], (5, 86400))
         self.assertIn(f"user:{ALICE}:hour", limits)
         self.assertIn("all:total:day", limits)
@@ -226,11 +229,29 @@ class ProGateTest(unittest.TestCase):
 
     def test_kerangka_has_its_own_daily_quota(self):
         self.pro_for(3600)
-        limits = self.app["rate_limits_for_request"](kerangka=True)
+        limits = self.app["rate_limits_for_request"]("kerangka")
         self.assertEqual(limits[f"kerangka:{ALICE}:day"], (10, 86400))
         self.assertNotIn(f"riset:{ALICE}:day", limits)
         self.assertIn("all:total:day", limits)
         self.assertIn("10 kali per hari", self.app["rate_limit_message"](f"kerangka:{ALICE}:day", 10))
+
+    def test_cek_kutipan_is_pro_only_with_its_own_quota(self):
+        refusal = self.app["cek_refusal"]
+        self.store.load_pro_until.return_value = 0.0
+        self.assertIn("Cek kutipan & kemiripan khusus Ciel Pro", refusal())
+        self.assertEqual(self.events, ["pro_required"])
+        self.pro_for(3600)
+        self.assertIsNone(refusal())
+        self.app["CHECK_ENABLED"] = False
+        self.assertIn("Cek kutipan & kemiripan belum aktif", refusal())
+
+        limits = self.app["rate_limits_for_request"]("cek")
+        self.assertEqual(limits[f"cek:{ALICE}:day"], (20, 86400))
+        self.assertNotIn(f"kerangka:{ALICE}:day", limits)
+        self.assertEqual(
+            self.app["rate_limit_message"](f"cek:{ALICE}:day", 20),
+            "Cek kutipan & kemiripan bisa dipakai 20 kali per hari per akun. Kuota hari ini sudah habis, coba lagi besok.",
+        )
 
     def test_account_menu_plan_line(self):
         html = self.app["pro_status_html"]
@@ -285,7 +306,7 @@ class RisetRequestTest(unittest.TestCase):
         self.assertEqual(self.app["riset_report"](None), [])
 
     def test_send_path_gates_before_quota_and_uses_the_research_flow(self):
-        self.assertIn("riset_refusal() or check_rate_limit(riset=True)", SOURCE)
+        self.assertIn('riset_refusal() or check_rate_limit("riset")', SOURCE)
         self.assertIn("flow_id=RESEARCH_FLOW_ID", SOURCE)
         self.assertIn('tweaks={RESEARCH_SEARCH_ID: {"start_published_date": riset_start_date(riset)}}', SOURCE)
         self.assertIn('"riset": user.get("riset")', SOURCE)  # retry stays a riset request
@@ -309,6 +330,8 @@ class RisetAppTest(unittest.TestCase):
         "# Peta Sumber: Literasi digital UMKM\n\nRingkasan [1].\n\n"
         "## Daftar Pustaka\n[1] Sari, D. (2023). Judul. https://example.org/a"
     )
+    # base64 of [{"n": 1, "highlights": ["Cuplikan."]}]
+    EXCERPTS = "\n\n<!-- ciel-excerpts:v1 W3sibiI6IDEsICJoaWdobGlnaHRzIjogWyJDdXBsaWthbi4iXX1d -->"
 
     def database(self, expires_at):
         rows = {"pro_members": [{"expires_at": expires_at}] if expires_at else []}
@@ -317,7 +340,7 @@ class RisetAppTest(unittest.TestCase):
     def run_riset(self, expires_at):
         from streamlit.testing.v1 import AppTest
 
-        answer = {"outputs": [{"outputs": [{"results": {"message": {"data": {"text": self.REPORT}}}}]}]}
+        answer = {"outputs": [{"outputs": [{"results": {"message": {"data": {"text": self.REPORT + self.EXCERPTS}}}}]}]}
         langflow = Mock(return_value=Response(answer))
 
         with patch.dict(os.environ, ENV), patch.object(streamlit, "user", SIGNED_IN), \
@@ -365,6 +388,8 @@ class RisetAppTest(unittest.TestCase):
         (chat,) = at.session_state["chats"].values()
         reply = chat["messages"][-1]
         self.assertEqual((reply["kind"], reply["topic"], reply["error"]), ("riset_skripsi", "Literasi digital UMKM", False))
+        self.assertEqual(reply["content"], self.REPORT)  # no excerpts line on screen or in the DOCX
+        self.assertEqual(reply["excerpts"], {"1": ["Cuplikan."]})
         self.assertEqual(chat["messages"][-2]["riset"]["min_year"], 2021)
         self.assertEqual(at.button(key="riset_open").label, "Riset Skripsi")
 
@@ -372,6 +397,7 @@ class RisetAppTest(unittest.TestCase):
         (save,) = [c for c in self.saves if c.args[0].endswith("/rest/v1/chats")]
         self.assertEqual(save.kwargs["json"]["owner"], SIGNED_IN_OWNER)
         self.assertEqual(save.kwargs["json"]["messages"][-1]["kind"], "riset_skripsi")
+        self.assertEqual(save.kwargs["json"]["messages"][-1]["excerpts"], {"1": ["Cuplikan."]})
 
     def test_feature_is_hidden_without_the_research_flow(self):
         from streamlit.testing.v1 import AppTest
