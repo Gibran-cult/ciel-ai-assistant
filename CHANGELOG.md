@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Ciel Pro: Cek kutipan & kemiripan (Riset flow v1.1.0)
+- New Pro feature: **"Cek kutipan & kemiripan"** under every Riset Skripsi source map. The student pastes a draft or uploads `.docx`/`.txt`, and gets a report in the chat.
+  - **Citations:** each `[n]`, "(Nama, 2024)" and "Nama dkk. (2024)" is matched with the map's Daftar Pustaka by name and year. The report lists matches, name-matched citations with the wrong year, citations not in the map, unknown numbers, and map sources never cited.
+  - **Similarity:** sentences that share 40% or more of their 5-word sequences with a source's Exa excerpts or with Ciel's own summary are listed with a revision hint. Direct quotes in quotation marks are not flagged.
+  - The report and the Pricing FAQ say plainly that this is not Turnitin and that Ciel does not promise to pass plagiarism or AI detectors. Ghost-writing and AI-detector evasion were declined.
+- `draft_check.py`: deterministic, no model and no Langflow call, so the check costs nothing and is instant. Server-side Pro check (`pro_refusal`) and its own quota `CEK_KUTIPAN_PER_DAY` (default 20).
+- The draft stays on the user message only until the check succeeds (for "Coba lagi"), so it is not saved in chat history.
+- Riset Skripsi flow **v1.1.0** (`flow/riset_skripsi/v1.1.0`): Ciel Scholar Search records each result's highlights (at most 3, 1,500 characters each). Ciel Reference Builder appends the highlights of the listed sources as one `<!-- ciel-excerpts:v1 ... -->` line, and drops any such line the Agent wrote. The app removes the line and stores the excerpts with the map. Older maps are compared with the summary text only.
+- Live test (2026-10-20, local test flow "Ciel Riset Skripsi (test)" on v1.1.0):
+  - Topic "Pengaruh media sosial terhadap minat beli mahasiswa": 23.0 s, 17 sources, and all 17 came with excerpts (about 18 KB in total).
+  - On that map, a draft sentence copied from an excerpt was flagged at 100%, and a sentence copied from Ciel's summary at 92%.
+  - In the browser (local app, dark mode), checked on an older map without excerpts:
+    - the third button wraps under the other two;
+    - the dialog with its upload box was readable;
+    - the report caught a wrong year and a citation not in the map.
+- Rate limits now take one `feature` argument (`FEATURE_QUOTAS`) instead of one flag per Pro feature.
+- Tests:
+  - New: `tests/test_draft_check.py`, `tests/test_flow_riset_v110_contract.py`, and `tests/test_cek_kutipan_app.py` (AppTest: Pro gets a report without any Langflow call, the draft is not saved, a free account is refused, a missing map is refused, and the button is hidden without Supabase).
+  - Updated: the v1.0.0 riset contract pins the two superseded components by hash, and the component tests cover highlights and the excerpts line.
+
 ### Ciel Pro: Kerangka Bab 1–3 from the source map (Ciel Penulis flow v1.0.0)
 - New Pro feature: **"Susun kerangka Bab 1–3"** under every Riset Skripsi source map.
   - A dialog asks for the approach (Kuantitatif / Kualitatif / Campuran / Belum tahu) and an optional research object.

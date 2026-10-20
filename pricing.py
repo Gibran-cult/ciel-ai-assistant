@@ -48,6 +48,7 @@ PLANS = (
             "Semua di paket Gratis",
             "Riset Skripsi: peta sumber per tema, celah riset, dan daftar pustaka APA 7",
             "Kerangka Bab 1–3 dari peta sumber, dengan pertanyaan pemandu",
+            "Cek kutipan & kemiripan draf terhadap peta sumber",
             "Unduh hasil Riset Skripsi sebagai DOCX",
             "Batas pesan per jam lebih tinggi",
         ),
@@ -126,6 +127,15 @@ def faq_items(memory_enabled, pro_for_sale=False):
             "ditulis bebas oleh AI. Kerangka Bab 1–3 juga hanya berisi poin dan "
             "pertanyaan pemandu dari peta sumber itu, bukan paragraf. Kamu tetap "
             "membaca sumbernya dan menulis skripsimu sendiri.",
+        ),
+        (
+            "Apakah Cek kutipan & kemiripan sama dengan Turnitin?",
+            "Tidak. Ciel mencocokkan sitasi di drafmu dengan daftar pustaka peta "
+            "sumber, lalu menandai kalimat yang terlalu mirip dengan cuplikan sumber "
+            "yang dibaca Ciel saat riset. Pembandingnya hanya sumber di peta itu, "
+            "bukan seluruh internet, jadi Ciel tidak menjanjikan lolos Turnitin atau "
+            "detektor AI. Cara yang aman tetap sama: tulis dengan kata-katamu sendiri "
+            "dan kutip sumbernya.",
         ),
         ("Apa bedanya riwayat chat dan long-term memory?", memory_answer),
         (

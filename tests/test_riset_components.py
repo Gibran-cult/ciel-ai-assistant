@@ -3,6 +3,7 @@
 import types
 import unittest
 
+from draft_check import split_excerpts
 from tests.test_source_guard import GUARD_SOURCE, COMPONENTS, install_stubs, load
 
 SCHOLAR_SOURCE = (COMPONENTS / "ciel_scholar_search.py").read_text(encoding="utf-8")
@@ -18,8 +19,9 @@ def load_component(source, name):
 
 
 class Result:
-    def __init__(self, url, title="", author=None, published_date=None):
+    def __init__(self, url, title="", author=None, published_date=None, highlights=None):
         self.url, self.title, self.author, self.published_date = url, title, author, published_date
+        self.highlights = highlights
 
 
 class Response:
@@ -76,6 +78,15 @@ class ScholarSearchTest(unittest.TestCase):
             {"url": "https://a.example/x", "title": "Judul A", "author": "Ani", "published_date": "2024-01-02"},
             {"url": "https://b.example/y", "title": "", "author": "", "published_date": ""},
         ])
+
+    def test_highlights_are_recorded_trimmed_and_capped(self):
+        namespace = load_component(SCHOLAR_SOURCE, "ciel_scholar_search")
+        response = Response(Result("https://a.example/x", highlights=[" satu ", "", "dua", "tiga", "empat", "x" * 2000]))
+        component = namespace["CielScholarSearch"](fake_search=lambda query: response)
+        [search] = component.build_toolkit()
+        search.func(query="q")
+        [source] = component.ctx[namespace["RETRIEVED_SOURCES_KEY"]]
+        self.assertEqual(source["highlights"], ["satu", "dua", "tiga"])
 
     def test_keys_match_the_guard_and_the_builder(self):
         scholar = load_component(SCHOLAR_SOURCE, "ciel_scholar_search")
@@ -152,6 +163,21 @@ class ReferenceBuilderTest(unittest.TestCase):
         self.assertEqual(count, 0)
         self.assertIn("Tidak ada sumber hasil pencarian yang bisa dicantumkan.", text)
         self.assertIn("Temuan.", text)
+
+    def test_highlights_of_listed_sources_reach_the_app(self):
+        sources = [dict(SOURCES[0], highlights=["Cuplikan satu."]), SOURCES[1], dict(SOURCES[2], highlights=["Cuplikan tiga."])]
+        # A marker written by the Agent (e.g. copied from a web page) is dropped.
+        notes = NOTES + "\n<!-- ciel-excerpts:v1 ZmFrZQ== -->"
+        text, count = self.build(notes, sources)
+        self.assertEqual(count, 3)
+        self.assertEqual(text.count("ciel-excerpts"), 1)
+        shown, excerpts = split_excerpts(text)
+        self.assertEqual(excerpts, {"1": ["Cuplikan satu."], "3": ["Cuplikan tiga."]})
+        self.assertNotIn("ciel-excerpts", shown)
+        self.assertTrue(shown.endswith("(1 sumber dihapus karena tidak ada di hasil pencarian.)"))
+
+    def test_no_highlights_means_no_excerpts_line(self):
+        self.assertNotIn("ciel-excerpts", self.build(NOTES, SOURCES)[0])
 
     def test_component_edits_text_blocks_in_place(self):
         uninstall = install_stubs()

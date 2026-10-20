@@ -22,6 +22,7 @@ from payments import create_snap_transaction, finish_url, new_order_id, order_me
 from pricing import PLANS, render_pricing, safe_contact_url
 from riset_export import report_docx, report_filename
 from writing import APPROACHES, KERANGKA_FOOTNOTE, MAX_OBJECT_CHARS, finish_kerangka, kerangka_payload
+from draft_check import MAX_DRAFT_CHARS, MIN_DRAFT_WORDS, check_report, clean_draft, draft_from_file, split_excerpts, word_count
 from privacy import render_privacy
 
 # ============================================================
@@ -833,10 +834,12 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 [data-testid="stSidebar"] [class*="st-key-chatrow_"] [data-testid="stPopoverButton"]:hover { color: var(--c-text); background: var(--c-raised); }
 /* The ⋯ icon already says "menu"; Streamlit's open/close chevron is noise here. */
 [class*="st-key-chatrow_"] [data-testid="stPopoverButton"] > div > div:last-child:not(:first-child) { display: none; }
-[data-testid="stSidebar"] [data-testid="stFileUploader"] section {
+/* Project files (sidebar) and the draft upload in Cek kutipan (dialog). */
+:is([data-testid="stSidebar"], [data-testid="stDialog"]) [data-testid="stFileUploader"] section {
     background: var(--c-bg);
     border: 1px dashed var(--c-control);
     border-radius: var(--r-md);
+    color: var(--c-faint);
 }
 .ciel-projfile {
     display: flex;
@@ -1159,6 +1162,7 @@ RATE_LIMIT_PER_HOUR_PRO = get_int_config("RATE_LIMIT_PER_HOUR_PRO", 150)
 RATE_LIMIT_PER_DAY_PRO = get_int_config("RATE_LIMIT_PER_DAY_PRO", 800)
 RISET_SKRIPSI_PER_DAY = get_int_config("RISET_SKRIPSI_PER_DAY", 5)
 KERANGKA_PER_DAY = get_int_config("KERANGKA_PER_DAY", 10)
+CEK_KUTIPAN_PER_DAY = get_int_config("CEK_KUTIPAN_PER_DAY", 20)
 
 AUTH_ENABLED = auth_configured()
 
@@ -1205,6 +1209,10 @@ RESEARCH_TIMEOUT = 420
 WRITER_FLOW_ID = get_config("WRITER_FLOW_ID")
 WRITER_ENABLED = bool(WRITER_FLOW_ID and CHAT_STORE)
 WRITER_TIMEOUT = 240
+
+# Cek kutipan & kemiripan (Pro) berjalan di app tanpa flow (draft_check.py);
+# yang dibutuhkan hanya Supabase untuk status Pro.
+CHECK_ENABLED = bool(CHAT_STORE)
 
 # Opsional: pembelian Pro lewat Midtrans Snap (payments.py, docs/PRO.md).
 # Server key hanya dipakai di server; MIDTRANS_PRODUCTION=true memakai akun
@@ -1609,10 +1617,18 @@ def rate_limit_state():
     return {"lock": threading.Lock(), "hits": {}}
 
 
-def rate_limits_for_request(riset=False, kerangka=False):
+# Kuota harian fitur Pro per akun: {fitur: (batas, kalimat untuk pesan saat habis)}.
+FEATURE_QUOTAS = {
+    "riset": (RISET_SKRIPSI_PER_DAY, "Riset Skripsi bisa dipakai {limit} kali"),
+    "kerangka": (KERANGKA_PER_DAY, "Kerangka Bab 1–3 bisa disusun {limit} kali"),
+    "cek": (CEK_KUTIPAN_PER_DAY, "Cek kutipan & kemiripan bisa dipakai {limit} kali"),
+}
+
+
+def rate_limits_for_request(feature=None):
     """
     {key: (batas, jendela)} untuk pengirim pesan ini, plus batas harian semua
-    pengguna. Riset Skripsi dan Kerangka Bab 1-3 juga punya kuota harian sendiri.
+    pengguna. Fitur Pro (FEATURE_QUOTAS) juga punya kuota harian sendiri.
     """
 
     if logged_in():
@@ -1622,11 +1638,8 @@ def rate_limits_for_request(riset=False, kerangka=False):
             f"user:{user_key()}:day": (RATE_LIMIT_PER_DAY_PRO if pro else RATE_LIMIT_PER_DAY_LOGIN, DAY),
         }
 
-        if riset:
-            limits[f"riset:{user_key()}:day"] = (RISET_SKRIPSI_PER_DAY, DAY)
-
-        if kerangka:
-            limits[f"kerangka:{user_key()}:day"] = (KERANGKA_PER_DAY, DAY)
+        if feature in FEATURE_QUOTAS:
+            limits[f"{feature}:{user_key()}:day"] = (FEATURE_QUOTAS[feature][0], DAY)
     else:
         limits = {
             f"visitor:{user_key()}:hour": (RATE_LIMIT_PER_HOUR, HOUR),
@@ -1644,11 +1657,13 @@ def rate_limit_message(key, limit):
 
     period = "jam" if key.endswith(":hour") else "hari"
 
-    if key.startswith("riset:"):
-        return f"Riset Skripsi bisa dipakai {limit} kali per hari per akun. Kuota hari ini sudah habis, coba lagi besok."
+    feature = key.split(":")[0]
 
-    if key.startswith("kerangka:"):
-        return f"Kerangka Bab 1–3 bisa disusun {limit} kali per hari per akun. Kuota hari ini sudah habis, coba lagi besok."
+    if feature in FEATURE_QUOTAS:
+        return (
+            FEATURE_QUOTAS[feature][1].format(limit=limit)
+            + " per hari per akun. Kuota hari ini sudah habis, coba lagi besok."
+        )
 
     if key.startswith("user:"):
         return f"Ciel menerima hingga {limit} pesan per {period} per akun. Silakan coba lagi nanti."
@@ -1665,10 +1680,10 @@ def rate_limit_message(key, limit):
     return "Ciel sedang menerima terlalu banyak pesan hari ini. Silakan coba lagi besok."
 
 
-def check_rate_limit(riset=False, kerangka=False):
+def check_rate_limit(feature=None):
     """Kembalikan None jika boleh lanjut, atau CielError yang menyebut batas yang tercapai."""
 
-    limits = rate_limits_for_request(riset, kerangka)
+    limits = rate_limits_for_request(feature)
     state = rate_limit_state()
 
     with state["lock"]:
@@ -3312,27 +3327,33 @@ def kerangka_refusal():
     return pro_refusal(WRITER_ENABLED, "Kerangka Bab 1–3", KERANGKA_KIND)
 
 
-def kerangka_source(chat, kerangka):
-    """Isi peta sumber yang dipilih (pesan Riset Skripsi di chat ini), atau None."""
+def map_message(chat, map_index):
+    """Pesan peta sumber (hasil Riset Skripsi) di posisi map_index chat ini, atau None."""
 
     messages = (chat or {}).get("messages", [])
-    index = kerangka.get("map_index")
 
-    if isinstance(index, int) and 0 <= index < len(messages):
-        message = messages[index]
+    if isinstance(map_index, int) and 0 <= map_index < len(messages):
+        message = messages[map_index]
         if message.get("kind") == RISET_KIND and not message.get("error"):
-            return str(message["content"])
+            return message
 
     return None
 
 
-def kerangka_missing_map(chat, kerangka):
+def kerangka_source(chat, kerangka):
+    """Isi peta sumber yang dipilih untuk kerangka, atau None."""
+
+    message = map_message(chat, kerangka.get("map_index"))
+    return str(message["content"]) if message else None
+
+
+def missing_map(chat, request, button):
     """CielError jika peta sumber yang dipilih tidak ada lagi di chat ini (mis. pesan dihapus)."""
 
-    if kerangka_source(chat, kerangka) is None:
+    if map_message(chat, request.get("map_index")) is None:
         return CielError(
             "Peta sumber tidak ditemukan.\n\n"
-            "Buka chat Riset Skripsi-nya, lalu klik \"Susun kerangka Bab 1–3\" di bawah peta sumber."
+            f"Buka chat Riset Skripsi-nya, lalu klik \"{button}\" di bawah peta sumber."
         )
 
     return None
@@ -3409,6 +3430,89 @@ def kerangka_dialog(topic, map_index):
         st.rerun()
 
 
+# ------------------------------------------------------------
+# CEK KUTIPAN & KEMIRIPAN (PRO)
+# ------------------------------------------------------------
+
+CEK_KIND = "cek_kutipan"
+DRAFT_FILE_TYPES = ["docx", "txt"]
+
+
+def cek_refusal():
+    return pro_refusal(CHECK_ENABLED, "Cek kutipan & kemiripan", CEK_KIND)
+
+
+def make_cek_pending(topic, draft, map_index):
+    # Draf ikut di permintaan supaya Coba lagi bisa memeriksa ulang. Setelah
+    # pemeriksaan berhasil, draf dibuang dari pesan pengguna (PROCESS NEW MESSAGE).
+    return {
+        "text": f"Cek kutipan & kemiripan: {topic} ({word_count(draft)} kata)",
+        "files": [],
+        "images": [],
+        "payload": "",
+        "cek": {"topic": topic, "draft": draft, "map_index": map_index},
+    }
+
+
+def open_cek_dialog(topic, map_index):
+    st.session_state.open_cek = {"topic": topic, "map_index": map_index}
+
+
+@st.dialog("Cek kutipan & kemiripan")
+def cek_dialog(topic, map_index):
+
+    st.markdown(
+        '<p class="ciel-riset-lead">Ciel mencocokkan setiap sitasi di drafmu dengan '
+        "<b>peta sumber</b> ini dan menandai kalimat yang terlalu mirip dengan sumbernya, "
+        "jadi kamu tahu bagian mana yang perlu diparafrasekan atau dikutip dengan benar.</p>",
+        unsafe_allow_html=True,
+    )
+
+    if not is_pro():
+
+        st.markdown(
+            '<p class="ciel-riset-lock">Fitur ini khusus <b>Ciel Pro</b>.</p>',
+            unsafe_allow_html=True,
+        )
+
+        if st.button("Lihat paket Pro", type="primary", icon=":material/sell:"):
+            show_pricing()
+            st.rerun()
+
+        return
+
+    pasted = st.text_area(
+        "Draf",
+        height=220,
+        max_chars=MAX_DRAFT_CHARS,
+        placeholder="Tempel Bab 1, 2, atau 3 di sini.",
+    )
+
+    uploaded = st.file_uploader("Atau unggah file .docx / .txt (dipakai jika ada)", type=DRAFT_FILE_TYPES)
+
+    st.caption(f"Selesai dalam hitungan detik. Kuota {CEK_KUTIPAN_PER_DAY} cek per hari.")
+
+    if st.button("Cek draf", type="primary", icon=":material/fact_check:"):
+
+        draft = pasted
+
+        if uploaded is not None:
+            try:
+                draft = draft_from_file(uploaded.name, uploaded.getvalue())
+            except ValueError:
+                st.error(f"{uploaded.name} tidak bisa dibaca. Simpan ulang sebagai .docx, atau tempel teksnya.")
+                return
+
+        draft = clean_draft(draft)
+
+        if word_count(draft) < MIN_DRAFT_WORDS:
+            st.error(f"Drafnya terlalu pendek. Tempel minimal {MIN_DRAFT_WORDS} kata.")
+            return
+
+        st.session_state.pending = make_cek_pending(topic, draft, map_index)
+        st.rerun()
+
+
 def retry_last():
     messages = current_messages()
 
@@ -3427,6 +3531,7 @@ def retry_last():
             "payload": user.get("payload", user["content"]),
             "riset": user.get("riset"),
             "kerangka": user.get("kerangka"),
+            "cek": user.get("cek"),
         }
 
         del messages[-2:]
@@ -4000,6 +4105,12 @@ kerangka_target = st.session_state.pop("open_kerangka", None)
 if kerangka_target and WRITER_ENABLED:
     kerangka_dialog(kerangka_target["topic"], kerangka_target["map_index"])
 
+# Dialog Cek kutipan & kemiripan (tombol di bawah peta sumber).
+cek_target = st.session_state.pop("open_cek", None)
+
+if cek_target and CHECK_ENABLED:
+    cek_dialog(cek_target["topic"], cek_target["map_index"])
+
 
 # ============================================================
 # PRICING PAGE
@@ -4171,6 +4282,15 @@ for index, message in enumerate(messages):
                             args=(topic, index),
                         )
 
+                    if CHECK_ENABLED:
+                        st.button(
+                            "Cek kutipan & kemiripan",
+                            key=f"rscheck_{st.session_state.active_chat}_{index}",
+                            icon=":material/fact_check:",
+                            on_click=open_cek_dialog,
+                            args=(topic, index),
+                        )
+
             elif message.get("kind") == KERANGKA_KIND:
 
                 topic = message.get("topic") or "Kerangka Bab 1–3"
@@ -4229,12 +4349,16 @@ if pending_request:
 
     riset = pending_request.get("riset")
     kerangka = pending_request.get("kerangka")
+    cek = pending_request.get("cek")
 
     if riset:
         user_message["riset"] = riset
 
     if kerangka:
         user_message["kerangka"] = kerangka
+
+    if cek:
+        user_message["cek"] = cek
 
     chat["messages"].append(user_message)
     chat["updated"] = time.time()
@@ -4272,14 +4396,23 @@ if pending_request:
         # Riset Skripsi: status Pro dicek di server sebelum kuota dipakai, jadi
         # permintaan buatan sendiri tanpa Pro tidak pernah sampai ke flow riset.
         answer = (
-            riset_refusal() or check_rate_limit(riset=True)
+            riset_refusal() or check_rate_limit("riset")
             if riset
-            else kerangka_refusal() or kerangka_missing_map(chat, kerangka) or check_rate_limit(kerangka=True)
+            else kerangka_refusal() or missing_map(chat, kerangka, "Susun kerangka Bab 1–3") or check_rate_limit("kerangka")
             if kerangka
+            else cek_refusal() or missing_map(chat, cek, "Cek kutipan & kemiripan") or check_rate_limit("cek")
+            if cek
             else check_rate_limit()
         )
+        excerpts = {}
 
-        if answer is None and kerangka:
+        if answer is None and cek:
+
+            # Tanpa Langflow dan tanpa model: pemeriksaan deterministik (draft_check.py).
+            source = map_message(chat, cek["map_index"])
+            answer = check_report(cek["draft"], source["content"], source.get("excerpts") or {}, cek["topic"])
+
+        elif answer is None and kerangka:
 
             source_map = kerangka_source(chat, kerangka)
             answer = ask_langflow(
@@ -4303,6 +4436,10 @@ if pending_request:
                 flow_id=RESEARCH_FLOW_ID,
                 timeout=RESEARCH_TIMEOUT,
             )
+
+            # Cuplikan sumber dari flow (untuk Cek kutipan) tidak ikut ditampilkan.
+            if not is_error_answer(answer):
+                answer, excerpts = split_excerpts(answer)
 
         elif answer is None and pending_request["images"]:
 
@@ -4339,6 +4476,10 @@ if pending_request:
             chat["project_context"] = pending_request["project_context"]
 
         user_message.pop("payload", None)
+
+        # Draf tidak disimpan di riwayat; laporan cek sudah memuat bagian yang perlu direvisi.
+        if cek:
+            user_message["cek"] = {key: value for key, value in cek.items() if key != "draft"}
         user_message["images"] = [
             make_thumbnail(image) for image in user_message["images"]
         ]
@@ -4354,9 +4495,16 @@ if pending_request:
         reply["kind"] = RISET_KIND
         reply["topic"] = riset["topic"]
 
+        if excerpts:
+            reply["excerpts"] = excerpts
+
     if kerangka and not failed:
         reply["kind"] = KERANGKA_KIND
         reply["topic"] = kerangka["topic"]
+
+    if cek and not failed:
+        reply["kind"] = CEK_KIND
+        reply["topic"] = cek["topic"]
 
     chat["messages"].append(reply)
     chat["updated"] = time.time()
