@@ -36,6 +36,15 @@ This is a new flow with its own ID, not an update of the main flow. The main flo
 
 Rollback: remove `RESEARCH_FLOW_ID` from the Streamlit secrets (the button disappears), then from `.env`, and re-render the policy.
 
+### First deployment of the Ciel Penulis flow (Kerangka Bab 1–3)
+
+1. Import `flow/penulis/v1.0.0/Ciel_Penulis.json` into Langflow as "Ciel Penulis" (it uses the `DEEPSEEK_API_KEY` global variable). Note the flow ID.
+2. Try one `[KERANGKA]` run on a real source map: check the time, that no `[n]` falls outside the map, and that the points are short.
+3. Add `WRITER_FLOW_ID` to the host `.env`, re-render the ngrok policy, stop ngrok (the watchdog restarts it), and run `tools/check_gateway.py`.
+4. Add `WRITER_FLOW_ID` to the Streamlit Cloud secrets, above `[auth]`.
+
+Rollback: remove `WRITER_FLOW_ID` from the app secrets; the button disappears.
+
 Sub-flows (Math Tutor Agent, Verified Data Analyst, Knowledge Retriever, Web Research Assistant) are not in this repository. Back them up the same way before changing them, record the change in `CHANGELOG.md`, and verify through ngrok.
 
 ## Release

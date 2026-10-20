@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Ciel Pro: Kerangka Bab 1–3 from the source map (Ciel Penulis flow v1.0.0)
+- New Pro feature: **"Susun kerangka Bab 1–3"** under every Riset Skripsi source map.
+  - A dialog asks for the approach (Kuantitatif / Kualitatif / Campuran / Belum tahu) and an optional research object.
+  - The result is a Bab I–III outline as **points and guiding questions, not paragraphs**: background arguments with `[n]`, a proposed problem statement, objectives, theme subsections, prior studies, the conceptual framework, hypotheses (quantitative only), and method decisions.
+  - It has its own "Unduh DOCX".
+  - Ciel still does not write the thesis; the Pricing FAQ says so.
+- New Langflow flow `flow/penulis/v1.0.0/Ciel_Penulis.json` (`WRITER_FLOW_ID`): Chat Input → DeepSeek (thinking off, temperature 0.7, max 6,000 tokens) → Chat Output.
+  - No search or tools: the source map is the only source.
+  - Mode marker `[KERANGKA]`, so Review draf can use the same flow later.
+- `writing.py`: the request carries the whole source map.
+  - Any `[n]` not in the map's Daftar Pustaka is removed, and any reference list the model writes itself is dropped.
+  - The map's Daftar Pustaka is appended, so the outline and its DOCX stand alone.
+- Server-side Pro check shared with Riset Skripsi (`pro_refusal`). Own quota `KERANGKA_PER_DAY` (default 10). A missing source map is refused before any call.
+- ngrok policy: `WRITER_FLOW_ID` is optional like `RESEARCH_FLOW_ID`, with the same 20-a-minute limit; empty means no change.
+- Live test (2026-10-20, local Langflow):
+  - IndoBERT map, quantitative: 15.7 s.
+  - Stunting map, qualitative: 13.1 s. Headings followed the approach ("Subjek dan Informan", "Fokus Penelitian", "Hipotesis: Tidak dipakai").
+  - Both: no `[n]` outside the map, no point over 25 words, and the author names and years in "Penelitian Terdahulu" match the reference list.
+  - Through the app in the browser (TikTok map, quantitative): the button, the dialog, the outline with all 18 references, and the DOCX button all worked in dark mode.
+- Tests:
+  - New: `tests/test_writing.py`, `tests/test_flow_penulis_v100_contract.py`, and `tests/test_kerangka_app.py` (AppTest: Pro gets the outline from the writer flow with unknown citations removed, a free account is refused, a missing map is refused, and the button is hidden without the flow).
+  - Extended: gateway policy and Pro gate tests.
+
 ### Ciel Pro in production (2026-10-19)
 - **Riset Skripsi** is live on the public app.
   - The production Langflow flow is `c6ac7acc-5af8-43a9-a589-e91a27da88f8`. `RESEARCH_FLOW_ID` was added to the host `.env` and to the Streamlit Cloud secrets.

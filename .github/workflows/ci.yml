@@ -63,6 +63,7 @@ jobs:
           python -m json.tool flow/v1.11.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
           python -m json.tool flow/subflows/Web_Research_Assistant.json > /dev/null
           python -m json.tool flow/riset_skripsi/v1.0.0/Ciel_Riset_Skripsi.json > /dev/null
+          python -m json.tool flow/penulis/v1.0.0/Ciel_Penulis.json > /dev/null
           python -m json.tool flow/memory_admin/Ciel_Memory_Admin.json > /dev/null
 
       - name: Run offline test suite
@@ -87,6 +88,9 @@ jobs:
             tests.test_flow_v1120_contract \
             tests.test_flow_riset_v100_contract \
             tests.test_riset_components \
+            tests.test_flow_penulis_v100_contract \
+            tests.test_writing \
+            tests.test_kerangka_app \
             tests.test_gateway_policy \
             tests.test_app_security \
             tests.test_source_guard \

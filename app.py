@@ -21,6 +21,7 @@ from login import render_login
 from payments import create_snap_transaction, finish_url, new_order_id, order_message, snap_payload
 from pricing import PLANS, render_pricing, safe_contact_url
 from riset_export import report_docx, report_filename
+from writing import APPROACHES, KERANGKA_FOOTNOTE, MAX_OBJECT_CHARS, finish_kerangka, kerangka_payload
 from privacy import render_privacy
 
 # ============================================================
@@ -1157,6 +1158,7 @@ RATE_LIMIT_TOTAL_PER_DAY = get_int_config("RATE_LIMIT_TOTAL_PER_DAY", 1500)
 RATE_LIMIT_PER_HOUR_PRO = get_int_config("RATE_LIMIT_PER_HOUR_PRO", 150)
 RATE_LIMIT_PER_DAY_PRO = get_int_config("RATE_LIMIT_PER_DAY_PRO", 800)
 RISET_SKRIPSI_PER_DAY = get_int_config("RISET_SKRIPSI_PER_DAY", 5)
+KERANGKA_PER_DAY = get_int_config("KERANGKA_PER_DAY", 10)
 
 AUTH_ENABLED = auth_configured()
 
@@ -1197,6 +1199,12 @@ RESEARCH_SEARCH_ID = get_config("RESEARCH_SEARCH_ID") or "CielScholarSearch-r1s3
 RISET_ENABLED = bool(RESEARCH_FLOW_ID and CHAT_STORE)
 # Beberapa putaran pencarian plus laporan panjang; diukur ulang saat uji live.
 RESEARCH_TIMEOUT = 420
+
+# Opsional: flow "Ciel Penulis" (Pro): Kerangka Bab 1-3 dari peta sumber,
+# tanpa pencarian web (writing.py). Uji live 2026-10-19: 13-16 detik.
+WRITER_FLOW_ID = get_config("WRITER_FLOW_ID")
+WRITER_ENABLED = bool(WRITER_FLOW_ID and CHAT_STORE)
+WRITER_TIMEOUT = 240
 
 # Opsional: pembelian Pro lewat Midtrans Snap (payments.py, docs/PRO.md).
 # Server key hanya dipakai di server; MIDTRANS_PRODUCTION=true memakai akun
@@ -1601,10 +1609,10 @@ def rate_limit_state():
     return {"lock": threading.Lock(), "hits": {}}
 
 
-def rate_limits_for_request(riset=False):
+def rate_limits_for_request(riset=False, kerangka=False):
     """
     {key: (batas, jendela)} untuk pengirim pesan ini, plus batas harian semua
-    pengguna. Riset Skripsi juga punya kuota hariannya sendiri.
+    pengguna. Riset Skripsi dan Kerangka Bab 1-3 juga punya kuota harian sendiri.
     """
 
     if logged_in():
@@ -1616,6 +1624,9 @@ def rate_limits_for_request(riset=False):
 
         if riset:
             limits[f"riset:{user_key()}:day"] = (RISET_SKRIPSI_PER_DAY, DAY)
+
+        if kerangka:
+            limits[f"kerangka:{user_key()}:day"] = (KERANGKA_PER_DAY, DAY)
     else:
         limits = {
             f"visitor:{user_key()}:hour": (RATE_LIMIT_PER_HOUR, HOUR),
@@ -1636,6 +1647,9 @@ def rate_limit_message(key, limit):
     if key.startswith("riset:"):
         return f"Riset Skripsi bisa dipakai {limit} kali per hari per akun. Kuota hari ini sudah habis, coba lagi besok."
 
+    if key.startswith("kerangka:"):
+        return f"Kerangka Bab 1–3 bisa disusun {limit} kali per hari per akun. Kuota hari ini sudah habis, coba lagi besok."
+
     if key.startswith("user:"):
         return f"Ciel menerima hingga {limit} pesan per {period} per akun. Silakan coba lagi nanti."
 
@@ -1651,10 +1665,10 @@ def rate_limit_message(key, limit):
     return "Ciel sedang menerima terlalu banyak pesan hari ini. Silakan coba lagi besok."
 
 
-def check_rate_limit(riset=False):
+def check_rate_limit(riset=False, kerangka=False):
     """Kembalikan None jika boleh lanjut, atau CielError yang menyebut batas yang tercapai."""
 
-    limits = rate_limits_for_request(riset)
+    limits = rate_limits_for_request(riset, kerangka)
     state = rate_limit_state()
 
     with state["lock"]:
@@ -2383,6 +2397,13 @@ THINKING_HTML = (
     '<div class="ciel-skel" aria-hidden="true"><b></b><b></b><b></b></div>'
     '<p class="ciel-thinking-note">Permintaan riset dapat memakan waktu hingga dua menit.</p>'
     "</div>"
+)
+
+KERANGKA_THINKING_HTML = THINKING_HTML.replace(
+    "Ciel sedang mencari dan memeriksa", "Ciel sedang menyusun kerangka dari peta sumber"
+).replace(
+    "Permintaan riset dapat memakan waktu hingga dua menit.",
+    "Biasanya sekitar setengah menit.",
 )
 
 RISET_THINKING_HTML = THINKING_HTML.replace(
@@ -3169,14 +3190,14 @@ def riset_report(chat):
     return [{"name": "Peta sumber (Riset Skripsi).md", "text": text, "size": len(text.encode("utf-8"))}]
 
 
-def riset_refusal():
-    """None jika akun ini boleh menjalankan Riset Skripsi, atau CielError penjelasannya."""
+def pro_refusal(enabled, feature, kind):
+    """None jika akun ini boleh memakai fitur Pro `feature`, atau CielError penjelasannya."""
 
-    if not RISET_ENABLED:
-        return CielError("Riset Skripsi belum aktif.\n\nFitur ini belum tersedia di deployment ini.")
+    if not enabled:
+        return CielError(f"{feature} belum aktif.\n\nFitur ini belum tersedia di deployment ini.")
 
     if not logged_in():
-        return CielError("Riset Skripsi khusus Ciel Pro.\n\nMasuk dengan akun Google yang sudah Pro, lalu coba lagi.")
+        return CielError(f"{feature} khusus Ciel Pro.\n\nMasuk dengan akun Google yang sudah Pro, lalu coba lagi.")
 
     # Dibaca langsung dari database, bukan dari cache tampilan.
     until = pro_until(refresh=True)
@@ -3189,9 +3210,9 @@ def riset_refusal():
         )
 
     if until <= time.time():
-        security_event("pro_required", feature=RISET_KIND)
+        security_event("pro_required", feature=kind)
         return CielError(
-            "Riset Skripsi khusus Ciel Pro.\n\n"
+            f"{feature} khusus Ciel Pro.\n\n"
             + (
                 f"Masa Pro akunmu berakhir {format_date_id(until)}."
                 if until
@@ -3200,6 +3221,10 @@ def riset_refusal():
         )
 
     return None
+
+
+def riset_refusal():
+    return pro_refusal(RISET_ENABLED, "Riset Skripsi", RISET_KIND)
 
 
 def open_riset_dialog():
@@ -3276,6 +3301,114 @@ def riset_dialog():
         st.rerun()
 
 
+# ------------------------------------------------------------
+# KERANGKA BAB 1-3 (PRO)
+# ------------------------------------------------------------
+
+KERANGKA_KIND = "kerangka_skripsi"
+
+
+def kerangka_refusal():
+    return pro_refusal(WRITER_ENABLED, "Kerangka Bab 1–3", KERANGKA_KIND)
+
+
+def kerangka_source(chat, kerangka):
+    """Isi peta sumber yang dipilih (pesan Riset Skripsi di chat ini), atau None."""
+
+    messages = (chat or {}).get("messages", [])
+    index = kerangka.get("map_index")
+
+    if isinstance(index, int) and 0 <= index < len(messages):
+        message = messages[index]
+        if message.get("kind") == RISET_KIND and not message.get("error"):
+            return str(message["content"])
+
+    return None
+
+
+def kerangka_missing_map(chat, kerangka):
+    """CielError jika peta sumber yang dipilih tidak ada lagi di chat ini (mis. pesan dihapus)."""
+
+    if kerangka_source(chat, kerangka) is None:
+        return CielError(
+            "Peta sumber tidak ditemukan.\n\n"
+            "Buka chat Riset Skripsi-nya, lalu klik \"Susun kerangka Bab 1–3\" di bawah peta sumber."
+        )
+
+    return None
+
+
+def make_kerangka_pending(topic, approach, research_object, map_index):
+    # Seperti Riset Skripsi, semua input ikut tersimpan di pesan pengguna
+    # supaya Coba lagi bisa menyusun ulang permintaannya.
+    return {
+        "text": f"Kerangka Bab 1–3: {topic}",
+        "files": [],
+        "images": [],
+        "payload": "",
+        "kerangka": {
+            "topic": topic,
+            "approach": approach,
+            "object": research_object,
+            "map_index": map_index,
+        },
+    }
+
+
+def open_kerangka_dialog(topic, map_index):
+    st.session_state.open_kerangka = {"topic": topic, "map_index": map_index}
+
+
+@st.dialog("Kerangka Bab 1–3")
+def kerangka_dialog(topic, map_index):
+
+    st.markdown(
+        '<p class="ciel-riset-lead">Ciel menyusun kerangka <b>Bab 1–3</b> dari peta '
+        "sumber ini: poin argumen yang didukung sumber, usulan rumusan masalah, "
+        "kerangka berpikir, dan keputusan metode, lengkap dengan pertanyaan pemandu. "
+        "Isinya poin, bukan paragraf; kamu yang menulis babnya.</p>",
+        unsafe_allow_html=True,
+    )
+
+    if not is_pro():
+
+        st.markdown(
+            '<p class="ciel-riset-lock">Fitur ini khusus <b>Ciel Pro</b>.</p>',
+            unsafe_allow_html=True,
+        )
+
+        if st.button("Lihat paket Pro", type="primary", icon=":material/sell:"):
+            show_pricing()
+            st.rerun()
+
+        return
+
+    approach = st.segmented_control(
+        "Pendekatan penelitian",
+        APPROACHES,
+        default="Belum tahu",
+    )
+
+    research_object = st.text_input(
+        "Objek atau lokasi penelitian (opsional)",
+        max_chars=MAX_OBJECT_CHARS,
+        placeholder="Contoh: UMKM kuliner di Kota Bandung",
+    )
+
+    st.caption(f"Sekitar setengah menit. Kuota {KERANGKA_PER_DAY} kerangka per hari.")
+
+    if st.button("Susun kerangka", type="primary", icon=":material/account_tree:"):
+
+        research_object = " ".join((research_object or "").split())[:MAX_OBJECT_CHARS]
+        st.session_state.pending = make_kerangka_pending(
+            topic,
+            approach if approach in APPROACHES else "Belum tahu",
+            research_object,
+            map_index,
+        )
+        st.rerun()
+
+
 def retry_last():
     messages = current_messages()
 
@@ -3293,6 +3426,7 @@ def retry_last():
             "images": user.get("images", []),
             "payload": user.get("payload", user["content"]),
             "riset": user.get("riset"),
+            "kerangka": user.get("kerangka"),
         }
 
         del messages[-2:]
@@ -3860,6 +3994,12 @@ with st.container(
 if st.session_state.pop("open_riset", False) and RISET_ENABLED:
     riset_dialog()
 
+# Dialog Kerangka Bab 1-3 (tombol di bawah peta sumber).
+kerangka_target = st.session_state.pop("open_kerangka", None)
+
+if kerangka_target and WRITER_ENABLED:
+    kerangka_dialog(kerangka_target["topic"], kerangka_target["map_index"])
+
 
 # ============================================================
 # PRICING PAGE
@@ -4009,13 +4149,40 @@ for index, message in enumerate(messages):
 
                 topic = message.get("topic") or "Riset Skripsi"
 
-                # DOCX baru dibuat saat tombol diklik (data berupa fungsi).
+                with st.container(horizontal=True, gap="small"):
+
+                    # DOCX baru dibuat saat tombol diklik (data berupa fungsi).
+                    st.download_button(
+                        "Unduh DOCX",
+                        data=lambda content=content, topic=topic: report_docx(content, topic),
+                        file_name=report_filename(topic),
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        key=f"rsdocx_{st.session_state.active_chat}_{index}",
+                        icon=":material/download:",
+                        on_click="ignore",
+                    )
+
+                    if WRITER_ENABLED:
+                        st.button(
+                            "Susun kerangka Bab 1–3",
+                            key=f"rsframe_{st.session_state.active_chat}_{index}",
+                            icon=":material/account_tree:",
+                            on_click=open_kerangka_dialog,
+                            args=(topic, index),
+                        )
+
+            elif message.get("kind") == KERANGKA_KIND:
+
+                topic = message.get("topic") or "Kerangka Bab 1–3"
+
                 st.download_button(
                     "Unduh DOCX",
-                    data=lambda content=content, topic=topic: report_docx(content, topic),
-                    file_name=report_filename(topic),
+                    data=lambda content=content, topic=topic: report_docx(
+                        content, topic, label="Kerangka Bab 1–3", footnote=KERANGKA_FOOTNOTE,
+                    ),
+                    file_name=report_filename(topic, prefix="Kerangka Bab 1-3"),
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key=f"rsdocx_{st.session_state.active_chat}_{index}",
+                    key=f"kfdocx_{st.session_state.active_chat}_{index}",
                     icon=":material/download:",
                     on_click="ignore",
                 )
@@ -4061,9 +4228,13 @@ if pending_request:
     }
 
     riset = pending_request.get("riset")
+    kerangka = pending_request.get("kerangka")
 
     if riset:
         user_message["riset"] = riset
+
+    if kerangka:
+        user_message["kerangka"] = kerangka
 
     chat["messages"].append(user_message)
     chat["updated"] = time.time()
@@ -4081,7 +4252,7 @@ if pending_request:
         working_slot = st.empty()
 
         working_slot.markdown(
-            RISET_THINKING_HTML if riset else THINKING_HTML,
+            RISET_THINKING_HTML if riset else KERANGKA_THINKING_HTML if kerangka else THINKING_HTML,
             unsafe_allow_html=True,
         )
 
@@ -4103,10 +4274,27 @@ if pending_request:
         answer = (
             riset_refusal() or check_rate_limit(riset=True)
             if riset
+            else kerangka_refusal() or kerangka_missing_map(chat, kerangka) or check_rate_limit(kerangka=True)
+            if kerangka
             else check_rate_limit()
         )
 
-        if answer is None and riset:
+        if answer is None and kerangka:
+
+            source_map = kerangka_source(chat, kerangka)
+            answer = ask_langflow(
+                kerangka_payload(source_map, kerangka["topic"], kerangka["approach"], kerangka.get("object", "")),
+                session_id=f"{session_id}-penulis",
+                flow_id=WRITER_FLOW_ID,
+                timeout=WRITER_TIMEOUT,
+            )
+
+            # Nomor [n] di luar Daftar Pustaka peta sumber dibuang di sini,
+            # lalu Daftar Pustaka itu ditempel supaya kerangka berdiri sendiri.
+            if not is_error_answer(answer):
+                answer = finish_kerangka(answer, source_map)
+
+        elif answer is None and riset:
 
             answer = ask_langflow(
                 riset_payload(**riset),
@@ -4165,6 +4353,10 @@ if pending_request:
     if riset and not failed:
         reply["kind"] = RISET_KIND
         reply["topic"] = riset["topic"]
+
+    if kerangka and not failed:
+        reply["kind"] = KERANGKA_KIND
+        reply["topic"] = kerangka["topic"]
 
     chat["messages"].append(reply)
     chat["updated"] = time.time()

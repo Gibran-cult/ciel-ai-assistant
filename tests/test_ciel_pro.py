@@ -108,8 +108,8 @@ class ProGateTest(unittest.TestCase):
         self.app = load_app(
             (
                 "PRO_STATUS_TTL", "pro_until", "is_pro", "MONTHS_ID", "format_date_id",
-                "rate_limits_for_request", "rate_limit_message", "riset_refusal", "RISET_KIND",
-                "pro_status_html",
+                "rate_limits_for_request", "rate_limit_message", "pro_refusal", "riset_refusal", "RISET_KIND",
+                "kerangka_refusal", "KERANGKA_KIND", "pro_status_html",
             ),
             st=self.st,
             CHAT_STORE=self.store,
@@ -119,6 +119,7 @@ class ProGateTest(unittest.TestCase):
             security_event=lambda kind, **fields: self.events.append(kind),
             CielError=type("CielError", (str,), {}),
             RISET_ENABLED=True,
+            WRITER_ENABLED=True,
             HOUR=3600,
             DAY=86400,
             RATE_LIMIT_PER_HOUR=10,
@@ -127,6 +128,7 @@ class ProGateTest(unittest.TestCase):
             RATE_LIMIT_PER_HOUR_PRO=150,
             RATE_LIMIT_PER_DAY_PRO=800,
             RISET_SKRIPSI_PER_DAY=5,
+            KERANGKA_PER_DAY=10,
             RATE_LIMIT_ANON_TOTAL_PER_HOUR=60,
             RATE_LIMIT_ANON_TOTAL_PER_DAY=300,
             RATE_LIMIT_TOTAL_PER_DAY=1500,
@@ -207,6 +209,28 @@ class ProGateTest(unittest.TestCase):
         self.pro_for(3600)
         self.assertIn("belum aktif", self.app["riset_refusal"]())
         self.store.load_pro_until.assert_not_called()
+
+    def test_kerangka_uses_the_same_server_side_pro_check(self):
+        refusal = self.app["kerangka_refusal"]
+        self.store.load_pro_until.return_value = 0.0
+        self.assertIn("Kerangka Bab 1–3 khusus Ciel Pro", refusal())
+        self.assertEqual(self.events, ["pro_required"])
+        self.pro_for(3600)
+        self.assertIsNone(refusal())
+        self.app["WRITER_ENABLED"] = False
+        self.assertIn("Kerangka Bab 1–3 belum aktif", refusal())
+        # Riset Skripsi keeps its own wording through the shared check.
+        self.app["RISET_ENABLED"] = True
+        self.store.load_pro_until.return_value = 0.0
+        self.assertIn("Riset Skripsi khusus Ciel Pro", self.app["riset_refusal"]())
+
+    def test_kerangka_has_its_own_daily_quota(self):
+        self.pro_for(3600)
+        limits = self.app["rate_limits_for_request"](kerangka=True)
+        self.assertEqual(limits[f"kerangka:{ALICE}:day"], (10, 86400))
+        self.assertNotIn(f"riset:{ALICE}:day", limits)
+        self.assertIn("all:total:day", limits)
+        self.assertIn("10 kali per hari", self.app["rate_limit_message"](f"kerangka:{ALICE}:day", 10))
 
     def test_account_menu_plan_line(self):
         html = self.app["pro_status_html"]

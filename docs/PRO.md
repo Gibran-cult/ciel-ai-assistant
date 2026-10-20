@@ -1,6 +1,6 @@
 # Ciel Pro
 
-Paket Pro berisi satu fitur khusus, **Riset Skripsi**, plus batas pesan lebih tinggi. Pengguna membelinya sendiri lewat Midtrans (sekali bayar Rp79.000 = Pro 30 hari, tanpa tagihan otomatis), atau pengelola memberikannya lewat SQL.
+Paket Pro berisi **Riset Skripsi** (peta sumber) dan **Kerangka Bab 1–3** dari peta sumber itu, plus batas pesan lebih tinggi. Pengguna membelinya sendiri lewat Midtrans (sekali bayar Rp79.000 = Pro 30 hari, tanpa tagihan otomatis), atau pengelola memberikannya lewat SQL.
 
 ## Cara kerja
 
@@ -20,6 +20,8 @@ Paket Pro berisi satu fitur khusus, **Riset Skripsi**, plus batas pesan lebih ti
 | `RATE_LIMIT_PER_HOUR_PRO` | tidak | 150 | Pesan per jam untuk akun Pro. |
 | `RATE_LIMIT_PER_DAY_PRO` | tidak | 800 | Pesan per hari untuk akun Pro. |
 | `RISET_SKRIPSI_PER_DAY` | tidak | 5 | Riset Skripsi per hari per akun. |
+| `WRITER_FLOW_ID` | ya, untuk kerangka | – | ID flow "Ciel Penulis" di Langflow. Tanpa ini tombol "Susun kerangka Bab 1–3" tidak tampil. |
+| `KERANGKA_PER_DAY` | tidak | 10 | Kerangka Bab 1–3 per hari per akun. |
 | `MIDTRANS_SERVER_KEY` | ya, untuk pembelian | – | Server key Midtrans. Akun baru memakai awalan `Mid-server-` di sandbox maupun produksi (akun lama: `SB-Mid-server-` untuk sandbox); lingkungannya ditentukan `MIDTRANS_PRODUCTION`. Tanpa ini Pro tampil sebagai "sedang disiapkan". |
 | `MIDTRANS_PRODUCTION` | tidak | `false` | `true` memakai akun produksi Midtrans. |
 | `APP_URL` | disarankan | alamat yang sedang dibuka | Alamat publik app, tujuan kembali setelah bayar (`<APP_URL>/?page=pricing`). |
