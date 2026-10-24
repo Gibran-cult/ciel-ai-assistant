@@ -631,6 +631,17 @@ details.ciel-home-more { display: block; }
 .ciel-home-more summary b { font-weight: 500; color: var(--c-accent); white-space: nowrap; }
 .ciel-home-more[open] summary b { display: none; }
 .ciel-home-more > span { display: block; margin-top: 0.4rem; }
+.ciel-home-less {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-weight: 500;
+    color: var(--c-accent);
+    white-space: nowrap;
+    cursor: pointer;
+}
+.ciel-home-less:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; border-radius: 2px; }
 @media (max-width: 640px) {
     .st-key-beranda { margin-top: 1rem; }
     .st-key-homepanels { flex-direction: column; }
@@ -1300,6 +1311,15 @@ UI_JS = """
             if (button.getAttribute('aria-label') !== UPLOAD_HINT) button.setAttribute('aria-label', UPLOAD_HINT);
         });
     };
+
+    // "Lebih sedikit" closes a long memory and hands focus back to its summary.
+    document.addEventListener('click', (event) => {
+        const row = event.target.closest('.ciel-home-less') && event.target.closest('details');
+        if (!row) return;
+        row.open = false;
+        const summary = row.querySelector('summary');
+        if (summary) summary.focus();
+    });
 
     document.addEventListener('click', (event) => {
         if (!event.target.closest('[data-ciel-theme-toggle]')) return;
@@ -3475,7 +3495,8 @@ def memory_row_html(item):
     return (
         '<details class="ciel-home-row ciel-home-more">'
         f"<summary>{html.escape(preview)} <b>Selengkapnya</b></summary>"
-        f"<span>{html.escape(rest)}</span>"
+        # UI_JS closes the row from this button, at the end of the text.
+        f'<span>{html.escape(rest)} <button type="button" class="ciel-home-less">Lebih sedikit</button></span>'
         "</details>"
     )
 
