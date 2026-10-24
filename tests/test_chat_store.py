@@ -17,7 +17,11 @@ sys.path.insert(0, str(ROOT))
 
 import chat_store  # noqa: E402
 
-ENV = {"NGROK_URL": "http://127.0.0.1:9", "NGROK_USER": "u", "NGROK_PASSWORD": "p", "LANGFLOW_API_KEY": "k", "FLOW_ID": "f"}
+# MEMORY_ADMIN_FLOW_ID is empty on purpose: app.py's load_dotenv() can find a
+# parent .env that sets it, and the Beranda and chat rail then list memories
+# once per session, adding a langflow call these tests would count.
+ENV = {"NGROK_URL": "http://127.0.0.1:9", "NGROK_USER": "u", "NGROK_PASSWORD": "p", "LANGFLOW_API_KEY": "k", "FLOW_ID": "f",
+       "MEMORY_ADMIN_FLOW_ID": ""}
 SIGNED_IN = {"is_logged_in": True, "name": "Ciel Tester", "email": "ciel@example.com", "sub": "sub-1"}
 ALICE = "a1b2c3d4e5f60718"
 SIGNED_IN_OWNER = hashlib.sha256(b"ciel-memory:sub-1").hexdigest()[:16]  # memory_owner_id()
@@ -247,7 +251,13 @@ class SidebarHistoryTest(unittest.TestCase):
         return at
 
     def history_labels(self, at):
-        return [b.label for b in at.sidebar.button if b.key.startswith(("chat_", "chatactive_"))]
+        # Rows read "<judul>  ·  <waktu>" (plus "  ·  Riset"); the title is what these tests track.
+        return [b.label.split("  ·  ")[0] for b in at.sidebar.button if b.key.startswith(("chat_", "chatactive_"))]
+
+    def test_history_rows_show_when_each_chat_was_used(self):
+        at = self.run_app(chats={"c1": sample_chat("c1")})
+        (label,) = [b.label for b in at.sidebar.button if b.key.startswith(("chat_", "chatactive_"))]
+        self.assertRegex(label, r"^Belajar limit  ·  (\d{2}\.\d{2}|Kemarin|Sen|Sel|Rab|Kam|Jum|Sab|Min|\d{1,2} \w{3}( \d{4})?)$")
 
     def test_archive_restore_and_delete_without_login(self):
         at = self.run_app(chats={"c1": sample_chat("c1"), "c2": sample_chat("c2", title="Statistik")})

@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 from PIL import Image, ImageOps
 from pypdf import PdfReader
 
+from beranda import greeting, latest_riset, relative_time, templates_for
+from chat_sources import answer_markdown, count_line, source_buttons_html, split_sources, summarize
 from chat_store import ChatStore
 from login import render_login
 from payments import create_snap_transaction, finish_url, new_order_id, order_message, snap_payload
@@ -62,86 +64,91 @@ st.set_page_config(
 # ============================================================
 # VISUAL SYSTEM
 # ============================================================
-# Warm, minimal workspace (palette "Kertas & Tinta"): neutral paper canvas,
-# off-white cards, warm ink-black text and warm greys, so the ink-navy accent
-# is the only cool colour on screen (actions, the current page, verified
-# claims). Soft highlighter gold marks guesses.
-# Dark mode keeps the same roles on dark paper (DARK_TOKENS): it follows the
-# device unless the visitor picks a theme with the toggle (UI_JS sets
-# data-ciel-theme on <html>, which React never touches).
+# Dark first (palette from the "Ciel AI" design artifact): near-black ground,
+# warm greys, white pill buttons, a soft blue accent for links, source
+# numbers and focus, and highlighter gold for what has no source yet.
+# Light mode (LIGHT_TOKENS) keeps the same roles on paper with ink pills; the
+# visitor opts in with the toggle (UI_JS sets data-ciel-theme on <html>,
+# which React never touches). Dark is the default for everyone else.
 # Styling is scoped through container keys (st-key-*) and stable
 # data-testid hooks so it survives Streamlit upgrades as far as possible.
-# Keep .streamlit/config.toml in step with the light tokens.
+# Keep .streamlit/config.toml in step with the dark tokens.
 
-DARK_TOKENS = """
-    color-scheme: dark;
-    --c-bg: #161513;
-    --c-surface: #1f1d1a;
-    --c-raised: #2a2824;
-    --c-raised-strong: #34322d;
-    --c-line: rgba(236, 234, 228, 0.10);
-    --c-line-strong: rgba(236, 234, 228, 0.18);
-    --c-control: #827c72;
-    --c-text: #eceae4;
-    --c-muted: #b5b0a6;
-    --c-faint: #9c968c;
-    --c-accent: #9db3e8;
-    --c-accent-hover: #b4c5ee;
-    --c-accent-ink: #0e1730;
-    --c-accent-soft: rgba(157, 179, 232, 0.14);
-    --c-gold: #e9d06a;
-    --c-gold-ink: #2e2400;
-    --c-mark-piece: #e9d06a;
-    --c-ok: #7cc49d;
-    --c-warn: #e3b24f;
-    --c-err: #f0907f;
-    --c-shimmer: rgba(236, 234, 228, 0.06);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30), 0 1px 1px rgba(0, 0, 0, 0.20);
-    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
-"""
-
-CIEL_CSS = """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,400;9..144,500&display=swap');
-
-:root {
-    --c-bg: #f3f2ee;
-    --c-surface: #fcfbf9;
-    --c-raised: #e9e7e1;
-    --c-raised-strong: #dfdcd4;
-    --c-line: rgba(28, 27, 25, 0.10);
-    --c-line-strong: rgba(28, 27, 25, 0.18);
+LIGHT_TOKENS = """
+    color-scheme: light;
+    --c-bg: #f1f1ee;
+    --c-surface: #fbfbf9;
+    --c-raised: #e6e6e2;
+    --c-raised-strong: #dcdcd7;
+    --c-line: rgba(22, 21, 19, 0.10);
+    --c-line-strong: rgba(22, 21, 19, 0.18);
     --c-control: #86817a;
-    --c-text: #1c1b19;
-    --c-muted: #55514b;
-    --c-faint: #6b665f;
-    --c-accent: #203a72;
-    --c-accent-hover: #2d4a8a;
+    --c-text: #161513;
+    --c-muted: #4b4a46;
+    --c-faint: #5c5b56;
+    --c-primary: #161513;
+    --c-primary-hover: #2c2a26;
+    --c-on-primary: #f1f1ee;
+    --c-accent: #2b4886;
+    --c-accent-hover: #36579c;
     --c-accent-ink: #ffffff;
-    --c-gold: #f4dc6e;
-    --c-gold-ink: #3a2e00;
-    /* Highlighter gold is ~1.2:1 on paper, too faint for the logo piece. */
+    --c-accent-soft: rgba(43, 72, 134, 0.10);
+    --c-gold: #e9d06a;
+    --c-gold-ink: #3d3209;
+    --c-gap-bg: #f5ecc4;
+    /* Highlighter gold is ~1.3:1 on paper, too faint for the logo piece. */
     --c-mark-piece: #a07800;
     --c-ok: #2e6a4c;
     --c-warn: #855a00;
     --c-err: #a33b2c;
-    --c-accent-soft: rgba(32, 58, 114, 0.10);
     --c-shimmer: rgba(255, 255, 255, 0.7);
-    color-scheme: light;
+    --shadow-sm: 0 1px 2px rgba(22, 21, 19, 0.05), 0 1px 1px rgba(22, 21, 19, 0.03);
+    --shadow-md: 0 4px 14px rgba(22, 21, 19, 0.06), 0 1px 3px rgba(22, 21, 19, 0.05);
+"""
+
+CIEL_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,400;9..144,500&display=swap');
+
+:root {
+    color-scheme: dark;
+    --c-bg: #0e0d0c;
+    --c-surface: #181715;
+    --c-raised: #24231f;
+    --c-raised-strong: #2a2926;
+    --c-line: rgba(244, 244, 242, 0.09);
+    --c-line-strong: rgba(244, 244, 242, 0.16);
+    --c-control: #827c72;
+    --c-text: #f4f4f2;
+    --c-muted: #b4b3ad;
+    --c-faint: #959490;
+    --c-primary: #f4f4f2;
+    --c-primary-hover: #ffffff;
+    --c-on-primary: #141311;
+    --c-accent: #9db3e8;
+    --c-accent-hover: #b4c5ef;
+    --c-accent-ink: #141a2a;
+    --c-accent-soft: rgba(157, 179, 232, 0.14);
+    --c-gold: #e9d06a;
+    --c-gold-ink: #2e2606;
+    --c-gap-bg: #2b2716;
+    --c-mark-piece: #e9d06a;
+    --c-ok: #7cc49d;
+    --c-warn: #e3b24f;
+    --c-err: #f0907f;
+    --c-shimmer: rgba(244, 244, 242, 0.06);
     --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     --font-serif: "Fraunces", Georgia, "Times New Roman", serif;
     --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     --ease: cubic-bezier(0.32, 0.72, 0, 1);
-    --shadow-sm: 0 1px 2px rgba(28, 27, 25, 0.05), 0 1px 1px rgba(28, 27, 25, 0.03);
-    --shadow-md: 0 4px 14px rgba(28, 27, 25, 0.06), 0 1px 3px rgba(28, 27, 25, 0.05);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30), 0 1px 1px rgba(0, 0, 0, 0.20);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
     --r-sm: 6px;
     --r-md: 10px;
-    --r-lg: 16px;
+    --r-lg: 17px;
+    --r-pill: 999px;
 }
-@media (prefers-color-scheme: dark) {
-    :root:not([data-ciel-theme="light"]) {{{DARK_TOKENS}}}
-}
-:root[data-ciel-theme="dark"] {{{DARK_TOKENS}}}
+:root[data-ciel-theme="light"] {{{LIGHT_TOKENS}}}
 
 /* ---------- Base ---------- */
 .stApp {
@@ -181,7 +188,7 @@ header[data-testid="stHeader"] button,
 [data-testid="stChatMessageAvatarCustom"],
 [data-testid="stChatMessageAvatarCustom"] [data-testid="stIconMaterial"] { background: var(--c-surface); color: var(--c-text); }
 /* Ciel's avatar is an image (the app icon), which Streamlit renders as a bare img. */
-[data-testid="stChatMessage"] > img { width: 2rem; height: 2rem; border-radius: var(--r-sm); }
+[data-testid="stChatMessage"] > img { width: 1.5rem; height: 1.5rem; border-radius: var(--r-sm); }
 /* Popover content (account menu, "Proyek baru") renders outside .stApp,
    so widget rules below cover both. */
 :is(.stApp, [data-testid="stPopoverBody"]) [data-testid="stExpander"] summary { color: var(--c-text); background: transparent; }
@@ -217,6 +224,7 @@ header[data-testid="stHeader"] button,
     border-color: var(--c-line-strong);
 }
 .stApp input, [data-testid="stPopoverBody"] input { color: var(--c-text); caret-color: var(--c-text); }
+:is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) [data-testid="InputInstructions"] { color: var(--c-faint); }
 .stApp input::placeholder, [data-testid="stPopoverBody"] input::placeholder { color: var(--c-faint); }
 #MainMenu, footer { visibility: hidden; }
 
@@ -272,14 +280,8 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     margin-bottom: 1.6rem;
     border-bottom: 1px solid var(--c-line);
 }
-.ciel-topbar {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-.ciel-brand { display: flex; align-items: baseline; gap: 0.8rem; min-width: 0; }
+.stApp .ciel-crumb { margin: 0; font-size: 0.875rem; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ciel-crumb b { font-weight: 500; color: var(--c-text); }
 .ciel-wordmark {
     font-family: var(--font-serif);
     font-size: 1.45rem;
@@ -291,10 +293,10 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 .ciel-mark-ring { fill: var(--c-accent); }
 .ciel-mark-piece { fill: var(--c-mark-piece); }
 
-/* Theme toggle (THEME_TOGGLE_HTML): moon in light mode, sun in dark mode,
+/* Theme toggle (THEME_TOGGLE_HTML): sun in dark mode (the default), moon in light mode,
    drawn as a mask so it takes the button's text colour. */
 .ciel-theme-toggle {
-    --ciel-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --ciel-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='4' fill='none' stroke='black' stroke-width='1.8'/%3E%3Cpath d='M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -317,10 +319,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     mask: var(--ciel-toggle-icon) center / contain no-repeat;
 }
 .ciel-theme-toggle:hover { color: var(--c-text); background: var(--c-raised); }
-:root[data-ciel-theme="dark"] .ciel-theme-toggle { --ciel-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='4' fill='none' stroke='black' stroke-width='1.8'/%3E%3Cpath d='M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E"); }
-@media (prefers-color-scheme: dark) {
-    :root:not([data-ciel-theme="light"]) .ciel-theme-toggle { --ciel-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='4' fill='none' stroke='black' stroke-width='1.8'/%3E%3Cpath d='M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E"); }
-}
+:root[data-ciel-theme="light"] .ciel-theme-toggle { --ciel-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E"); }
 
 /* Top bar nav, in the style of the claude.ai app: quiet ghost buttons with
    no border and 8px corners, a soft grey background on hover, and Masuk a
@@ -361,7 +360,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     margin-top: auto;
     padding: 0.5rem 0 0.75rem;
     border-top: 1px solid var(--c-line);
-    background: var(--c-surface);
+    background: var(--c-bg);
 }
 [data-testid="stSidebar"] .st-key-sideaccount [data-testid="stPopoverButton"] {
     justify-content: flex-start;
@@ -418,23 +417,10 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 .stApp .st-key-topbar { flex-wrap: nowrap; }
 .stApp .st-key-topbar > [data-testid="stElementContainer"]:first-child { flex: 1 1 0; min-width: 0; }
 
-.ciel-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.2rem 0.6rem;
-    border: 1px solid var(--c-line-strong);
-    border-radius: var(--r-sm);
-    font-size: 0.78rem;
-    color: var(--c-muted);
-    white-space: nowrap;
-}
-.ciel-status b { font-weight: 500; color: var(--c-text); }
-.ciel-dot { width: 6px; height: 6px; border-radius: 1px; background: var(--c-accent); flex: none; }
 
 /* ---------- Sidebar ---------- */
 [data-testid="stSidebar"] {
-    background: var(--c-surface);
+    background: var(--c-bg);
     border-right: 1px solid var(--c-line);
 }
 [data-testid="stSidebarContent"] { padding-top: 1.4rem; }
@@ -497,7 +483,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 /* ---------- Buttons ---------- */
 :is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button,
 [data-testid="stSidebar"] [data-testid="stPopover"] > button {
-    border-radius: var(--r-md);
+    border-radius: var(--r-pill);
     border: 1px solid var(--c-line-strong);
     background: transparent;
     color: var(--c-text);
@@ -513,16 +499,18 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 [data-testid="stSidebar"] [data-testid="stPopover"] button:hover { background: var(--c-raised); }
 :is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button:active { transform: translateY(1px); }
 :is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button[kind="primary"] {
-    background: var(--c-accent);
-    border-color: var(--c-accent);
-    color: var(--c-accent-ink);
+    background: var(--c-primary);
+    border-color: var(--c-primary);
+    color: var(--c-on-primary);
+    border-radius: var(--r-pill);
     font-weight: 600;
 }
-:is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button[kind="primary"]:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); }
+:is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button[kind="primary"]:hover { background: var(--c-primary-hover); border-color: var(--c-primary-hover); color: var(--c-on-primary); }
+:is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button[kind="primary"] :is(p, [data-testid="stIconMaterial"]) { color: inherit; }
 /* Download buttons ("Unduh DOCX", "Unduh CSV") sit in .stDownloadButton,
    not .stButton, and kept Streamlit's light colours in dark mode. */
 :is(.stApp, [data-testid="stPopoverBody"]) .stDownloadButton > button {
-    border-radius: var(--r-md);
+    border-radius: var(--r-pill);
     border: 1px solid var(--c-line-strong);
     background: transparent;
     color: var(--c-text);
@@ -541,13 +529,13 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 /* Link buttons ("Bayar di Midtrans" on Pricing) are <a>, not <button>, so
    the rules above do not reach them. */
 .stApp [data-testid="stBaseLinkButton-primary"] {
-    border-radius: var(--r-md);
-    border: 1px solid var(--c-accent);
-    background: var(--c-accent);
-    color: var(--c-accent-ink);
+    border-radius: var(--r-pill);
+    border: 1px solid var(--c-primary);
+    background: var(--c-primary);
+    color: var(--c-on-primary);
     font-weight: 600;
 }
-.stApp [data-testid="stBaseLinkButton-primary"]:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); color: var(--c-accent-ink); }
+.stApp [data-testid="stBaseLinkButton-primary"]:hover { background: var(--c-primary-hover); border-color: var(--c-primary-hover); color: var(--c-on-primary); }
 .stApp [data-testid="stBaseLinkButton-primary"] :is(p, span, [data-testid="stIconMaterial"]) { color: inherit; }
 /* Disabled buttons (e.g. "Hapus semua memoriku" until its checkbox is
    ticked) look muted and stay the same on hover; otherwise the hover
@@ -567,75 +555,73 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     background: transparent;
 }
 
-/* ---------- Empty state ---------- */
-.st-key-emptystate { padding: 1.2rem 0 0.5rem; }
-.ciel-hero h1 {
-    margin: 0 0 0.9rem;
+/* ---------- Beranda ---------- */
+/* Replaces the empty chat page: greeting, the composer itself (inline),
+   template buttons, then two quiet panels. */
+.st-key-beranda { max-width: 41.25rem; margin: 2.5rem auto 0; gap: 1.1rem; }
+.ciel-home-head { text-align: center; }
+.stApp .ciel-home-head h1 {
+    margin: 0;
     padding: 0;
     font-family: var(--font-serif);
-    font-size: clamp(2rem, 4vw, 2.9rem);
-    font-weight: 400;
-    letter-spacing: -0.025em;
-    line-height: 1.08;
-    text-wrap: balance;
+    font-size: 2rem;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
     color: var(--c-text);
 }
-.ciel-hero p {
-    margin: 0;
-    max-width: 34rem;
-    font-size: 1rem;
-    line-height: 1.65;
-    color: var(--c-muted);
-    text-wrap: pretty;
+.stApp .ciel-home-head p { margin: 0.4rem 0 0; font-size: 0.875rem; color: var(--c-muted); }
+.st-key-beranda [data-testid="stChatInput"] { margin: 0.4rem 6px 0.3rem; }
+.st-key-templates { justify-content: center; flex-wrap: wrap; gap: 0.5rem; }
+.st-key-templates .stButton > button {
+    min-height: 2.25rem;
+    padding: 0 0.95rem;
+    border: 0;
+    background: var(--c-surface);
+    box-shadow: inset 0 0 0 1px var(--c-line);
+    color: var(--c-text);
 }
-/* Sample answer: shows the [Terverifikasi]/[Dugaan] labels instead of
-   listing features. */
-.ciel-sample {
-    margin: 2rem 0 0.9rem;
-    padding: 1.1rem 1.25rem 1rem;
-    border: 1px solid var(--c-line);
+.st-key-templates .stButton > button:hover { background: var(--c-raised-strong); }
+.st-key-homepanels { gap: 0.6rem; align-items: stretch; margin-top: 0.8rem; }
+:is(.st-key-home_recent, .st-key-home_memory) {
+    flex: 1 1 0;
+    min-width: 0;
+    gap: 0.4rem;
+    padding: 0.9rem;
     border-radius: var(--r-lg);
     background: var(--c-surface);
-    box-shadow: var(--shadow-sm);
+    box-shadow: inset 0 0 0 1px var(--c-line);
 }
-.ciel-sample figcaption { margin-bottom: 0.75rem; font-size: 0.78rem; color: var(--c-faint); }
-.stApp .ciel-sample-q {
-    margin: 0 0 0.85rem;
-    padding-bottom: 0.85rem;
-    border-bottom: 1px solid var(--c-line);
-    font-size: 0.92rem;
-    color: var(--c-text);
-}
-.stApp .ciel-sample-a p, .stApp .ciel-sample-a li { margin: 0 0 0.35rem; font-size: 0.9rem; line-height: 1.6; color: var(--c-text); }
-.stApp .ciel-sample-a ol { margin: 0 0 0.35rem; padding-left: 1.2rem; }
-.ciel-sample-a b { font-weight: 600; }
-.ciel-label {
-    display: inline-block;
-    margin-left: 0.15rem;
-    padding: 0.05rem 0.45rem;
-    border-radius: 999px;
-    font-size: 0.74rem;
-    font-weight: 500;
-    white-space: nowrap;
-}
-.ciel-label.is-ok { background: var(--c-accent-soft); color: var(--c-accent); }
-.ciel-label.is-guess { background: var(--c-gold); color: var(--c-gold-ink); }
-.stApp .ciel-hint { margin: 0 0 1.6rem; font-size: 0.84rem; line-height: 1.6; color: var(--c-muted); }
-.st-key-starters .stButton > button {
+.stApp .ciel-home-h { margin: 0 0 0.2rem; font-size: 0.875rem; font-weight: 600; color: var(--c-text); }
+.st-key-home_recent .stButton > button {
     width: 100%;
     justify-content: flex-start;
-    text-align: left;
     border: 0;
-    border-bottom: 1px solid var(--c-line);
-    border-radius: 0;
-    padding: 0.8rem 0;
-    background: transparent;
+    border-radius: var(--r-md);
+    background: var(--c-raised);
     color: var(--c-text);
-    font-weight: 400;
+    font-weight: 500;
 }
-.st-key-starters .stButton > button { transition: color 0.3s var(--ease); }
-.st-key-starters .stButton > button:hover { background: transparent; color: var(--c-accent); }
-.st-key-starters .stButton > button p { white-space: normal; text-align: left; }
+.st-key-home_recent .stButton > button:hover { background: var(--c-raised-strong); }
+.st-key-home_recent .stButton > button p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Streamlit centres the label in an inner wrapper; short titles drifted to the middle. */
+.st-key-home_recent .stButton > button > div { justify-content: flex-start; min-width: 0; }
+.ciel-home-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: var(--r-md);
+    background: var(--c-raised);
+    font-size: 0.875rem;
+    color: var(--c-text);
+}
+.ciel-home-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ciel-home-row em { font-style: normal; font-size: 0.75rem; color: var(--c-faint); white-space: nowrap; }
+@media (max-width: 640px) {
+    .st-key-beranda { margin-top: 1rem; }
+    .st-key-homepanels { flex-direction: column; }
+}
 
 /* ---------- Messages ---------- */
 [data-testid="stChatMessage"] {
@@ -645,9 +631,9 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     animation: ciel-rise 0.6s var(--ease) both;
 }
 [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
-    font-size: 0.98rem;
-    line-height: 1.75;
-    max-width: 44rem;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    max-width: 66ch;
 }
 /* Headings inside answers (the Riset Skripsi source map starts with "#").
    Streamlit's defaults are 44/36 px in its own font; these follow the
@@ -679,14 +665,20 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     font-size: 1rem;
     font-weight: 600;
 }
-[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+/* The user avatar is a material icon (stChatMessageAvatarCustom), so the
+   message is found by its content's aria-label. */
+[data-testid="stChatMessage"]:has(> [aria-label="Chat message from user"]) {
+    width: fit-content;
+    max-width: 80%;
+    margin-left: auto;
     background: var(--c-surface);
-    border: 1px solid var(--c-line);
-    border-radius: var(--r-lg);
-    box-shadow: var(--shadow-sm);
-    padding: 0.85rem 1.05rem;
-    margin: 0.6rem 0;
+    border: 0;
+    border-radius: 16px;
+    padding: 0.7rem 1rem;
+    margin-top: 0.6rem;
+    margin-bottom: 0.6rem;
 }
+[data-testid="stChatMessage"]:has(> [aria-label="Chat message from user"]) > :first-child { display: none; }
 [data-testid="stChatMessageAvatarUser"],
 [data-testid="stChatMessageAvatarAssistant"] {
     border-radius: var(--r-sm);
@@ -696,6 +688,111 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 }
 [data-testid="stChatMessageAvatarUser"] { background: var(--c-raised); color: var(--c-muted); }
 [data-testid="stChatMessageAvatarAssistant"] { background: var(--c-accent); color: var(--c-accent-ink); }
+
+/* ---------- Chat page: header, sources, rail ---------- */
+.stApp .ciel-chathead { padding: 0 0 0.9rem; margin-bottom: 0.4rem; border-bottom: 1px solid var(--c-line); }
+.stApp .ciel-chathead h1 { margin: 0; padding: 0; font-family: var(--font-sans); font-size: 1.125rem; font-weight: 600; line-height: 1.4; color: var(--c-text); }
+.stApp .ciel-chathead p { margin: 0.2rem 0 0; font-size: 0.875rem; color: var(--c-muted); }
+.ciel-srcs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.2rem; }
+.stApp a.ciel-src {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: 100%;
+    height: 2rem;
+    padding: 0 0.75rem 0 0.375rem;
+    border-radius: var(--r-pill);
+    background: var(--c-surface);
+    font-size: 0.8125rem;
+    color: var(--c-text);
+    text-decoration: none;
+    transition: background-color 0.3s var(--ease);
+}
+.stApp a.ciel-src:hover { background: var(--c-raised); color: var(--c-text); }
+.ciel-src b, .ciel-ri b {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.3rem;
+    border-radius: 6px;
+    background: var(--c-accent);
+    color: var(--c-accent-ink);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.ciel-src span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-muted); }
+.ciel-rail { display: flex; flex-direction: column; gap: 1.6rem; padding-top: 0.2rem; }
+.stApp .ciel-rail h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.6rem;
+    padding: 0;
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--c-text);
+}
+/* Streamlit wraps heading text in its own span and adds anchor links. */
+:is(.ciel-rail, .ciel-chathead) [data-testid="stHeaderActionElements"] { display: none; }
+.ciel-rail h2 .ciel-count { padding: 0 0.5rem; border-radius: var(--r-pill); background: var(--c-raised); font-size: 0.75rem; font-weight: 400; line-height: 1.25rem; color: var(--c-muted); }
+.stApp .ciel-rail-q { margin: 0.6rem 0 0.35rem; font-size: 0.75rem; color: var(--c-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stApp a.ciel-ri, .ciel-gap {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin-bottom: 0.4rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 14px;
+    background: var(--c-surface);
+    box-shadow: inset 0 0 0 1px var(--c-line);
+    font-size: 0.875rem;
+    line-height: 1.4;
+    color: var(--c-text);
+    text-decoration: none;
+}
+.stApp a.ciel-ri:hover { background: var(--c-raised); color: var(--c-text); }
+.ciel-ri strong { display: block; font-weight: 500; overflow-wrap: anywhere; }
+.ciel-ri em { display: block; margin-top: 0.1rem; font-style: normal; font-size: 0.75rem; color: var(--c-faint); }
+.ciel-gap { background: var(--c-gap-bg); box-shadow: inset 0 0 0 1px rgba(233, 208, 106, 0.18); }
+.ciel-gap i { flex: none; width: 0.9rem; height: 0.9rem; margin-top: 0.15rem; border-radius: 4px; background: var(--c-gold); }
+.ciel-mc { display: inline-flex; align-items: center; height: 1.75rem; margin: 0 0.35rem 0.35rem 0; padding: 0 0.75rem; border-radius: var(--r-pill); background: var(--c-surface); font-size: 0.8125rem; color: var(--c-text); }
+.ciel-kv { margin: 0; }
+.ciel-kv div { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.35rem 0; border-bottom: 1px solid var(--c-line); font-size: 0.875rem; }
+.ciel-kv dt { color: var(--c-muted); }
+.ciel-kv dd { margin: 0; font-weight: 500; color: var(--c-text); }
+/* [Dugaan]/[Terverifikasi] badges: Streamlit paints them inline from its
+   base theme; UI_JS tags them by text so they follow the tokens. */
+.stMarkdownBadge.ciel-guess { background: var(--c-gold) !important; color: var(--c-gold-ink) !important; }
+.stMarkdownBadge.ciel-ok { background: var(--c-accent-soft) !important; color: var(--c-accent) !important; }
+/* Copy button (UI_JS adds it under finished answers). */
+.ciel-copy {
+    margin-top: 0.5rem;
+    height: 2rem;
+    padding: 0 0.875rem;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: var(--c-raised);
+    color: var(--c-text);
+    font: 500 0.8125rem var(--font-sans);
+    cursor: pointer;
+    transition: background-color 0.3s var(--ease);
+}
+.ciel-copy:hover { background: var(--c-raised-strong); }
+.ciel-copy:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+/* With the rail the page widens; the composer stays under the conversation. */
+.stMain .block-container:has(.st-key-rail) { max-width: 78rem; }
+body:has(.st-key-rail) [data-testid="stBottomBlockContainer"] { max-width: 78rem; }
+@media (min-width: 1200px) {
+    body:has(.st-key-rail) [data-testid="stBottomBlockContainer"] [data-testid="stChatInput"] { width: 68%; }
+}
+@media (max-width: 1199px) {
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-rail) { flex-direction: column; }
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-rail) > [data-testid="stColumn"] { width: 100% !important; flex: 1 1 auto !important; }
+}
 
 /* ---------- Working indicator ---------- */
 .ciel-thinking { max-width: 26rem; padding: 0.2rem 0 0.4rem; }
@@ -764,11 +861,13 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     background: linear-gradient(to top, var(--c-bg) 70%, transparent);
 }
 [data-testid="stBottomBlockContainer"] { max-width: 50rem; padding-bottom: 1.4rem; }
+/* The floating tray: the input core (22px corners) inside a 6px ring of
+   the surface colour with a hairline, like the artifact's composer. */
 [data-testid="stChatInput"] {
-    border: 1px solid var(--c-control);
-    border-radius: var(--r-lg);
-    background: var(--c-surface);
-    box-shadow: var(--shadow-md);
+    border: 1px solid var(--c-line-strong);
+    border-radius: 22px;
+    background: var(--c-raised);
+    box-shadow: 0 0 0 6px var(--c-surface), 0 0 0 7px var(--c-line), 0 24px 48px -24px rgba(0, 0, 0, 0.55);
     transition: border-color 0.4s var(--ease);
 }
 [data-testid="stChatInput"] > div { background: transparent; border: 0; }
@@ -781,9 +880,9 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 [data-testid="stChatInput"] textarea { color: var(--c-text); font-size: 0.98rem; }
 [data-testid="stChatInput"] textarea::placeholder { color: var(--c-faint); }
 [data-testid="stChatInputSubmitButton"] {
-    border-radius: var(--r-md);
-    background: var(--c-accent);
-    color: var(--c-accent-ink);
+    border-radius: var(--r-pill);
+    background: var(--c-primary);
+    color: var(--c-on-primary);
     transition: transform 0.4s var(--ease);
 }
 [data-testid="stChatInputSubmitButton"]:active { transform: translateY(1px); }
@@ -797,6 +896,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     justify-content: flex-start;
     text-align: left;
     border-color: transparent;
+    border-radius: 8px;
     color: var(--c-muted);
     min-height: 2.2rem;
 }
@@ -811,9 +911,8 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 .stButton[class*="st-key-projactive_"] > button,
 .stButton[class*="st-key-chatactive_"] > button {
     background: var(--c-raised);
-    border-color: var(--c-line-strong);
+    border-color: transparent;
     color: var(--c-text);
-    box-shadow: inset 2px 0 0 var(--c-accent);
 }
 .st-key-history .stButton > button p,
 .st-key-projects .stButton > button p {
@@ -866,6 +965,29 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     overflow-wrap: anywhere;
 }
 
+/* ---------- First-load curtain ---------- */
+/* Added to <body> by UI_JS once per browser session; it never takes clicks. */
+.ciel-curtain {
+    position: fixed;
+    inset: 0;
+    z-index: 999999;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--c-bg);
+    animation: ciel-curtain 0.8s var(--ease) forwards;
+}
+.ciel-curtain::before {
+    content: "";
+    width: 44px;
+    height: 44px;
+    background: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%239db3e8' d='M24.89 10.6A11.8 11.8 0 1 0 24.89 21.4H20.57A8.2 8.2 0 1 1 20.57 10.6Z'/%3E%3Cpath fill='%23e9d06a' d='M28.39 10.6A11.8 11.8 0 0 1 28.39 21.4H24.07A8.2 8.2 0 0 0 24.07 10.6Z'/%3E%3C/svg%3E");
+    animation: ciel-curtain-mark 0.8s var(--ease) forwards;
+}
+@keyframes ciel-curtain { 0%, 35% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+@keyframes ciel-curtain-mark { 0% { opacity: 0; transform: scale(0.85); } 35% { opacity: 1; transform: none; } 100% { opacity: 0; transform: scale(1.12); } }
+
 /* ---------- Motion ---------- */
 @keyframes ciel-rise {
     from { opacity: 0; transform: translateY(8px); }
@@ -912,7 +1034,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 </style>
 """
 
-st.markdown(CIEL_CSS.replace("{{{DARK_TOKENS}}}", "{" + DARK_TOKENS + "}"), unsafe_allow_html=True)
+st.markdown(CIEL_CSS.replace("{{{LIGHT_TOKENS}}}", "{" + LIGHT_TOKENS + "}"), unsafe_allow_html=True)
 
 # Top bar that follows the scroll: scrolling down pushes it up behind the
 # header pixel for pixel, scrolling up pulls it back, and when scrolling
@@ -996,9 +1118,9 @@ NAV_SCROLL_JS = """
 
 # Page details Streamlit gives no option for. One observer on <body> keeps
 # them applied as Streamlit re-renders:
-# - Theme: data-ciel-theme on <html> overrides the device setting once the
-#   visitor uses the toggle (THEME_TOGGLE_HTML); the choice is kept in
-#   localStorage, and the page still works if storage is blocked.
+# - Theme: data-ciel-theme on <html> is "dark" unless the visitor chose
+#   light with the toggle (THEME_TOGGLE_HTML); the choice is kept in
+#   localStorage, and the page still works (dark) if storage is blocked.
 # - Hosted on Streamlit Cloud (inside its iframe): data-ciel-hosted on
 #   <html> lets CSS lift the composer above Cloud's corner badges.
 # - The chat composer's "+" tooltip lists every accepted extension
@@ -1016,17 +1138,90 @@ UI_JS = """
     // Inside an iframe means Streamlit Community Cloud, whose badges cover
     // the bottom-right corner (comparing windows is allowed cross-origin).
     if (window.self !== window.top) root.dataset.cielHosted = '1';
-    const UPLOAD_HINT = 'Lampirkan file atau foto';
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
 
-    const effectiveTheme = () => root.dataset.cielTheme || (prefersDark.matches ? 'dark' : 'light');
+    // First-load curtain, once per browser session; skipped when motion is
+    // reduced or storage is blocked.
+    try {
+        const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!still && !sessionStorage.getItem('ciel-curtain')) {
+            sessionStorage.setItem('ciel-curtain', '1');
+            const curtain = document.createElement('div');
+            curtain.className = 'ciel-curtain';
+            curtain.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(curtain);
+            setTimeout(() => curtain.remove(), 800);
+        }
+    } catch (error) { /* no curtain */ }
+    const UPLOAD_HINT = 'Lampirkan file atau foto';
+
+    // Dark unless the visitor chose light with the toggle.
+    const effectiveTheme = () => root.dataset.cielTheme;
 
     try {
         const saved = localStorage.getItem(KEY);
-        if (saved === 'light' || saved === 'dark') root.dataset.cielTheme = saved;
-    } catch (error) { /* storage blocked: follow the device */ }
+        root.dataset.cielTheme = saved === 'light' ? 'light' : 'dark';
+    } catch (error) { root.dataset.cielTheme = 'dark'; /* storage blocked */ }
+
+    // "Salin jawaban" under each finished answer (not while Ciel is working,
+    // not on error cards). Clipboard API first, execCommand as the fallback;
+    // when both fail the button hides itself.
+    const fallbackCopy = (value) => {
+        const area = document.createElement('textarea');
+        area.value = value;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        const copied = document.execCommand('copy');
+        area.remove();
+        return copied;
+    };
+    // The answer's text plus its source buttons as a "Sumber:" list, read
+    // when clicked (Streamlit may have replaced the nodes since).
+    const copyText = (answer) => {
+        const text = answer.querySelector('[data-testid="stMarkdownContainer"]');
+        const sources = [...answer.querySelectorAll('.ciel-srcs a')].map((link) => {
+            const number = link.querySelector('b') ? link.querySelector('b').textContent : '';
+            const title = link.querySelector('span') ? link.querySelector('span').textContent : '';
+            return `[${number}] ${title} ${link.href}`;
+        });
+        return (text ? text.innerText.trim() : '') + (sources.length ? `\\n\\nSumber:\\n${sources.join('\\n')}` : '');
+    };
+
+    const addCopyButtons = () => {
+        document.querySelectorAll('[aria-label="Chat message from assistant"]').forEach((answer) => {
+            if (answer.querySelector('.ciel-copy, .ciel-thinking, [class*="st-key-errcard"]')) return;
+            const first = answer.querySelector('[data-testid="stMarkdownContainer"]');
+            if (!first || !first.innerText.trim()) return;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'ciel-copy';
+            button.textContent = 'Salin jawaban';
+            const done = () => {
+                button.textContent = 'Tersalin';
+                setTimeout(() => { button.textContent = 'Salin jawaban'; }, 1500);
+            };
+            button.addEventListener('click', () => {
+                const value = copyText(answer);
+                const failed = () => { if (fallbackCopy(value)) done(); else button.hidden = true; };
+                if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(value).then(done, failed);
+                else failed();
+            });
+            answer.appendChild(button);
+        });
+    };
+
+    const tagBadges = () => {
+        document.querySelectorAll('.stMarkdownBadge:not(.ciel-guess):not(.ciel-ok)').forEach((badge) => {
+            if (badge.textContent === 'Dugaan') badge.classList.add('ciel-guess');
+            else if (badge.textContent === 'Terverifikasi') badge.classList.add('ciel-ok');
+        });
+    };
 
     const apply = () => {
+        addCopyButtons();
+        tagBadges();
         const label = effectiveTheme() === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap';
         document.querySelectorAll('[data-ciel-theme-toggle]').forEach((button) => {
             if (button.getAttribute('aria-label') !== label) {
@@ -1050,7 +1245,6 @@ UI_JS = """
         apply();
     });
 
-    prefersDark.addEventListener('change', apply);
     new MutationObserver(apply).observe(document.body, { childList: true, subtree: true });
     apply();
 })();
@@ -2162,7 +2356,7 @@ def upload_images(images):
 # DATA SAYA (MEMORY DAN RIWAYAT CHAT DI SERVER)
 # ============================================================
 
-def memory_admin(action, memory_id="", dataset_name=""):
+def memory_admin(action, memory_id="", dataset_name="", timeout=60):
     """
     Panggil flow "Ciel Memory Admin" untuk akun yang sedang login: memory
     dan dataset pribadi.
@@ -2200,7 +2394,7 @@ def memory_admin(action, memory_id="", dataset_name=""):
                 "session_id": f"{owner}-memory-admin",
                 "tweaks": {MEMORY_ADMIN_NODE_ID: tweak},
             },
-            timeout=60,
+            timeout=timeout,
         )
         response.raise_for_status()
 
@@ -2375,36 +2569,6 @@ CIEL_MARK_SVG = (
     '<path class="ciel-mark-piece" d="M28.39 10.6A11.8 11.8 0 0 1 28.39 21.4'
     'H24.07A8.2 8.2 0 0 0 24.07 10.6Z"/>'
     "</svg>"
-)
-
-STARTER_PROMPTS = (
-    "Ajari aku limit fungsi dari dasar, lalu kasih 2 soal latihan",
-    "Analisis: apakah model bahasa open-source sudah layak dipakai untuk riset skripsi?",
-    "Rangkum perkembangan terbaru model bahasa open-source beserta sumbernya",
-)
-
-# Contoh di empty state: format asli mode analisis (lihat prompt flow:
-# "Analisis dimulai.", Kesimpulan, Dasar berlabel, Tingkat keyakinan,
-# Batasan). Datanya ilustrasi dan diberi keterangan begitu, supaya halaman
-# depan tidak mengarang fakta atau sumber.
-SAMPLE_ANSWER_HTML = (
-    '<figure class="ciel-sample">'
-    "<figcaption>Contoh jawaban mode analisis &middot; data ilustrasi</figcaption>"
-    '<p class="ciel-sample-q">analisis: dari nilai_kelas.csv, kelas ini sudah siap ujian akhir?</p>'
-    '<div class="ciel-sample-a">'
-    "<p>Analisis dimulai.</p>"
-    "<p><b>Kesimpulan:</b> Sebagian besar siap; 6 dari 32 siswa masih di bawah KKM 75.</p>"
-    "<p><b>Dasar:</b></p>"
-    "<ol>"
-    "<li>Rata-rata kelas 78,4 dan median 80, dihitung dari 32 baris file. "
-    '<span class="ciel-label is-ok">Terverifikasi</span></li>'
-    "<li>Nilai terendah ada di soal geometri, jadi bab itu kemungkinan perlu diulang. "
-    '<span class="ciel-label is-guess">Dugaan</span></li>'
-    "</ol>"
-    "<p><b>Tingkat keyakinan:</b> Sedang, karena datanya hanya satu ujian.</p>"
-    "<p><b>Batasan:</b> File tidak memuat nilai tugas.</p>"
-    "</div>"
-    "</figure>"
 )
 
 THINKING_HTML = (
@@ -3149,14 +3313,153 @@ def set_archived(chat_id, archived):
         new_chat()
 
 
-def queue_prompt(text):
-    st.session_state.pending = make_pending(text, [])
+MEMORY_LIST_TIMEOUT = 8
+
+# The one chat input; the Beranda shows it inline, the chat at the bottom.
+COMPOSER_KEY = "composer"
+
+
+def fill_composer(text):
+    """Template button: the sentence goes into the composer to be edited."""
+    st.session_state[COMPOSER_KEY] = text
+
+
+def open_kerangka_from(chat_id, map_index, topic):
+    """Kerangka template: open the chat holding the map, then its dialog."""
+    select_chat(chat_id)
+    open_kerangka_dialog(topic, map_index)
+
+
+def session_memories():
+    """The account's memories, listed at most once per session (one flow call)."""
+
+    if not (logged_in() and MEMORY_ADMIN_FLOW_ID):
+        return []
+
+    # The listing runs inside the page's run and blocks it, so it gives up
+    # after a few seconds instead of memory_admin's 60.
+    if not st.session_state.get("memories_loaded"):
+        st.session_state.memories_loaded = True
+        st.session_state.my_memories = memory_admin("list", timeout=MEMORY_LIST_TIMEOUT)
+
+    listing = st.session_state.get("my_memories") or {}
+    return list(listing.get("memories") or []) if listing.get("ok") else []
+
+
+def composer(placeholder):
+    return st.chat_input(
+        placeholder,
+        key=COMPOSER_KEY,
+        accept_file="multiple",
+        file_type=ALLOWED_FILE_TYPES + ALLOWED_IMAGE_TYPES,
+        max_chars=MAX_MESSAGE_CHARS,
+    )
+
+
+def take_composer_value(value):
+    """Turn a submitted composer value into the pending request."""
+
+    if not value:
+        return
+
+    typed_text, typed_files = unpack_chat_input(value)
+
+    # max_chars hanya dicek di browser; permintaan buatan sendiri bisa melewatinya.
+    if len(typed_text) > MAX_MESSAGE_CHARS:
+        security_event("message_too_long", length=len(typed_text))
+        st.toast(
+            "Pesan terlalu panjang (maks. 10.000 karakter). Lampirkan teks panjang sebagai file.",
+            icon=":material/error:",
+        )
+
+    elif typed_text.strip() or typed_files:
+        st.session_state.pending = make_pending(typed_text, typed_files)
+
+
+def render_beranda():
+    """Beranda: greeting, the composer, template buttons, recent chats, memories.
+
+    Returns the composer's value (the composer lives here on this page).
+    """
+
+    project = st.session_state.projects.get(st.session_state.active_project)
+    project_id = project["id"] if project else None
+    visible = [
+        chat for chat in st.session_state.chats.values()
+        if not chat.get("archived") and (project_id is None or chat["project_id"] == project_id)
+    ]
+    name = (st.user.get("name") or "") if logged_in() else None
+    subline = (
+        f"{short(project['name'], 40)} · {len(visible)} chat · {len(project['files'])} file proyek"
+        if project
+        else f"Semua chat · {len(visible)} chat"
+    )
+
+    st.markdown(
+        '<div class="ciel-home-head">'
+        f"<h1>{html.escape(greeting(time.time(), name))}</h1>"
+        f"<p>{html.escape(subline)}</p>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    value = composer("Tanya soal skripsimu" if project else "Tanyakan sesuatu kepada Ciel...")
+    riset = latest_riset(st.session_state.chats.values(), project_id)
+
+    with st.container(key="templates", horizontal=True, gap="small"):
+
+        for template in templates_for(bool(project and project["files"]), riset is not None, RISET_ENABLED, WRITER_ENABLED):
+
+            label = f"{template.label} · Pro" if template.pro else template.label
+
+            if template.action == "fill":
+                st.button(label, key=f"tpl_{template.key}", on_click=fill_composer, args=(template.text,))
+            elif template.action == "riset":
+                st.button(label, key=f"tpl_{template.key}", on_click=open_riset_dialog)
+            else:
+                chat, index = riset
+                topic = chat["messages"][index].get("topic") or "Kerangka Bab 1–3"
+                st.button(label, key=f"tpl_{template.key}", on_click=open_kerangka_from, args=(chat["id"], index, topic))
+
+    recent = sorted(visible, key=lambda chat: chat["updated"], reverse=True)[:3]
+    memories = session_memories()[:4]
+
+    if not (recent or memories):
+        return value
+
+    with st.container(key="homepanels", horizontal=True):
+
+        if recent:
+            with st.container(key="home_recent"):
+                st.markdown('<p class="ciel-home-h">Lanjutkan riset</p>', unsafe_allow_html=True)
+                for chat in recent:
+                    st.button(
+                        f"{short(chat['title'], 44)}  ·  {relative_time(chat['updated'], time.time())}",
+                        key=f"home_chat_{chat['id']}",
+                        on_click=select_chat,
+                        args=(chat["id"],),
+                        width="stretch",
+                    )
+
+        if memories:
+            with st.container(key="home_memory"):
+                rows = "".join(
+                    '<div class="ciel-home-row">'
+                    f"<span>{html.escape(short(str(item.get('text', '')), 60))}</span>"
+                    + (f"<em>{html.escape(str(item['category']))}</em>" if item.get("category") else "")
+                    + "</div>"
+                    for item in memories
+                )
+                st.markdown(f'<p class="ciel-home-h">Yang Ciel ingat</p>{rows}', unsafe_allow_html=True)
+
+    return value
 
 
 # ------------------------------------------------------------
 # RISET SKRIPSI (PRO)
 # ------------------------------------------------------------
 
+# Same value as beranda.RISET_KIND (tests/test_beranda.py checks it).
 RISET_KIND = "riset_skripsi"
 RISET_YEAR_SPANS = (3, 5, 10)
 MAX_RISET_TOPIC_CHARS = 300
@@ -3583,8 +3886,13 @@ def render_history_row(chat):
 
     with st.container(key=f"chatrow_{chat_id}", horizontal=True, gap="small"):
 
+        label = f"{short(chat['title'], 26)}  ·  {relative_time(chat.get('updated', time.time()), time.time())}"
+
+        if latest_riset([chat], chat.get("project_id")):
+            label += "  ·  Riset"
+
         st.button(
-            short(chat["title"], 30),
+            label,
             key=f"chatactive_{chat_id}" if is_active else f"chat_{chat_id}",
             on_click=select_chat,
             args=(chat_id,),
@@ -3621,6 +3929,69 @@ def render_history_row(chat):
                 on_click=delete_chat,
                 args=(chat_id,),
             )
+
+
+def format_elapsed(seconds):
+    minutes, rest = divmod(int(seconds), 60)
+    return f"{minutes} m {rest} d" if minutes else f"{rest} d"
+
+
+def render_chat_header(chat, summary):
+    counts = count_line(summary)
+    st.markdown(
+        '<div class="ciel-chathead">'
+        f"<h1>{html.escape(chat['title'])}</h1>"
+        + (f"<p>{html.escape(counts)}</p>" if counts else "")
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_rail(summary, memories, riset_message):
+    """Panel kanan: sumber, yang belum ketemu, ingatan, dan catatan riset."""
+
+    def section(title, count, body):
+        badge = f' <span class="ciel-count">{count}</span>' if count else ""
+        return f"<section><h2>{title}{badge}</h2>{body}</section>"
+
+    parts = []
+
+    if summary.groups:
+        items = []
+        for group in summary.groups:
+            if len(summary.groups) > 1:
+                items.append(f'<p class="ciel-rail-q">{html.escape(group.question)}</p>')
+            items.extend(
+                f'<a class="ciel-ri" href="{html.escape(source.url, quote=True)}" target="_blank" rel="noopener noreferrer">'
+                f"<b>{source.number}</b><span><strong>{html.escape(source.title)}</strong>"
+                f"<em>{html.escape(source.domain)}</em></span></a>"
+                for source in group.sources
+                if source.url.startswith(("https://", "http://"))
+            )
+        parts.append(section("Sumber di chat ini", summary.unique_count, "".join(items)))
+
+    if summary.guesses:
+        items = "".join(
+            f'<div class="ciel-gap"><i aria-hidden="true"></i><span>{html.escape(guess)}</span></div>'
+            for guess in summary.guesses
+        )
+        parts.append(section("Belum ketemu", len(summary.guesses), items))
+
+    if memories:
+        chips = "".join(
+            f'<span class="ciel-mc">{html.escape(short(str(item.get("text", "")), 40))}</span>'
+            for item in memories[:6]
+        )
+        parts.append(section("Yang Ciel ingat", len(memories), f"<div>{chips}</div>"))
+
+    if riset_message is not None:
+        rows = [("Mode", "Riset Skripsi"), ("Sumber di peta", str(summary.map_entries))]
+        if riset_message.get("elapsed"):
+            rows.append(("Waktu riset", format_elapsed(riset_message["elapsed"])))
+        facts = "".join(f"<div><dt>{label}</dt><dd>{html.escape(value)}</dd></div>" for label, value in rows)
+        parts.append(section("Riset ini", None, f'<dl class="ciel-kv">{facts}</dl>'))
+
+    st.markdown(f'<div class="ciel-rail">{"".join(parts)}</div>', unsafe_allow_html=True)
 
 
 def render_error(content, index, show_retry):
@@ -3809,7 +4180,9 @@ with st.sidebar:
     # --------------------------------------------------------
 
     st.markdown(
-        '<div class="ciel-eyebrow">Riwayat</div>',
+        '<div class="ciel-eyebrow">'
+        f'{"Chat di proyek ini" if active_project_id in st.session_state.projects else "Riwayat"}'
+        "</div>",
         unsafe_allow_html=True,
     )
 
@@ -4055,25 +4428,15 @@ with st.container(
     vertical_alignment="center",
 ):
 
-    project_chip = ""
-
-    if topbar_project:
-        project_chip = (
-            '<div class="ciel-status" data-state="ok">'
-            '<span class="ciel-dot" aria-hidden="true"></span>'
-            f"<span>Proyek <b>{html.escape(short(topbar_project['name'], 28))}</b></span>"
-            "</div>"
-        )
-
-    st.markdown(
-        '<div class="ciel-topbar">'
-        '<div class="ciel-brand">'
-        f'<span class="ciel-wordmark">{CIEL_MARK_SVG}Ciel</span>'
-        "</div>"
-        f"{project_chip}"
-        "</div>",
-        unsafe_allow_html=True,
+    # Crumb, as in the artifact: where you are, not the brand (the wordmark
+    # lives in the sidebar head).
+    crumb = (
+        f"Proyek · <b>{html.escape(short(topbar_project['name'], 40))}</b>"
+        if topbar_project
+        else "Semua chat"
     )
+
+    st.markdown(f'<p class="ciel-crumb">{crumb}</p>', unsafe_allow_html=True)
 
     with st.container(
         key="topnav",
@@ -4128,6 +4491,7 @@ if current_view() == "pricing":
         rate_limits=(RATE_LIMIT_PER_HOUR, RATE_LIMIT_PER_HOUR_LOGIN),
         memory_enabled=AUTH_ENABLED,
         pro_action=render_pro_action if PAYMENTS_ENABLED else None,
+        history_saved=CHAT_STORE is not None,
     )
     st.stop()
 
@@ -4155,78 +4519,37 @@ if current_view() == "login":
             else None
         ),
         history_saved=CHAT_STORE is not None,
+        on_privacy=show_privacy,
     )
     st.stop()
 
 
 # ============================================================
-# CHAT INPUT
+# BERANDA / CHAT INPUT
 # ============================================================
-# Dipanggil sebelum riwayat dirender agar empty state langsung hilang
-# saat pesan pertama dikirim. Posisi visual composer tetap di bawah.
-
-chat_value = st.chat_input(
-    "Tanyakan sesuatu kepada Ciel...",
-    accept_file="multiple",
-    file_type=ALLOWED_FILE_TYPES + ALLOWED_IMAGE_TYPES,
-    max_chars=MAX_MESSAGE_CHARS,
-)
-
-if chat_value:
-
-    typed_text, typed_files = unpack_chat_input(chat_value)
-
-    # max_chars hanya dicek di browser; permintaan buatan sendiri bisa melewatinya.
-    if len(typed_text) > MAX_MESSAGE_CHARS:
-        security_event("message_too_long", length=len(typed_text))
-        st.toast(
-            "Pesan terlalu panjang (maks. 10.000 karakter). Lampirkan teks panjang sebagai file.",
-            icon=":material/error:",
-        )
-
-    elif typed_text.strip() or typed_files:
-        st.session_state.pending = make_pending(typed_text, typed_files)
-
-pending_request = st.session_state.pending
-st.session_state.pending = None
-
-
-# ============================================================
-# EMPTY STATE
-# ============================================================
+# Tanpa pesan: Beranda, dengan composer di tengah halaman. Setelah pesan
+# pertama terkirim, Beranda dikosongkan di run yang sama sehingga chat
+# langsung tampil; dengan pesan, composer berada di bawah seperti biasa.
 
 messages = current_messages()
 
-if not messages and not pending_request:
+if not messages and not st.session_state.pending:
 
-    with st.container(key="emptystate"):
+    beranda_slot = st.empty()
 
-        st.markdown(
-            '<div class="ciel-hero">'
-            "<h1>Kalau sumbernya tidak ada, Ciel bilang tidak tahu.</h1>"
-            "<p>Teman riset dan belajar yang menjawab dari sumber dan data "
-            "yang bisa kamu cek. Di mode analisis, setiap poin diberi label: "
-            "terverifikasi dari data, atau masih dugaan.</p>"
-            "</div>"
-            f"{SAMPLE_ANSWER_HTML}"
-            '<p class="ciel-hint">Tulis &ldquo;analisis&rdquo; di awal pertanyaan '
-            "untuk format ini. Lampirkan CSV, file teks, atau foto lewat tombol + "
-            "di kotak pesan.</p>",
-            unsafe_allow_html=True,
-        )
+    with beranda_slot.container(key="beranda"):
+        chat_value = render_beranda()
 
-        st.caption("Coba tanyakan")
+    if chat_value:
+        beranda_slot.empty()
 
-        with st.container(key="starters"):
+else:
+    chat_value = composer("Tanyakan sesuatu kepada Ciel...")
 
-            for number, starter in enumerate(STARTER_PROMPTS):
+take_composer_value(chat_value)
 
-                st.button(
-                    starter,
-                    key=f"starter_{number}",
-                    on_click=queue_prompt,
-                    args=(starter,),
-                )
+pending_request = st.session_state.pending
+st.session_state.pending = None
 
 
 # ============================================================
@@ -4234,10 +4557,26 @@ if not messages and not pending_request:
 # ============================================================
 
 last_index = len(messages) - 1
+convo = st.container()
+
+if messages:
+
+    summary = summarize(messages)
+    rail_memories = session_memories()
+    riset_messages = [m for m in messages if m.get("kind") == RISET_KIND and not m.get("error")]
+
+    # Tiga kolom (sidebar, percakapan, panel kanan) hanya jika panelnya berisi.
+    if summary.groups or summary.guesses or rail_memories or riset_messages:
+        convo, rail = st.columns([7, 3], gap="large")
+        with rail, st.container(key="rail"):
+            render_rail(summary, rail_memories, riset_messages[-1] if riset_messages else None)
+
+    with convo:
+        render_chat_header(active_chat(), summary)
 
 for index, message in enumerate(messages):
 
-    with st.chat_message(
+    with convo, st.chat_message(
         message["role"],
         avatar=AVATARS.get(message["role"]),
     ):
@@ -4258,7 +4597,11 @@ for index, message in enumerate(messages):
 
             # Riwayat lama (Supabase) dibersihkan lagi saat ditampilkan.
             content = strip_markdown_images(message["content"])[0]
-            st.markdown(content)
+            st.markdown(answer_markdown(content))
+            sources_html = source_buttons_html(split_sources(content)[1])
+
+            if sources_html:
+                st.markdown(sources_html, unsafe_allow_html=True)
 
             if message.get("kind") == RISET_KIND:
 
@@ -4322,6 +4665,7 @@ if pending_request:
     # CHAT (BUAT BARU JIKA BELUM ADA)
     # --------------------------------------------------------
 
+    started = time.time()
     chat = active_chat()
 
     if chat is None:
@@ -4367,7 +4711,7 @@ if pending_request:
     chat["messages"].append(user_message)
     chat["updated"] = time.time()
 
-    with st.chat_message("user", avatar=AVATARS["user"]):
+    with convo, st.chat_message("user", avatar=AVATARS["user"]):
 
         render_user(user_message)
 
@@ -4375,7 +4719,7 @@ if pending_request:
     # ASSISTANT MESSAGE
     # --------------------------------------------------------
 
-    with st.chat_message("assistant", avatar=AVATARS["assistant"]):
+    with convo, st.chat_message("assistant", avatar=AVATARS["assistant"]):
 
         working_slot = st.empty()
 
@@ -4492,6 +4836,7 @@ if pending_request:
         "role": "assistant",
         "content": answer,
         "error": failed,
+        "elapsed": int(time.time() - started),
     }
 
     # Penanda hasil Riset Skripsi: tombol Unduh DOCX dan konteks pertanyaan lanjutan.

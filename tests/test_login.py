@@ -72,7 +72,7 @@ class LoginPageTest(unittest.TestCase):
         # The first version showed a disabled Google button and a disabled
         # email/password form. Only working controls are shown now.
         at = run_app("login")
-        self.assertEqual([b.key for b in at.main.button if b.key.startswith("login_")], ["login_skip"])
+        self.assertEqual([b.key for b in at.main.button if b.key.startswith("login_")], ["login_skip", "login_privacy"])
         self.assertEqual(len(at.main.text_input), 0)
         self.assertFalse(any(b.disabled for b in at.main.button))
         self.assertEqual(at.button(key="login_skip").proto.type, "primary")
@@ -88,6 +88,48 @@ class LoginPageTest(unittest.TestCase):
         at = AppTest.from_function(page).run()
         self.assertFalse(at.button(key="login_google").disabled)
         self.assertEqual(at.button(key="login_skip").proto.type, "secondary")
+
+    def render(self, **kwargs):
+        sys.path.insert(0, str(ROOT))
+        from streamlit.testing.v1 import AppTest
+
+        def page(kwargs):
+            import login
+            login.render_login(on_google=lambda: None, on_back=lambda: None, **kwargs)
+
+        return AppTest.from_function(page, kwargs={"kwargs": kwargs}).run()
+
+    def test_two_column_layout_with_example_project(self):
+        at = self.render(auth_enabled=True)
+        text = page_text(at)
+        self.assertEqual(len(at.columns), 2)
+        self.assertIn("<h1>Masuk ke Ciel</h1>", text)
+        self.assertIn("Begini proyekmu nanti", text)
+        self.assertIn("Contoh proyek. Isinya mulai kosong, lalu keisi sendiri sambil kamu ngobrol sama Ciel.", text)
+        self.assertNotIn("Sumber tersimpan", text)
+
+    def test_google_button_copy_and_scope_note(self):
+        at = self.render(auth_enabled=True)
+        self.assertEqual(at.button(key="login_google").label, "Lanjutkan dengan Google")
+        self.assertIn("Ciel cuma minta nama, email, dan foto profil dari akun Google kamu.", page_text(at))
+
+    def test_intro_only_promises_saved_history_when_it_is_saved(self):
+        self.assertIn("Riwayat chat dan yang Ciel ingat ikut tersimpan di akunmu.", page_text(self.render(history_saved=True)))
+        self.assertNotIn("Riwayat chat", page_text(self.render(history_saved=False)).split("</h1>")[1].split("</p>")[0])
+
+    def test_privacy_link_and_no_terms_link(self):
+        sys.path.insert(0, str(ROOT))
+        from streamlit.testing.v1 import AppTest
+
+        def page():
+            import login
+            import streamlit as st
+            login.render_login(on_back=lambda: None, on_privacy=lambda: st.session_state.update(privacy_opened=True))
+
+        at = AppTest.from_function(page).run()
+        self.assertNotIn("Syarat layanan", page_text(at))
+        at.button(key="login_privacy").click().run()
+        self.assertTrue(at.session_state["privacy_opened"])
 
     def test_continue_without_signing_in_returns_to_chat(self):
         at = run_app("login")
@@ -118,6 +160,15 @@ class TopBarNavTest(unittest.TestCase):
             self.assertIn(label, sidebar_labels)
         for label in ("New chat", "All chats", "Clear chat"):
             self.assertNotIn(label, sidebar_labels)
+
+    def test_top_bar_shows_the_crumb(self):
+        at = run_app()
+        self.assertIn('<p class="ciel-crumb">Semua chat</p>', page_text(at))
+        with patch.dict(os.environ, ENV):
+            at.session_state.projects = {"p1": {"id": "p1", "name": "Skripsi <ojol>", "created": 0, "files": []}}
+            at.session_state.active_project = "p1"
+            at.run()
+        self.assertIn('<p class="ciel-crumb">Proyek · <b>Skripsi &lt;ojol&gt;</b></p>', page_text(at))
 
     def test_sign_in_button_opens_the_login_page(self):
         at = run_app()

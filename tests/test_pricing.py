@@ -72,9 +72,26 @@ class PricingHonestyTest(unittest.TestCase):
     def test_free_plan_extras_follow_the_app_config(self):
         self.assertEqual(
             pricing.free_plan_extras((5, 50), memory_enabled=True),
-            ("Long-term memory pribadi (perlu login)", "5 pesan/jam tanpa login, 50 pesan/jam setelah login"),
+            ("Long-term memory pribadi (perlu login)", "5 pesan/jam tanpa login, 50 pesan/jam setelah login",
+             "Riwayat chat selama sesi"),
         )
-        self.assertEqual(pricing.free_plan_extras((5, 50), memory_enabled=False), ("5 pesan/jam",))
+        self.assertEqual(pricing.free_plan_extras((5, 50), memory_enabled=False), ("5 pesan/jam", "Riwayat chat selama sesi"))
+
+    def test_history_line_follows_where_history_is_saved(self):
+        # Production saves signed-in history in Supabase; "selama sesi" was
+        # only true before that.
+        self.assertNotIn("Riwayat chat selama sesi", pricing.PLANS[0]["features"])
+        self.assertIn("Riwayat chat tersimpan di akun setelah masuk",
+                      pricing.free_plan_extras((10, 60), True, history_saved=True))
+        self.assertIn("Riwayat chat selama sesi", pricing.free_plan_extras((10, 60), True, history_saved=False))
+        saved = dict(pricing.faq_items(True, history_saved=True))["Apa bedanya riwayat chat dan long-term memory?"]
+        self.assertIn("Setelah masuk, riwayat chat dan proyek tersimpan di akunmu dan bisa kamu hapus.", saved)
+        self.assertNotIn("selama sesi browser", saved)
+
+    def test_app_passes_where_history_is_saved(self):
+        app = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
+        pricing_call = app.split("render_pricing(", 1)[1].split("st.stop()", 1)[0]
+        self.assertIn("history_saved=CHAT_STORE is not None", pricing_call)
 
     def test_app_passes_its_limits_and_login_state(self):
         app = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")

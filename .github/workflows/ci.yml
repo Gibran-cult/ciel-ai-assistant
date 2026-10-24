@@ -115,6 +115,10 @@ jobs:
             tests.test_payments \
             tests.test_keep_alive \
             tests.test_theme \
+            tests.test_chat_sources \
+            tests.test_beranda \
+            tests.test_beranda_app \
+            tests.test_chat_view \
             tests.test_pdf_attachments
 
       # Node that comes with the runner (no extra setup): the Edge Function's
