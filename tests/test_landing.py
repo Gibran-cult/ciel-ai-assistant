@@ -68,10 +68,19 @@ class LandingContentTest(unittest.TestCase):
     def test_no_placeholders_or_contact_stubs(self):
         source = page()
         self.assertNotRegex(visible_text(source), r"\[(?:[A-Z@]|YOUR|Syarat|Kebijakan)[^\]]*\]")
-        # TikTok and Instagram stay out until Ciel has accounts.
-        for word in ("TikTok", "Instagram"):
-            with self.subTest(word=word):
-                self.assertNotIn(word, source)
+
+    def test_social_links_are_ciels_accounts(self):
+        # Ciel created these accounts on 2026-10-24.
+        social = {link for link in re.findall(r'href="([^"]+)"', page()) if "instagram.com" in link or "tiktok.com" in link}
+        self.assertEqual(social, {"https://www.instagram.com/ciel_ai.1/", "https://www.tiktok.com/@ciel_ai.1"})
+        for link in social:
+            anchor = re.search(rf'<a\b[^>]*href="{re.escape(link)}"[^>]*>', page()).group(0)
+            with self.subTest(link=link):
+                self.assertIn('rel="noopener noreferrer"', anchor)
+                self.assertIn('target="_blank"', anchor)
+        text = visible_text(page())
+        self.assertIn("Instagram @ciel_ai.1", text)
+        self.assertIn("TikTok @ciel_ai.1", text)
 
     def test_contact_email_is_ciels_address(self):
         # Ciel gave this address for the footer on 2026-10-24; no other mailto.
