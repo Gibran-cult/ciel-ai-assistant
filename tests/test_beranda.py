@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from beranda import RISET_KIND, TEMPLATES, greeting, latest_riset, relative_time, templates_for
+from beranda import RISET_KIND, TEMPLATES, greeting, has_riset_map, latest_riset, relative_time, templates_for
 
 
 WIB = ZoneInfo("Asia/Jakarta")
@@ -63,6 +63,14 @@ class LatestRisetTest(unittest.TestCase):
         chat, index = latest_riset(chats, None)
         self.assertEqual((chat["id"], index), ("b", 3))
         self.assertIsNone(latest_riset(chats, "p2"))
+
+    def test_has_riset_map_counts_archived_chats(self):
+        archived = self.chat("a", None, 10, [RISET_KIND], archived=True)
+        self.assertTrue(has_riset_map(archived))
+        self.assertFalse(has_riset_map(self.chat("b", None, 10, [None])))
+        failed = self.chat("c", None, 10, ["error"])
+        failed["messages"][1]["kind"] = RISET_KIND
+        self.assertFalse(has_riset_map(failed))
 
     def test_app_uses_the_same_kind(self):
         from pathlib import Path

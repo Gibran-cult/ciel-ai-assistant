@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = ROOT / "app.py"
 sys.path.insert(0, str(ROOT))
 
-from chat_sources import Source, answer_markdown, count_line, source_buttons_html, summarize  # noqa: E402
+from chat_sources import Source, answer_parts, count_line, source_buttons_html, summarize  # noqa: E402
 from tests.test_chat_sources import KOTO_SUMBER, RISET_TEXT, VASWANI_SUMBER  # noqa: E402
 from tests.test_chat_store import ENV, SIGNED_IN, Response  # noqa: E402
 from tests.test_theme import app_constants  # noqa: E402
@@ -20,28 +20,39 @@ from tests.test_theme import app_constants  # noqa: E402
 
 class AnswerDisplayTest(unittest.TestCase):
 
-    def test_answer_markdown_moves_sumber_to_buttons_and_keeps_leftover(self):
+    def test_sumber_moves_to_buttons_and_leftover_shows_below_them(self):
+        # Spec 4: URL-less entries and the guard note stay as text *under*
+        # the source buttons.
         text = ("Ringkasan.\n\nSumber:\n[1] Web — Judul — https://x.org/a\n[2] File lampiran — catatan.pdf\n\n"
                 "(1 sumber dihapus karena tidak ada di hasil pencarian.)")
-        md = answer_markdown(text)
-        self.assertTrue(md.startswith("Ringkasan."))
-        self.assertNotIn("https://x.org/a", md)
-        self.assertIn("[2] File lampiran — catatan.pdf", md)
-        self.assertIn("(1 sumber dihapus karena tidak ada di hasil pencarian.)", md)
+        before, sources, after = answer_parts(text)
+        self.assertEqual(before, "Ringkasan.")
+        self.assertEqual([s.url for s in sources], ["https://x.org/a"])
+        self.assertNotIn("https://x.org/a", before + after)
+        self.assertIn("[2] File lampiran — catatan.pdf", after)
+        self.assertIn("(1 sumber dihapus karena tidak ada di hasil pencarian.)", after)
 
     def test_sumber_without_any_link_stays_as_written(self):
         text = "Isi.\n\nSumber:\n[1] File lampiran — catatan.pdf"
-        self.assertEqual(answer_markdown(text), text)
+        self.assertEqual(answer_parts(text), (text, [], ""))
 
     def test_daftar_pustaka_stays_in_the_text(self):
-        self.assertIn("## Daftar Pustaka", answer_markdown(RISET_TEXT))
-        self.assertIn("https://jurnal.ugm.ac.id/jbs/article/view/123", answer_markdown(RISET_TEXT))
+        before, sources, after = answer_parts(RISET_TEXT)
+        self.assertIn("## Daftar Pustaka", before)
+        self.assertIn("https://jurnal.ugm.ac.id/jbs/article/view/123", before)
+        self.assertEqual((sources, after), ([], ""))
 
     def test_labels_become_badges_without_html(self):
-        md = answer_markdown("1. Geometri lemah. [Dugaan]\n2. Rata 78. [Terverifikasi]")
-        self.assertIn(":orange-badge[Dugaan]", md)
-        self.assertIn(":blue-badge[Terverifikasi]", md)
-        self.assertNotIn("<span", md)
+        before, _, _ = answer_parts("1. Geometri lemah. [Dugaan]\n2. Rata 78. [Terverifikasi]")
+        self.assertIn(":orange-badge[Dugaan]", before)
+        self.assertIn(":blue-badge[Terverifikasi]", before)
+        self.assertNotIn("<span", before)
+        _, _, after = answer_parts("Isi.\n\nSumber: [1] A — B — https://a.org\n\nPoin lanjutan. [Dugaan]")
+        self.assertIn(":orange-badge[Dugaan]", after)
+
+    def test_source_pills_have_a_readable_name(self):
+        html_out = source_buttons_html([Source(2, "IndoNLU", "arxiv.org", "https://arxiv.org/abs/2009.05387")])
+        self.assertIn('aria-label="Sumber 2: IndoNLU, arxiv.org (buka di tab baru)"', html_out)
 
     def test_source_html_is_escaped(self):
         html_out = source_buttons_html([Source(1, '<img src=x onerror=1>', "evil.org", "https://evil.org/a?b=<c>")])
@@ -114,9 +125,24 @@ class ChatPageTest(unittest.TestCase):
     def text(self, at):
         return " ".join(md.value for md in at.markdown)
 
-    def rail(self, at):
-        found = [c for c in at.main.children.values() if getattr(c, "key", None) == "rail"]
-        return found
+    def test_hostile_sources_render_as_escaped_text_end_to_end(self):
+        at = self.start([
+            {"role": "user", "content": "q"},
+            {"role": "assistant", "error": False, "content": (
+                "Isi.\n\nSumber: [1] Evil — <script>alert(1)</script> — javascript:alert(1) "
+                "[2] Web — <img src=x onerror=alert(2)> — https://ok.org/a")},
+            {"role": "user", "content": "Riset Skripsi: x"},
+            {"role": "assistant", "error": False, "kind": "riset_skripsi", "topic": "x", "content": (
+                "# Peta\n\n## Daftar Pustaka\n\n[1] A. (2020). *<b onmouseover=alert(3)>T</b>*. https://ok.org/b")},
+        ])
+        html_parts = [md.value for md in at.markdown if "ciel-src" in md.value or "ciel-rail" in md.value]
+        self.assertTrue(html_parts)
+        for part in html_parts:
+            with self.subTest(part=part[:60]):
+                self.assertNotIn("<script", part)
+                self.assertNotIn("<img", part)
+                self.assertNotIn("<b onmouseover", part)
+                self.assertNotIn('href="javascript:', part)
 
     def test_rail_lists_sources_guesses_and_riset_facts(self):
         at = self.start([

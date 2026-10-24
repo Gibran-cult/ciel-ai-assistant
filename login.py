@@ -109,7 +109,7 @@ PEEK_HTML = (
     "</dl>"
     '<ul class="ciel-why">'
     "<li>Format sitasi APA 7<span>diingat</span></li>"
-    "<li>Bab 2 dikumpulin 28 Oktober<span>diingat</span></li>"
+    "<li>Data ulasan diambil dari Play Store<span>diingat</span></li>"
     "<li>Lebih ngerti kalau dikasih contoh angka<span>diingat</span></li>"
     "</ul>"
     "</div>"
@@ -172,11 +172,12 @@ def render_login(auth_enabled=False, on_google=None, on_back=None, rate_limits=(
             st.button("Kembali ke chat", key="login_tochat", type="primary", on_click=on_back)
         return
 
-    intro = (
-        "Satu akun Google buat semua proyekmu. Riwayat chat dan yang Ciel ingat ikut tersimpan di akunmu."
-        if history_saved
-        else "Satu akun Google buat semua proyekmu, dan Ciel bisa ingat konteks penting dari percakapanmu."
-    )
+    if not auth_enabled:
+        intro = "Masuk belum tersedia di deployment ini, tapi kamu tetap bisa chat tanpa masuk."
+    elif history_saved:
+        intro = "Satu akun Google buat semua proyekmu. Riwayat chat dan yang Ciel ingat ikut tersimpan di akunmu."
+    else:
+        intro = "Satu akun Google buat semua proyekmu, dan Ciel bisa ingat konteks penting dari percakapanmu."
 
     with st.container(key="loginpage"):
 

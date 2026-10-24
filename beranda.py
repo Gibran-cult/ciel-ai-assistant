@@ -48,6 +48,11 @@ def templates_for(has_files, has_map, riset_enabled, writer_enabled):
     return [template for template in TEMPLATES if template.key not in hidden]
 
 
+def has_riset_map(chat):
+    """True when the chat holds a finished Riset Skripsi map (archived chats too)."""
+    return any(m.get("kind") == RISET_KIND and not m.get("error") for m in chat.get("messages", []))
+
+
 def latest_riset(chats, project_id):
     """(chat, indeks pesan) peta Riset Skripsi terbaru di konteks ini, atau None.
 
