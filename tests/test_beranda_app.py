@@ -204,6 +204,9 @@ class BerandaAppTest(unittest.TestCase):
         self.assertIn("Selengkapnya", summary)
         self.assertNotIn("…", summary)
         self.assertIn("Kalimat lanjutan nomor 29 tentang materi limit dan turunan.", html_out)
+        # Once open, "Lebih sedikit" closes it again from the end of the text.
+        self.assertRegex(html_out, r'nomor 29 tentang materi limit dan turunan\. <button type="button" class="ciel-home-less">Lebih sedikit</button></span></details>')
+        self.assertEqual(html_out.count('class="ciel-home-less"'), 1)
         self.assertIn("<span>Format sitasi APA 7</span>", html_out)
 
     def test_very_long_first_questions_fall_back_to_the_title(self):
