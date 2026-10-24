@@ -14,6 +14,7 @@ import pricing  # noqa: E402
 LANDING = ROOT / "landing" / "index.html"
 PAGES = ROOT / ".github" / "workflows" / "pages.yml"
 APP = "https://ciel-ai-assistant-hywsyrnfpyhxc5e9pjgaho.streamlit.app/"
+CONTACT = "gibranahmadn6@gmail.com"
 
 
 def page():
@@ -61,15 +62,22 @@ class LandingContentTest(unittest.TestCase):
                     self.assertEqual(match.group(1), f"{APP}?page=login")
         for link in re.findall(r'<a\b[^>]*href="([^"]+)"', page()):
             with self.subTest(link=link):
-                self.assertRegex(link, r"^(#|https://)")
+                self.assertRegex(link, r"^(#|https://|mailto:)")
                 self.assertNotIn("streamlit.app", link.replace(APP, ""))
 
     def test_no_placeholders_or_contact_stubs(self):
         source = page()
         self.assertNotRegex(visible_text(source), r"\[(?:[A-Z@]|YOUR|Syarat|Kebijakan)[^\]]*\]")
-        for word in ("TikTok", "Instagram", "mailto:"):
+        # TikTok and Instagram stay out until Ciel has accounts.
+        for word in ("TikTok", "Instagram"):
             with self.subTest(word=word):
                 self.assertNotIn(word, source)
+
+    def test_contact_email_is_ciels_address(self):
+        # Ciel gave this address for the footer on 2026-10-24; no other mailto.
+        mailtos = set(re.findall(r'href="(mailto:[^"]+)"', page()))
+        self.assertEqual(mailtos, {f"mailto:{CONTACT}"})
+        self.assertIn(CONTACT, visible_text(page()))
 
     def test_only_the_real_test_date(self):
         text = visible_text(page())
