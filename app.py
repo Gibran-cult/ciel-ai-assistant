@@ -624,6 +624,13 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 }
 .ciel-home-row span { white-space: normal; overflow-wrap: anywhere; line-height: 1.45; }
 .ciel-home-row em { font-style: normal; font-size: 0.75rem; color: var(--c-faint); white-space: nowrap; }
+/* Long memories: whole sentences first, the rest one click away. */
+details.ciel-home-more { display: block; }
+.ciel-home-more summary { cursor: pointer; list-style: none; line-height: 1.45; overflow-wrap: anywhere; }
+.ciel-home-more summary::-webkit-details-marker { display: none; }
+.ciel-home-more summary b { font-weight: 500; color: var(--c-accent); white-space: nowrap; }
+.ciel-home-more[open] summary b { display: none; }
+.ciel-home-more > span { display: block; margin-top: 0.4rem; }
 @media (max-width: 640px) {
     .st-key-beranda { margin-top: 1rem; }
     .st-key-homepanels { flex-direction: column; }
@@ -3426,6 +3433,43 @@ def take_composer_value(value):
 
 
 FULL_LABEL_LIMIT = 200
+MEMORY_PREVIEW_LIMIT = 220
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+def sentence_preview(text, limit=MEMORY_PREVIEW_LIMIT):
+    """(whole sentences up to about `limit` characters, the rest).
+
+    Never cuts a sentence: a first sentence longer than `limit` is kept whole.
+    Defined here, not in beranda.py: app.py is re-run on every deploy, while
+    Streamlit Cloud once kept a stale beranda module and the import failed.
+    """
+
+    text = " ".join(str(text or "").split())
+    if len(text) <= limit:
+        return text, ""
+    sentences = SENTENCE_END.split(text)
+    preview = sentences[0]
+    count = 1
+    while count < len(sentences) and len(preview) + 1 + len(sentences[count]) <= limit:
+        preview = f"{preview} {sentences[count]}"
+        count += 1
+    return preview, " ".join(sentences[count:])
+
+
+def memory_row_html(item):
+    """One memory: short ones whole; long ones open with whole sentences."""
+
+    preview, rest = sentence_preview(item.get("text", ""))
+    category = f"<em>{html.escape(str(item['category']))}</em>" if item.get("category") else ""
+    if not rest:
+        return f'<div class="ciel-home-row"><span>{html.escape(preview)}</span>{category}</div>'
+    return (
+        '<details class="ciel-home-row ciel-home-more">'
+        f"<summary>{html.escape(preview)} <b>Selengkapnya</b></summary>"
+        f"<span>{html.escape(rest)}</span>"
+        "</details>"
+    )
 
 
 def chat_label(chat):
@@ -3507,13 +3551,7 @@ def render_beranda():
 
         if memories:
             with st.container(key="home_memory"):
-                rows = "".join(
-                    '<div class="ciel-home-row">'
-                    f"<span>{html.escape(str(item.get('text', '')))}</span>"
-                    + (f"<em>{html.escape(str(item['category']))}</em>" if item.get("category") else "")
-                    + "</div>"
-                    for item in memories
-                )
+                rows = "".join(memory_row_html(item) for item in memories)
                 st.markdown(f'<p class="ciel-home-h">Yang Ciel ingat</p>{rows}', unsafe_allow_html=True)
 
     return value
