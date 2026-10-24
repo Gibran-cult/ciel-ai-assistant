@@ -940,11 +940,19 @@ body:has(.st-key-rail) [data-testid="stBottomBlockContainer"] { max-width: 78rem
     border-color: transparent;
     color: var(--c-text);
 }
-.st-key-history .stButton > button p,
 .st-key-projects .stButton > button p {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+/* History rows show whole titles: they wrap, left aligned, instead of being cut. */
+.st-key-history .stButton > button { height: auto; padding-top: 0.45rem; padding-bottom: 0.45rem; text-align: left; }
+.st-key-history .stButton > button > div { justify-content: flex-start; min-width: 0; }
+.st-key-history .stButton > button p {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: left;
+    line-height: 1.4;
 }
 /* History row: the title fills the row; the options menu stays small and
    always visible (no hover-only reveal, which touch screens can't reach). */
@@ -3473,15 +3481,19 @@ def memory_row_html(item):
 
 
 def chat_label(chat):
-    """The chat's first question in full when it is not too long, else its title.
+    """The chat's name as a whole sentence.
 
-    Titles are cut at 48 characters when a chat is created; the Beranda shows
-    whole sentences instead.
+    Titles are cut at 48 characters (ending in "…") when a chat is created; a
+    cut title is replaced by the chat's first question when that question is
+    not too long. Uncut titles stay as they are.
     """
 
+    title = chat["title"]
+    if not title.endswith("…"):
+        return title
     first = next((m.get("content") for m in chat.get("messages", []) if m.get("role") == "user"), "")
     first = " ".join(str(first or "").split())
-    return first if first and len(first) <= FULL_LABEL_LIMIT else chat["title"]
+    return first if first and len(first) <= FULL_LABEL_LIMIT else title
 
 
 def render_beranda():
@@ -3988,8 +4000,8 @@ def render_history_row(chat):
 
     with st.container(key=f"chatrow_{chat_id}", horizontal=True, gap="small"):
 
-        # A short title keeps the time (and the Riset marker) visible in the row.
-        label = f"{short(chat['title'], 22)}  ·  {relative_time(chat.get('updated', time.time()), time.time())}"
+        # Whole title; the row wraps instead of cutting it (see the CSS).
+        label = f"{chat_label(chat)}  ·  {relative_time(chat.get('updated', time.time()), time.time())}"
 
         if has_riset_map(chat):
             label += "  ·  Riset"
