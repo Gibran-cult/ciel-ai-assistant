@@ -259,6 +259,21 @@ class SidebarHistoryTest(unittest.TestCase):
         (label,) = [b.label for b in at.sidebar.button if b.key.startswith(("chat_", "chatactive_"))]
         self.assertRegex(label, r"^Belajar limit  ·  (\d{2}\.\d{2}|Kemarin|Sen|Sel|Rab|Kam|Jum|Sab|Min|\d{1,2} \w{3}( \d{4})?)$")
 
+    def test_history_rows_show_whole_titles(self):
+        # Seen on the live site (2026-10-24): "Riset Skripsi: Pengar… · Sel · …".
+        # A title cut at creation is replaced by the chat's first question.
+        question = "Riset Skripsi: Pengaruh media sosial terhadap minat beli mahasiswa"
+        chat = sample_chat("c1", title=question[:47] + "…")
+        chat["messages"][0]["content"] = question
+        at = self.run_app(chats={"c1": chat, "c2": sample_chat("c2", title="Statistik")})
+        labels = [b.label for b in at.sidebar.button if b.key.startswith(("chat_", "chatactive_"))]
+        self.assertTrue(any(label.startswith(question + "  ·  ") for label in labels), labels)
+        self.assertTrue(any(label.startswith("Statistik  ·  ") for label in labels), labels)
+        css = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
+        rule = css.split(".st-key-history .stButton > button p {", 1)[1].split("}", 1)[0]
+        self.assertIn("white-space: normal;", rule)
+        self.assertNotIn("ellipsis", rule)
+
     def test_archive_restore_and_delete_without_login(self):
         at = self.run_app(chats={"c1": sample_chat("c1"), "c2": sample_chat("c2", title="Statistik")})
         self.assertFalse(at.exception)
