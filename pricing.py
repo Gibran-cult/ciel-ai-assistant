@@ -34,7 +34,6 @@ PLANS = (
             "Analisis angka dari file CSV/TSV",
             "Lampiran foto, PDF, dan file teks",
             "Proyek dengan file konteks bersama",
-            "Riwayat chat selama sesi",
         ),
         "cta": "Mulai chat",
     },
@@ -70,7 +69,7 @@ PLANS = (
 )
 
 
-def free_plan_extras(rate_limits, memory_enabled):
+def free_plan_extras(rate_limits, memory_enabled, history_saved=False):
     """Baris fitur Gratis yang bergantung pada konfigurasi app."""
     anonymous, signed_in = rate_limits
     extras = []
@@ -81,12 +80,17 @@ def free_plan_extras(rate_limits, memory_enabled):
     else:
         extras.append(f"{anonymous} pesan/jam")
 
+    extras.append("Riwayat chat tersimpan di akun setelah masuk" if history_saved else "Riwayat chat selama sesi")
     return tuple(extras)
 
 
-def faq_items(memory_enabled, pro_for_sale=False):
+def faq_items(memory_enabled, pro_for_sale=False, history_saved=False):
     memory_answer = (
-        "Riwayat chat di sidebar hanya bertahan selama sesi browser. "
+        "Setelah masuk, riwayat chat dan proyek tersimpan di akunmu dan bisa kamu hapus. "
+        "Long-term memory menyimpan konteks penting di backend Ciel dan hanya bisa "
+        "dibaca akunmu sendiri."
+        if memory_enabled and history_saved
+        else "Riwayat chat di sidebar hanya bertahan selama sesi browser. "
         "Long-term memory menyimpan konteks penting di backend Ciel sehingga "
         "bisa dipakai lagi di percakapan berikutnya. Memory hanya aktif "
         "setelah login dan hanya bisa dibaca oleh akunmu sendiri."
@@ -321,7 +325,7 @@ def _planned_html(plans):
     )
 
 
-def render_pricing(contact_url=None, on_start_chat=None, rate_limits=(20, 60), memory_enabled=False, pro_action=None):
+def render_pricing(contact_url=None, on_start_chat=None, rate_limits=(20, 60), memory_enabled=False, pro_action=None, history_saved=False):
     """Render halaman harga.
 
     contact_url: tautan https/mailto untuk yang tertarik dengan paket berbayar.
@@ -353,7 +357,7 @@ def render_pricing(contact_url=None, on_start_chat=None, rate_limits=(20, 60), m
 
     with st.container(key="plan_free"):
         st.markdown(
-            _free_plan_html(free, free_plan_extras(rate_limits, memory_enabled)),
+            _free_plan_html(free, free_plan_extras(rate_limits, memory_enabled, history_saved)),
             unsafe_allow_html=True,
         )
         st.button(free["cta"], key="cta_free", type="primary", on_click=on_start_chat)
@@ -382,7 +386,7 @@ def render_pricing(contact_url=None, on_start_chat=None, rate_limits=(20, 60), m
 
     faq_html = "".join(
         f"<div><strong>{html.escape(q)}</strong><span>{html.escape(a)}</span></div>"
-        for q, a in faq_items(memory_enabled, pro_for_sale=bool(pro_action))
+        for q, a in faq_items(memory_enabled, pro_for_sale=bool(pro_action), history_saved=history_saved)
     )
 
     st.markdown(

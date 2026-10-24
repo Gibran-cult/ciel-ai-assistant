@@ -1,10 +1,11 @@
 [theme]
-# Keep in step with the --c-* tokens in CIEL_CSS (app.py).
-base = "light"
-primaryColor = "#203a72"
-backgroundColor = "#f3f2ee"
-secondaryBackgroundColor = "#e9e7e1"
-textColor = "#1c1b19"
+# Keep in step with the dark --c-* tokens in CIEL_CSS (app.py): dark is the
+# default theme, so Streamlit's own first paint must already be dark.
+base = "dark"
+primaryColor = "#9db3e8"
+backgroundColor = "#0e0d0c"
+secondaryBackgroundColor = "#181715"
+textColor = "#f4f4f2"
 
 [server]
 # MB per file. Images are capped at 5 MB and text at 40,000 characters in

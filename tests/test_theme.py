@@ -40,18 +40,28 @@ class ThemeTokensTest(unittest.TestCase):
     def setUpClass(cls):
         constants = app_constants()
         cls.css = constants["CIEL_CSS"]
-        cls.light = tokens(cls.css.split(":root {", 1)[1].split("}", 1)[0])
-        cls.dark = tokens(constants["DARK_TOKENS"])
+        cls.dark = tokens(cls.css.split(":root {", 1)[1].split("}", 1)[0])
+        cls.light = tokens(constants["LIGHT_TOKENS"])
 
-    def test_every_light_colour_token_has_a_dark_value(self):
-        # A token added for light mode only would leave that colour light on
-        # a dark page.
-        self.assertEqual(set(self.light) - set(self.dark), set())
+    def test_every_colour_token_exists_in_both_themes(self):
+        # A token set for one theme only would keep the other theme's colour.
+        self.assertEqual(set(self.light) ^ set(self.dark), set())
 
-    def test_dark_tokens_follow_the_device_and_the_toggle(self):
-        self.assertIn('@media (prefers-color-scheme: dark) {\n    :root:not([data-ciel-theme="light"]) {{{DARK_TOKENS}}}', self.css)
-        self.assertIn(':root[data-ciel-theme="dark"] {{{DARK_TOKENS}}}', self.css)
-        self.assertIn('CIEL_CSS.replace("{{{DARK_TOKENS}}}", "{" + DARK_TOKENS + "}")', APP_PATH.read_text(encoding="utf-8"))
+    def test_dark_is_the_default_and_light_is_opt_in(self):
+        self.assertIn(':root[data-ciel-theme="light"] {{{LIGHT_TOKENS}}}', self.css)
+        self.assertNotIn("prefers-color-scheme", self.css)
+        self.assertIn('CIEL_CSS.replace("{{{LIGHT_TOKENS}}}", "{" + LIGHT_TOKENS + "}")', APP_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(self.dark["--c-bg"], "#0e0d0c")
+        self.assertEqual(self.dark["--c-primary"], "#f4f4f2")
+        self.assertEqual(self.light["--c-bg"], "#f1f1ee")
+        self.assertEqual(self.light["--c-primary"], "#161513")
+
+    def test_streamlit_base_theme_is_dark(self):
+        # Streamlit paints its own theme before CIEL_CSS arrives; a light base
+        # flashed white on every load once dark became the default.
+        config = (APP_PATH.parent / ".streamlit" / "config.toml").read_text(encoding="utf-8")
+        self.assertIn('base = "dark"', config)
+        self.assertIn('backgroundColor = "#0e0d0c"', config)
 
     def test_sidebar_toggle_icons_follow_the_tokens(self):
         # Streamlit colours these icons itself (light theme), and the collapse
@@ -79,7 +89,7 @@ class ThemeTokensTest(unittest.TestCase):
         wrapper = '[data-testid="stLayoutWrapper"]:has(> .st-key-sideaccount) {'
         self.assertIn(wrapper, self.css)
         rule = self.css.split(wrapper, 1)[1].split("}", 1)[0]
-        for line in ("position: sticky;", "bottom: 0;", "margin-top: auto;", "background: var(--c-surface);"):
+        for line in ("position: sticky;", "bottom: 0;", "margin-top: auto;", "background: var(--c-bg);"):
             self.assertIn(line, rule)
         self.assertIn('[data-testid="stSidebarUserContent"]:has(.st-key-sideaccount) {', self.css)
         # The menu's email is HTML, so markdown cannot turn it into a mailto link.
@@ -134,12 +144,41 @@ class ThemeTokensTest(unittest.TestCase):
         for kind, token in (("Success", "--c-ok"), ("Error", "--c-err"), ("Warning", "--c-warn")):
             self.assertIn(f'[data-testid="stAlertContent{kind}"] {{ color: var({token}); }}', self.css)
 
+    def test_primary_buttons_are_pills_on_the_primary_token(self):
+        scope = ':is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"])'
+        rule = self.css.split(f'{scope} .stButton > button[kind="primary"] {{', 1)[1].split("}", 1)[0]
+        for line in ("background: var(--c-primary);", "color: var(--c-on-primary);", "border-radius: var(--r-pill);"):
+            self.assertIn(line, rule)
+
+    def test_user_messages_are_right_aligned_bubbles(self):
+        # The user avatar is a material icon (stChatMessageAvatarCustom), so
+        # the message is found by its content's aria-label instead.
+        user = '[data-testid="stChatMessage"]:has(> [aria-label="Chat message from user"])'
+        rule = self.css.split(user + " {", 1)[1].split("}", 1)[0]
+        for line in ("margin-left: auto;", "max-width: 80%;", "background: var(--c-surface);"):
+            self.assertIn(line, rule)
+        self.assertIn(user + " > :first-child { display: none; }", self.css)
+
+    def test_curtain_plays_once_per_session(self):
+        js = app_constants()["UI_JS"]
+        self.assertIn("sessionStorage.getItem('ciel-curtain')", js)
+        self.assertIn("prefers-reduced-motion", js)
+        self.assertIn(".ciel-curtain {", self.css)
+        rule = self.css.split(".ciel-curtain {", 1)[1].split("}", 1)[0]
+        self.assertIn("pointer-events: none;", rule)
+
+    def test_input_character_counter_follows_the_tokens(self):
+        # With the dark base theme, Streamlit painted the "0/80" counter of the
+        # Riset Skripsi field near-white on the light dialog (1.06:1).
+        self.assertIn(':is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) [data-testid="InputInstructions"] { color: var(--c-faint); }', self.css)
+
     def test_text_pairs_pass_wcag_aa_in_both_themes(self):
         pairs = [
             ("--c-text", "--c-bg"), ("--c-muted", "--c-bg"), ("--c-faint", "--c-bg"),
             ("--c-faint", "--c-surface"), ("--c-faint", "--c-raised"), ("--c-accent", "--c-bg"),
             ("--c-accent-ink", "--c-accent"), ("--c-accent-ink", "--c-accent-hover"),
             ("--c-gold-ink", "--c-gold"), ("--c-ok", "--c-bg"), ("--c-warn", "--c-bg"), ("--c-err", "--c-bg"),
+            ("--c-on-primary", "--c-primary"), ("--c-text", "--c-gap-bg"), ("--c-faint", "--c-raised-strong"),
         ]
         for name, palette in (("light", self.light), ("dark", self.dark)):
             for fg, bg in pairs:
@@ -170,9 +209,14 @@ class ThemeScriptTest(unittest.TestCase):
         self.assertIn("const root = document.documentElement;", self.js)
         self.assertIn("root.dataset.cielTheme = next;", self.js)
         self.assertIn("localStorage.setItem(KEY, next)", self.js)
-        self.assertEqual(self.js.count("try {"), 2)
-        self.assertIn("prefersDark.addEventListener('change', apply)", self.js)
         self.assertIn("if (window.__cielUi) return;", self.js)
+
+    def test_saved_light_choice_survives_and_default_is_dark(self):
+        self.assertIn("root.dataset.cielTheme = saved === 'light' ? 'light' : 'dark';", self.js)
+        self.assertNotIn("prefers-color-scheme", self.js)
+        self.assertIn("localStorage.setItem(KEY, next)", self.js)
+        # Theme storage read and write, plus the curtain's sessionStorage.
+        self.assertEqual(self.js.count("try {"), 3)
 
     def test_composer_is_lifted_above_streamlit_cloud_badges(self):
         # On Android the send button sat under Streamlit Cloud's corner
@@ -182,6 +226,25 @@ class ThemeScriptTest(unittest.TestCase):
         rule = css.split("@media (max-width: 960px) {\n    :root[data-ciel-hosted]", 1)
         self.assertEqual(len(rule), 2, "hosted composer rule missing")
         self.assertIn('[data-testid="stBottomBlockContainer"] { padding-bottom: 3.5rem; }', rule[1].split("}\n}", 1)[0])
+
+    def test_page_scripts_are_valid_javascript(self):
+        # UI_JS lives in a Python string: a "\n" meant for JavaScript became a
+        # real line break inside a JS string and the whole script stopped
+        # (found in the final review of the redesign).
+        import shutil
+        import subprocess
+        import tempfile
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node is not installed")
+        for name in ("UI_JS", "NAV_SCROLL_JS"):
+            script = app_constants()[name].split("<script>", 1)[1].split("</script>", 1)[0]
+            with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as handle:
+                handle.write(script)
+            result = subprocess.run([node, "--check", handle.name], capture_output=True, text=True)
+            Path(handle.name).unlink()
+            with self.subTest(script=name):
+                self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_upload_tooltip_is_short_and_in_indonesian(self):
         self.assertIn("const UPLOAD_HINT = 'Lampirkan file atau foto';", self.js)
