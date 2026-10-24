@@ -340,9 +340,14 @@ body{margin:0;background:#f1f1ee}
 .foot-name{display:flex;align-items:center;gap:0.18em;font-family:var(--brand);font-weight:500;font-size:var(--s-l);letter-spacing:-0.03em;line-height:1}
 .foot-name .mark{width:0.86em;height:0.86em}
 .foot-row{margin-top:72px;display:grid;grid-template-columns:5fr 1fr 6fr;align-items:start}
-.reach{display:flex;flex-direction:column;gap:6px}
-.pg .reach a{font-size:var(--s-m);line-height:1.2;letter-spacing:-0.02em;color:var(--blue);text-decoration:none;overflow-wrap:anywhere;transition:opacity 300ms var(--spring)}
-.pg .reach a:hover{opacity:0.7}
+.reach{display:flex;flex-direction:column;align-items:flex-start;gap:40px}
+.reach-list{width:100%;max-width:460px;border-top:1px solid var(--ring-d)}
+.pg .reach-list a{display:grid;grid-template-columns:7rem minmax(0,1fr) auto;align-items:center;gap:16px;padding:18px 0;border-bottom:1px solid var(--ring-d);color:var(--on-night);text-decoration:none}
+.reach-list .k{font-size:var(--s-sm);color:var(--on-night-muted)}
+.reach-list .v{font-size:var(--s-b);font-weight:500;letter-spacing:-0.01em;overflow-wrap:anywhere;transition:color 300ms var(--spring)}
+.reach-list svg{color:var(--on-night-muted);transition:transform 600ms var(--spring),color 300ms var(--spring)}
+.pg .reach-list a:hover .v{color:var(--blue)}
+.pg .reach-list a:hover svg{color:var(--blue);transform:translate(3px,-2px)}
 .links-f{grid-column:3;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;font-size:var(--s-sm)}
 .links-f h3{font-size:var(--s-sm);font-weight:600;margin-bottom:10px}
 .links-f li{margin-bottom:8px}
@@ -429,6 +434,8 @@ body{margin:0;background:#f1f1ee}
   .cta-row .pill{justify-content:space-between}
   .foot-name{font-size:13vw}
   .foot-row{grid-template-columns:1fr;gap:48px}
+  .pg .reach-list a{grid-template-columns:minmax(0,1fr) auto;row-gap:2px}
+  .reach-list .k{grid-column:1 / -1}
   .links-f{grid-column:1;grid-template-columns:1fr 1fr}
 }
 
@@ -754,10 +761,12 @@ body{margin:0;background:#f1f1ee}
     <p class="foot-name"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path class="r" d="M24.89 10.6A11.8 11.8 0 1 0 24.89 21.4H20.57A8.2 8.2 0 1 1 20.57 10.6Z"></path><path class="p" d="M28.39 10.6A11.8 11.8 0 0 1 28.39 21.4H24.07A8.2 8.2 0 0 0 24.07 10.6Z"></path></svg>Ciel</p>
     <div class="foot-row">
       <div class="reach">
-        <a href="https://ciel-ai-assistant-hywsyrnfpyhxc5e9pjgaho.streamlit.app/">Buka aplikasi Ciel</a>
-        <a href="https://www.instagram.com/ciel_ai.1/" target="_blank" rel="noopener noreferrer">Instagram @ciel_ai.1</a>
-        <a href="https://www.tiktok.com/@ciel_ai.1" target="_blank" rel="noopener noreferrer">TikTok @ciel_ai.1</a>
-        <a href="mailto:gibranahmadn6@gmail.com">gibranahmadn6@gmail.com</a>
+        <a class="pill pill-blue pill-sm" href="https://ciel-ai-assistant-hywsyrnfpyhxc5e9pjgaho.streamlit.app/">Buka aplikasi Ciel<span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"></path></svg></span></a>
+        <ul class="reach-list" aria-label="Kontak dan media sosial">
+          <li><a href="https://www.instagram.com/ciel_ai.1/" target="_blank" rel="noopener noreferrer"><span class="k">Instagram</span><span class="v">@ciel_ai.1</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"></path></svg></a></li>
+          <li><a href="https://www.tiktok.com/@ciel_ai.1" target="_blank" rel="noopener noreferrer"><span class="k">TikTok</span><span class="v">@ciel_ai.1</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"></path></svg></a></li>
+          <li><a href="mailto:gibranahmadn6@gmail.com"><span class="k">Email</span><span class="v">gibranahmadn6@gmail.com</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"></path></svg></a></li>
+        </ul>
       </div>
       <div class="links-f">
         <div><h3>Produk</h3><ul><li><a href="#cara-kerja">Cara kerja</a></li><li><a href="#uji">Uji jurnal palsu</a></li><li><a href="#harga">Harga</a></li></ul></div>
