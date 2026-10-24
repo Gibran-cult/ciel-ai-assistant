@@ -186,6 +186,26 @@ class BerandaAppTest(unittest.TestCase):
         self.assertNotIn("…", label)
         self.assertIn("Pengguna sedang mempelajari Modul 16 tentang regresi logistik dan butuh contoh angka", self.text(at))
 
+    def test_long_memories_open_with_whole_sentences(self):
+        # A real memory on the live site was ~2,500 characters. The panel shows
+        # whole sentences up to ~220 characters and keeps the rest one click
+        # away, never cutting a sentence in the middle.
+        first = 'Pengguna sedang mempelajari Modul 16 "Limit Fungsi dan Turunan" (17 halaman, hal. 42-58).'
+        rest = " ".join(f"Kalimat lanjutan nomor {n} tentang materi limit dan turunan." for n in range(30))
+        listing = {"ok": True, "total": 2, "memories": [
+            {"id": "m1", "text": f"{first} {rest}"},
+            {"id": "m2", "text": "Format sitasi APA 7"},
+        ]}
+        reply = {"outputs": [{"outputs": [{"results": {"message": {"data": {"text": __import__("json").dumps(listing)}}}}]}]}
+        at = self.start(user=SIGNED_IN, env={"MEMORY_ADMIN_FLOW_ID": "mem-flow"}, post=Mock(return_value=Response(reply)))
+        html_out = " ".join(md.value for md in at.markdown if "ciel-home-row" in md.value)
+        summary = __import__("html").unescape(re.search(r"<summary>(.*?)</summary>", html_out, re.S).group(1))
+        self.assertIn(first, summary)
+        self.assertIn("Selengkapnya", summary)
+        self.assertNotIn("…", summary)
+        self.assertIn("Kalimat lanjutan nomor 29 tentang materi limit dan turunan.", html_out)
+        self.assertIn("<span>Format sitasi APA 7</span>", html_out)
+
     def test_very_long_first_questions_fall_back_to_the_title(self):
         long_question = "kata " * 80
         item = chat("c1", None, 100, title="Judul pendek")

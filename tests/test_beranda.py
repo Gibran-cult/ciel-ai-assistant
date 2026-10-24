@@ -83,6 +83,31 @@ class LatestRisetTest(unittest.TestCase):
         self.assertIsNone(latest_riset(chats, None))
 
 
+def sentence_preview(text, limit=220):
+    # Lives in app.py (re-run on every deploy) rather than beranda.py, after
+    # Streamlit Cloud kept a stale beranda module and the app failed to import.
+    import re
+    from tests.test_ciel_pro import load_app
+    return load_app(("MEMORY_PREVIEW_LIMIT", "SENTENCE_END", "sentence_preview"), re=re)["sentence_preview"](text, limit)
+
+
+class SentencePreviewTest(unittest.TestCase):
+
+    def test_short_text_is_whole(self):
+        self.assertEqual(sentence_preview("Format sitasi APA 7"), ("Format sitasi APA 7", ""))
+
+    def test_long_text_stops_at_a_sentence_end(self):
+        text = "Satu dua tiga. " * 30
+        preview, rest = sentence_preview(text.strip(), limit=50)
+        self.assertEqual(preview, "Satu dua tiga. Satu dua tiga. Satu dua tiga.")
+        self.assertEqual(f"{preview} {rest}", text.strip())
+
+    def test_a_first_sentence_longer_than_the_limit_is_kept_whole(self):
+        first = "Kalimat pertama yang sangat panjang " * 10 + "selesai."
+        preview, rest = sentence_preview(f"{first} Kalimat kedua.", limit=50)
+        self.assertEqual((preview, rest), (first, "Kalimat kedua."))
+
+
 class TimeTextTest(unittest.TestCase):
 
     def test_greeting_uses_wib(self):
