@@ -63,7 +63,16 @@ def _url(text):
     match = URL.search(text)
     if not match:
         return None, -1
-    return match.group(0).rstrip(".,;)"), match.start()
+    # Same rule as the source guard: Markdown emphasis and punctuation end
+    # a URL, and a closing parenthesis stays only when the URL opened one.
+    url = match.group(0)
+    while True:
+        trimmed = url.rstrip(".,;:*_")
+        while trimmed.endswith(")") and trimmed.count(")") > trimmed.count("("):
+            trimmed = trimmed[:-1]
+        if trimmed == url:
+            return url, match.start()
+        url = trimmed
 
 
 def _domain(url):
@@ -82,7 +91,7 @@ def _sumber_entry(number, text):
     before = text[:start].strip(" —–-")
     fields = [field.strip() for field in SEPARATOR.split(before) if field.strip()]
     title = fields[1] if len(fields) >= 2 else fields[0] if fields else _domain(url)
-    return Source(number, title, _domain(url), url)
+    return Source(number, " ".join(title.split()), _domain(url), url)
 
 
 def split_sources(text):
@@ -123,7 +132,9 @@ def split_sources(text):
         entry_text = block[marker.end():stop].strip()
         source = _sumber_entry(number, entry_text)
         if source:
-            sources.append(source)
+            # The same URL twice in one list is one source (the first number).
+            if all(seen.url != source.url for seen in sources):
+                sources.append(source)
         else:
             kept.append(f"[{number}] {entry_text}")
 
@@ -153,7 +164,8 @@ def reference_sources(text):
             continue
         title = ITALIC_TITLE.search(body)
         title = title.group(1).strip() if title else body[:start].strip(" .") or _domain(url)
-        sources.append(Source(number, title, _domain(url), url))
+        if all(seen.url != url for seen in sources):
+            sources.append(Source(number, " ".join(title.split()), _domain(url), url))
     return sources
 
 
@@ -207,27 +219,39 @@ def summarize(messages):
 BADGES = (("[Dugaan]", ":orange-badge[Dugaan]"), ("[Terverifikasi]", ":blue-badge[Terverifikasi]"))
 
 
-def answer_markdown(text):
-    """Markdown jawaban untuk ditampilkan (tanpa HTML; isi tersimpan tetap utuh).
+def _badges(text):
+    for label, badge in BADGES:
+        text = text.replace(label, badge)
+    return text
 
-    Blok "Sumber:" pindah ke tombol (source_buttons_html) bila ada entri
-    ber-URL; entri tanpa URL dan catatan guard tetap di teks. Label
-    [Dugaan]/[Terverifikasi] jadi badge Streamlit.
+
+def answer_parts(text):
+    """(markdown sebelum tombol, sumber untuk tombol, markdown sesudah tombol).
+
+    Tanpa HTML; isi tersimpan tetap utuh. Blok "Sumber:" pindah ke tombol
+    (source_buttons_html) bila ada entri ber-URL; entri tanpa URL, catatan
+    guard dan teks sesudah blok tampil di bawah tombol. Tanpa entri ber-URL
+    jawaban tampil apa adanya. Label [Dugaan]/[Terverifikasi] jadi badge.
     """
 
     text = str(text or "")
     body, sources, leftover = split_sources(text)
-    shown = body.rstrip() + (f"\n\n{leftover}" if leftover else "") if sources else text
-    for label, badge in BADGES:
-        shown = shown.replace(label, badge)
-    return shown
+    if not sources:
+        return _badges(text), [], ""
+    return _badges(body.rstrip()), sources, _badges(leftover)
+
+
+def source_label(source):
+    """Accessible name of a source link."""
+    return f"Sumber {source.number}: {source.title}, {source.domain} (buka di tab baru)"
 
 
 def source_buttons_html(sources):
     """Deretan tombol sumber bernomor; setiap teks di-escape, hanya link http(s)."""
 
     links = "".join(
-        f'<a class="ciel-src" href="{html.escape(source.url, quote=True)}" target="_blank" rel="noopener noreferrer">'
+        f'<a class="ciel-src" href="{html.escape(source.url, quote=True)}" target="_blank" rel="noopener noreferrer" '
+        f'aria-label="{html.escape(source_label(source), quote=True)}">'
         f"<b>{source.number}</b>{html.escape(source.domain)}<span>{html.escape(source.title)}</span></a>"
         for source in sources
         if source.url.startswith(("https://", "http://"))

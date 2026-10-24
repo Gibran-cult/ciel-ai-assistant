@@ -123,6 +123,25 @@ class SplitSourcesKeepsContentTest(unittest.TestCase):
                    {"role": "assistant", "content": "## Daftar Pustaka\n\n[1] A. (2020). *B*. https://[x]"}])
 
 
+class SourceCleanupTest(unittest.TestCase):
+
+    def test_sources_are_deduplicated_within_an_answer(self):
+        _, sources, _ = split_sources("Isi.\n\nSumber: [1] A — B — https://x.org/a [2] C — D — https://x.org/a [3] E — F — https://y.org/b")
+        self.assertEqual([(s.number, s.url) for s in sources], [(1, "https://x.org/a"), (3, "https://y.org/b")])
+
+    def test_url_trimming_matches_the_source_guard(self):
+        def url(entry):
+            return split_sources(f"Isi.\n\nSumber: [1] Nama — Judul — {entry}")[1][0].url
+        self.assertEqual(url("**https://x.org/a**"), "https://x.org/a")
+        self.assertEqual(url("https://x.org/a_"), "https://x.org/a")
+        self.assertEqual(url("https://en.wikipedia.org/wiki/Gaya_(fisika)"), "https://en.wikipedia.org/wiki/Gaya_(fisika)")
+        self.assertEqual(url("(lihat https://x.org/a)."), "https://x.org/a")
+
+    def test_titles_collapse_whitespace(self):
+        _, sources, _ = split_sources("Isi.\n\nSumber: [1] Nama — Judul   yang\tpanjang — https://x.org/a")
+        self.assertEqual(sources[0].title, "Judul yang panjang")
+
+
 class ReferenceSourcesTest(unittest.TestCase):
 
     def test_daftar_pustaka_entries_from_riset_and_kerangka(self):

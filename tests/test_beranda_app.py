@@ -110,6 +110,8 @@ class BerandaAppTest(unittest.TestCase):
         at = self.start(user=SIGNED_IN, secrets=FEATURES, chats=chats)
         at.button(key="tpl_kerangka").click().run()
         self.assertEqual(at.session_state["active_chat"], "c1")
+        # The Kerangka dialog is open (a free account sees its Pro offer).
+        self.assertIn("Lihat paket Pro", [b.label for b in at.button])
         self.assertNotIn("tpl_jelasin", self.keys(at))  # the chat is open now
 
     def test_submitting_from_beranda_shows_the_chat(self):
@@ -123,6 +125,16 @@ class BerandaAppTest(unittest.TestCase):
         self.assertNotIn("tpl_jelasin", self.keys(at))
         self.assertEqual(len(at.chat_message), 2)
         self.assertIn("Jawaban Ciel.", self.text(at))
+
+    def test_beranda_is_only_cleared_once_a_request_is_pending(self):
+        # A submit that makes no request (an over-long crafted message) must
+        # leave the Beranda, and its composer, on screen.
+        source = APP_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
+        self.assertIn("        take_composer_value(render_beranda())\n\n    if st.session_state.pending:\n        beranda_slot.empty()", source)
+
+    def test_kerangka_topic_falls_back_to_riset_skripsi(self):
+        source = APP_PATH.read_text(encoding="utf-8")
+        self.assertIn('topic = chat["messages"][index].get("topic") or "Riset Skripsi"', source)
 
     def test_guest_beranda_never_lists_memories(self):
         at = self.start(env={"MEMORY_ADMIN_FLOW_ID": "mem-flow"})

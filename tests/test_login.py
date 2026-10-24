@@ -108,14 +108,23 @@ class LoginPageTest(unittest.TestCase):
         self.assertIn("Contoh proyek. Isinya mulai kosong, lalu keisi sendiri sambil kamu ngobrol sama Ciel.", text)
         self.assertNotIn("Sumber tersimpan", text)
 
+    def test_example_card_has_no_deadline(self):
+        # Deadlines are not a Ciel feature (spec non-goal).
+        self.assertNotIn("dikumpulin", page_text(self.render(auth_enabled=True)))
+
+    def test_intro_does_not_promise_google_when_sign_in_is_off(self):
+        intro = page_text(self.render(auth_enabled=False)).split("</h1>")[1].split("</p>")[0]
+        self.assertNotIn("Google", intro)
+        self.assertIn("tanpa masuk", intro)
+
     def test_google_button_copy_and_scope_note(self):
         at = self.render(auth_enabled=True)
         self.assertEqual(at.button(key="login_google").label, "Lanjutkan dengan Google")
         self.assertIn("Ciel cuma minta nama, email, dan foto profil dari akun Google kamu.", page_text(at))
 
     def test_intro_only_promises_saved_history_when_it_is_saved(self):
-        self.assertIn("Riwayat chat dan yang Ciel ingat ikut tersimpan di akunmu.", page_text(self.render(history_saved=True)))
-        self.assertNotIn("Riwayat chat", page_text(self.render(history_saved=False)).split("</h1>")[1].split("</p>")[0])
+        self.assertIn("Riwayat chat dan yang Ciel ingat ikut tersimpan di akunmu.", page_text(self.render(auth_enabled=True, history_saved=True)))
+        self.assertNotIn("Riwayat chat", page_text(self.render(auth_enabled=True, history_saved=False)).split("</h1>")[1].split("</p>")[0])
 
     def test_privacy_link_and_no_terms_link(self):
         sys.path.insert(0, str(ROOT))

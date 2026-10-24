@@ -16,8 +16,8 @@ from dotenv import load_dotenv
 from PIL import Image, ImageOps
 from pypdf import PdfReader
 
-from beranda import greeting, latest_riset, relative_time, templates_for
-from chat_sources import answer_markdown, count_line, source_buttons_html, split_sources, summarize
+from beranda import greeting, has_riset_map, latest_riset, relative_time, templates_for
+from chat_sources import answer_parts, count_line, source_buttons_html, source_label, summarize
 from chat_store import ChatStore
 from login import render_login
 from payments import create_snap_transaction, finish_url, new_order_id, order_message, snap_payload
@@ -788,6 +788,19 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 body:has(.st-key-rail) [data-testid="stBottomBlockContainer"] { max-width: 78rem; }
 @media (min-width: 1200px) {
     body:has(.st-key-rail) [data-testid="stBottomBlockContainer"] [data-testid="stChatInput"] { width: 68%; }
+    /* The rail stays in view while a long chat scrolls. Streamlit wraps the
+       keyed container in a wrapper exactly as tall as it, so the wrapper is
+       what sticks (its parent spans the whole column). */
+    [data-testid="stColumn"]:has(.st-key-rail) { align-self: stretch; }
+    [data-testid="stLayoutWrapper"]:has(> .st-key-rail) {
+        position: sticky;
+        top: 4.5rem;
+    }
+    .st-key-rail {
+        max-height: calc(100vh - 11rem);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
 }
 @media (max-width: 1199px) {
     [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-rail) { flex-direction: column; }
@@ -1191,12 +1204,20 @@ UI_JS = """
 
     const addCopyButtons = () => {
         document.querySelectorAll('[aria-label="Chat message from assistant"]').forEach((answer) => {
-            if (answer.querySelector('.ciel-copy, .ciel-thinking, [class*="st-key-errcard"]')) return;
+            // Streamlit reuses message slots: a slot that now holds an error
+            // card or the working indicator loses its old button.
+            const stale = answer.querySelector('.ciel-copy');
+            if (answer.querySelector('.ciel-thinking, [class*="st-key-errcard"]')) {
+                if (stale) stale.remove();
+                return;
+            }
+            if (stale) return;
             const first = answer.querySelector('[data-testid="stMarkdownContainer"]');
             if (!first || !first.innerText.trim()) return;
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'ciel-copy';
+            button.setAttribute('aria-live', 'polite');
             button.textContent = 'Salin jawaban';
             const done = () => {
                 button.textContent = 'Tersalin';
@@ -1218,6 +1239,28 @@ UI_JS = """
             else if (badge.textContent === 'Terverifikasi') badge.classList.add('ciel-ok');
         });
     };
+
+    // A template button fills the composer on the next run: focus it then,
+    // with the first [...] selected so typing replaces it.
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('.st-key-templates button')) return;
+        const current = document.querySelector('.st-key-beranda textarea');
+        const before = current ? current.value : '';
+        let tries = 0;
+        const wait = setInterval(() => {
+            const box = document.querySelector('.st-key-beranda textarea');
+            tries += 1;
+            if (box && box.value && box.value !== before) {
+                clearInterval(wait);
+                box.focus();
+                const start = box.value.indexOf('[');
+                const end = box.value.indexOf(']', start);
+                if (start >= 0 && end > start) box.setSelectionRange(start, end + 1);
+            } else if (tries > 40) {
+                clearInterval(wait);
+            }
+        }, 50);
+    });
 
     const apply = () => {
         addCopyButtons();
@@ -3418,7 +3461,7 @@ def render_beranda():
                 st.button(label, key=f"tpl_{template.key}", on_click=open_riset_dialog)
             else:
                 chat, index = riset
-                topic = chat["messages"][index].get("topic") or "Kerangka Bab 1–3"
+                topic = chat["messages"][index].get("topic") or "Riset Skripsi"
                 st.button(label, key=f"tpl_{template.key}", on_click=open_kerangka_from, args=(chat["id"], index, topic))
 
     recent = sorted(visible, key=lambda chat: chat["updated"], reverse=True)[:3]
@@ -3886,9 +3929,10 @@ def render_history_row(chat):
 
     with st.container(key=f"chatrow_{chat_id}", horizontal=True, gap="small"):
 
-        label = f"{short(chat['title'], 26)}  ·  {relative_time(chat.get('updated', time.time()), time.time())}"
+        # A short title keeps the time (and the Riset marker) visible in the row.
+        label = f"{short(chat['title'], 22)}  ·  {relative_time(chat.get('updated', time.time()), time.time())}"
 
-        if latest_riset([chat], chat.get("project_id")):
+        if has_riset_map(chat):
             label += "  ·  Riset"
 
         st.button(
@@ -3962,7 +4006,8 @@ def render_rail(summary, memories, riset_message):
             if len(summary.groups) > 1:
                 items.append(f'<p class="ciel-rail-q">{html.escape(group.question)}</p>')
             items.extend(
-                f'<a class="ciel-ri" href="{html.escape(source.url, quote=True)}" target="_blank" rel="noopener noreferrer">'
+                f'<a class="ciel-ri" href="{html.escape(source.url, quote=True)}" target="_blank" rel="noopener noreferrer" '
+                f'aria-label="{html.escape(source_label(source), quote=True)}">'
                 f"<b>{source.number}</b><span><strong>{html.escape(source.title)}</strong>"
                 f"<em>{html.escape(source.domain)}</em></span></a>"
                 for source in group.sources
@@ -4538,15 +4583,13 @@ if not messages and not st.session_state.pending:
     beranda_slot = st.empty()
 
     with beranda_slot.container(key="beranda"):
-        chat_value = render_beranda()
+        take_composer_value(render_beranda())
 
-    if chat_value:
+    if st.session_state.pending:
         beranda_slot.empty()
 
 else:
-    chat_value = composer("Tanyakan sesuatu kepada Ciel...")
-
-take_composer_value(chat_value)
+    take_composer_value(composer("Tanyakan sesuatu kepada Ciel..."))
 
 pending_request = st.session_state.pending
 st.session_state.pending = None
@@ -4597,11 +4640,14 @@ for index, message in enumerate(messages):
 
             # Riwayat lama (Supabase) dibersihkan lagi saat ditampilkan.
             content = strip_markdown_images(message["content"])[0]
-            st.markdown(answer_markdown(content))
-            sources_html = source_buttons_html(split_sources(content)[1])
+            before, sources, after = answer_parts(content)
+            st.markdown(before)
 
-            if sources_html:
-                st.markdown(sources_html, unsafe_allow_html=True)
+            if sources:
+                st.markdown(source_buttons_html(sources), unsafe_allow_html=True)
+
+            if after:
+                st.markdown(after)
 
             if message.get("kind") == RISET_KIND:
 

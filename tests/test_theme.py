@@ -227,6 +227,26 @@ class ThemeScriptTest(unittest.TestCase):
         self.assertEqual(len(rule), 2, "hosted composer rule missing")
         self.assertIn('[data-testid="stBottomBlockContainer"] { padding-bottom: 3.5rem; }', rule[1].split("}\n}", 1)[0])
 
+    def test_rail_stays_in_view_on_wide_screens(self):
+        css = app_constants()["CIEL_CSS"]
+        # Sticky on Streamlit's wrapper: the keyed block alone is exactly as
+        # tall as its wrapper and could not stick (checked in the browser).
+        wrapper = css.split('[data-testid="stLayoutWrapper"]:has(> .st-key-rail) {', 1)[1].split("}", 1)[0]
+        self.assertIn("position: sticky;", wrapper)
+        rail = css.split(".st-key-rail {", 1)[1].split("}", 1)[0]
+        self.assertIn("overflow-y: auto;", rail)
+        self.assertIn('[data-testid="stColumn"]:has(.st-key-rail) { align-self: stretch; }', css)
+
+    def test_copy_button_announces_and_leaves_error_cards(self):
+        self.assertIn("button.setAttribute('aria-live', 'polite')", self.js)
+        self.assertIn("stale.remove()", self.js)
+
+    def test_template_click_focuses_the_composer_on_the_first_blank(self):
+        # Spec 3: after a template fills the composer it gets focus, with the
+        # first [...] selected so typing replaces it.
+        self.assertIn(".st-key-templates button", self.js)
+        self.assertIn("setSelectionRange(start, end + 1)", self.js)
+
     def test_page_scripts_are_valid_javascript(self):
         # UI_JS lives in a Python string: a "\n" meant for JavaScript became a
         # real line break inside a JS string and the whole script stopped
