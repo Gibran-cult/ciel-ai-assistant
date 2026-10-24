@@ -592,10 +592,14 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     background: var(--c-surface);
     box-shadow: inset 0 0 0 1px var(--c-line);
 }
-.stApp .ciel-home-h { margin: 0 0 0.2rem; font-size: 0.875rem; font-weight: 600; color: var(--c-text); }
+.stApp .ciel-home-h { margin: 0 0 0.35rem; font-size: 0.875rem; font-weight: 600; line-height: 1.4; color: var(--c-text); }
+:is(.st-key-home_recent, .st-key-home_memory) [data-testid="stMarkdownContainer"] { margin-bottom: 0; }
 .st-key-home_recent .stButton > button {
     width: 100%;
+    height: auto;
+    padding: 0.6rem 0.9rem;
     justify-content: flex-start;
+    text-align: left;
     border: 0;
     border-radius: var(--r-md);
     background: var(--c-raised);
@@ -603,11 +607,13 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     font-weight: 500;
 }
 .st-key-home_recent .stButton > button:hover { background: var(--c-raised-strong); }
-.st-key-home_recent .stButton > button p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Whole sentences: long titles wrap instead of being cut. */
+.st-key-home_recent .stButton > button p { white-space: normal; overflow-wrap: anywhere; text-align: left; line-height: 1.45; }
 /* Streamlit centres the label in an inner wrapper; short titles drifted to the middle. */
 .st-key-home_recent .stButton > button > div { justify-content: flex-start; min-width: 0; }
 .ciel-home-row {
     display: flex;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 0.6rem;
     padding: 0.6rem 0.75rem;
@@ -616,7 +622,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     font-size: 0.875rem;
     color: var(--c-text);
 }
-.ciel-home-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ciel-home-row span { white-space: normal; overflow-wrap: anywhere; line-height: 1.45; }
 .ciel-home-row em { font-style: normal; font-size: 0.75rem; color: var(--c-faint); white-space: nowrap; }
 @media (max-width: 640px) {
     .st-key-beranda { margin-top: 1rem; }
@@ -3419,6 +3425,21 @@ def take_composer_value(value):
         st.session_state.pending = make_pending(typed_text, typed_files)
 
 
+FULL_LABEL_LIMIT = 200
+
+
+def chat_label(chat):
+    """The chat's first question in full when it is not too long, else its title.
+
+    Titles are cut at 48 characters when a chat is created; the Beranda shows
+    whole sentences instead.
+    """
+
+    first = next((m.get("content") for m in chat.get("messages", []) if m.get("role") == "user"), "")
+    first = " ".join(str(first or "").split())
+    return first if first and len(first) <= FULL_LABEL_LIMIT else chat["title"]
+
+
 def render_beranda():
     """Beranda: greeting, the composer, template buttons, recent chats, memories.
 
@@ -3477,7 +3498,7 @@ def render_beranda():
                 st.markdown('<p class="ciel-home-h">Lanjutkan riset</p>', unsafe_allow_html=True)
                 for chat in recent:
                     st.button(
-                        f"{short(chat['title'], 44)}  ·  {relative_time(chat['updated'], time.time())}",
+                        f"{chat_label(chat)}  ·  {relative_time(chat['updated'], time.time())}",
                         key=f"home_chat_{chat['id']}",
                         on_click=select_chat,
                         args=(chat["id"],),
@@ -3488,7 +3509,7 @@ def render_beranda():
             with st.container(key="home_memory"):
                 rows = "".join(
                     '<div class="ciel-home-row">'
-                    f"<span>{html.escape(short(str(item.get('text', '')), 60))}</span>"
+                    f"<span>{html.escape(str(item.get('text', '')))}</span>"
                     + (f"<em>{html.escape(str(item['category']))}</em>" if item.get("category") else "")
                     + "</div>"
                     for item in memories

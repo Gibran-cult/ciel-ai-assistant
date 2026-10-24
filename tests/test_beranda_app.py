@@ -170,6 +170,41 @@ class BerandaAppTest(unittest.TestCase):
         self.assertIn("Format sitasi APA 7", text)
         self.assertIn("Suka contoh &lt;angka&gt;", text)
 
+    def test_beranda_rows_show_whole_sentences(self):
+        # Ciel's screenshot (2026-10-24): "Riset Skripsi: pengaruh literasi
+        # digital te……" — the stored title is cut at 48 characters, and the
+        # row cut it again. Rows now show the first question in full.
+        question = "Riset Skripsi: pengaruh literasi digital terhadap kinerja UMKM kuliner di Bandung"
+        item = chat("c1", None, 100, title=question[:47] + "…")
+        item["messages"][0]["content"] = question
+        listing = {"ok": True, "total": 1, "memories": [{"id": "m1", "text": "Pengguna sedang mempelajari Modul 16 tentang regresi logistik dan butuh contoh angka"}]}
+        reply = {"outputs": [{"outputs": [{"results": {"message": {"data": {"text": __import__("json").dumps(listing)}}}}]}]}
+        at = self.start(user=SIGNED_IN, chats={"c1": item}, env={"MEMORY_ADMIN_FLOW_ID": "mem-flow"},
+                        post=Mock(return_value=Response(reply)))
+        label = at.button(key="home_chat_c1").label
+        self.assertTrue(label.startswith(question + "  ·  "), label)
+        self.assertNotIn("…", label)
+        self.assertIn("Pengguna sedang mempelajari Modul 16 tentang regresi logistik dan butuh contoh angka", self.text(at))
+
+    def test_very_long_first_questions_fall_back_to_the_title(self):
+        long_question = "kata " * 80
+        item = chat("c1", None, 100, title="Judul pendek")
+        item["messages"][0]["content"] = long_question
+        at = self.start(chats={"c1": item})
+        self.assertTrue(at.button(key="home_chat_c1").label.startswith("Judul pendek  ·  "))
+
+    def test_beranda_rows_wrap_instead_of_cutting(self):
+        css = APP_PATH.read_text(encoding="utf-8")
+        recent = css.split(".st-key-home_recent .stButton > button p {", 1)[1].split("}", 1)[0]
+        self.assertIn("white-space: normal;", recent)
+        self.assertNotIn("ellipsis", recent)
+        row = css.split(".ciel-home-row span {", 1)[1].split("}", 1)[0]
+        self.assertIn("white-space: normal;", row)
+        self.assertNotIn("ellipsis", row)
+        # Streamlit gives markdown a -16px bottom margin; the first row then
+        # covered the descenders of "Lanjutkan riset" (measured: 4 px).
+        self.assertIn(':is(.st-key-home_recent, .st-key-home_memory) [data-testid="stMarkdownContainer"] { margin-bottom: 0; }', css)
+
     def test_lanjutkan_riset_lists_three_latest_chats(self):
         chats = {f"c{i}": chat(f"c{i}", None, 100 + i, title=f"Judul {i}") for i in range(5)}
         chats["c4"]["archived"] = True
