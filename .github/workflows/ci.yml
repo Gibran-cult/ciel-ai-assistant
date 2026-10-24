@@ -139,6 +139,7 @@ jobs:
             tests.test_beranda \
             tests.test_beranda_app \
             tests.test_chat_view \
+            tests.test_landing \
             tests.test_pdf_attachments
 
       # Node that comes with the runner (no extra setup): the Edge Function's
