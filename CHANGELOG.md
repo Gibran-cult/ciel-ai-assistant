@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Repeated general questions are answered from a cache
+- New `answer_cache.py`: an in-memory cache (1 day, 500 questions) for the first message of a new chat when it is plain text. A hit answers instantly, costs no DeepSeek call, and uses no message quota.
+- An answer is stored only after the same question is asked twice, and only if it is at least 40 characters. The key includes `FLOW_ID`.
+- Only anonymous answers fill the cache, because they run without long-term memory. Logged-in users can still get cached answers, but their own answers are never stored.
+- Never cached:
+  - questions about the asker (`aku`, `sy`, `kita`, `namaku`);
+  - memory, dataset, or earlier-conversation requests (`ingat`, `lupakan`, `dataset`, `tadi`);
+  - questions about time (`hari ini`, `jam`, `tanggal`, `kapan`, `harga`, `selamat pagi`, a year).
+- Punctuation inside a question is kept in the key, so `hitung 12/4` and `hitung 12*4` never share an answer.
+- The message after a cached answer carries that question and answer to Langflow, so follow-ups like "jelasin lebih detail" still have context.
+- Tests: new `tests/test_answer_cache.py` and `tests/test_answer_cache_app.py`, both in CI.
+
 ### Cek kutipan: the thesis title no longer counts as copying
 - On the live app, a draft sentence that restated the thesis title was flagged at 44% against the source map, because the map's heading and summary repeat the same title. Five-word sequences from the topic are now left out of the comparison. A sentence copied from the map is still flagged at 100%.
 
