@@ -1924,7 +1924,8 @@ def answer_cache_key(chat, pending_request):
     ):
         return None
 
-    return question_key(text)
+    # Flow baru (prompt atau tool berubah) tidak memakai jawaban flow lama.
+    return question_key(f"{FLOW_ID} {text}")
 
 
 def cached_turn_context(chat):

@@ -3,6 +3,7 @@ Cache jawaban untuk pertanyaan umum yang sering ditanya.
 
 Hanya pertanyaan yang jawabannya sama untuk semua orang yang boleh masuk:
 bukan tentang diri penanya (memory pribadi) dan tidak bergantung waktu.
+Jawaban baru disimpan setelah pertanyaan yang sama ditanya dua kali.
 Cache tinggal di memori proses server, jadi hilang saat app restart.
 """
 
@@ -11,13 +12,20 @@ import re
 import threading
 import time
 
-ANSWER_CACHE_TTL = 3 * 24 * 3600
+ANSWER_CACHE_TTL = 24 * 3600
 ANSWER_CACHE_MAX_ENTRIES = 500
 MAX_QUESTION_CHARS = 300
 
-# Pertanyaan tentang diri penanya: jawaban anonim ("aku belum tahu namamu")
-# salah jika disajikan ke pengguna login yang punya memory.
-PERSONAL_WORDS = re.compile(r"\b(aku|saya|gue|gw|gua|ane|i|me|my|mine)\b")
+# Jawaban sependek ini biasanya permintaan maaf atau tool yang gagal, bukan jawaban.
+MIN_ANSWER_CHARS = 40
+
+# Pertanyaan tentang diri penanya, memory, dataset, atau percakapan sebelumnya:
+# jawaban anonim ("aku belum tahu namamu") salah jika disajikan ke pengguna login.
+PERSONAL_WORDS = re.compile(
+    r"\b(aku|saya|gue|gw|gua|ane|ku|sy|aq|kita|kami|i|me|my|mine|we|our|us"
+    r"|ingat|ingatkan|lupa|lupakan|memori|memory|dataset|tersimpan|simpan"
+    r"|lanjut|lanjutkan|tadi|sebelumnya|terakhir)\b"
+)
 
 # Akhiran milik "-ku" (namaku, skripsiku), kecuali kata umum yang memang berakhiran "ku".
 POSSESSIVE_KU = re.compile(r"\b\w{2,}ku\b")
@@ -25,15 +33,18 @@ WORDS_ENDING_IN_KU = {"buku", "suku", "kuku", "paku", "saku", "laku", "baku", "b
 
 # Pertanyaan yang jawabannya berubah seiring waktu cepat basi.
 TIME_WORDS = re.compile(
-    r"\b(hari ini|sekarang|terbaru|terkini|kemarin|besok|minggu ini|bulan ini|tahun ini"
-    r"|berita|harga|kurs|cuaca|skor|jadwal|today|now|latest|news|price|weather|20\d\d)\b"
+    r"\b(hari ini|hari apa|sekarang|terbaru|terkini|kemarin|besok|lusa|minggu ini|bulan ini|tahun ini"
+    r"|tahun depan|jam|tanggal|kapan|pagi|siang|sore|malam|berita|harga|kurs|cuaca|skor|jadwal"
+    r"|today|now|yesterday|tomorrow|current|recent|update|latest|news|price|weather|20\d\d)\b"
 )
 
 
 def normalize_question(text):
-    """Huruf kecil, tanda baca jadi spasi (kecuali + dan #), spasi dirapatkan."""
-    text = re.sub(r"[^\w\s+#]", " ", str(text).lower())
-    return " ".join(text.split())
+    """
+    Huruf kecil, spasi dirapatkan, tanda baca di ujung dibuang. Tanda baca
+    di tengah tetap ada supaya "12/4" dan "12*4" tidak dianggap sama.
+    """
+    return " ".join(str(text).lower().split()).strip(" ?!.,")
 
 
 def cacheable_question(text):
@@ -53,7 +64,10 @@ def question_key(text):
 
 
 class AnswerCache:
-    """{kunci: (waktu simpan, jawaban)} ber-TTL; entri tertua dibuang saat penuh."""
+    """
+    {kunci: (waktu, jawaban atau None)} ber-TTL. None berarti pertanyaan baru
+    ditanya sekali; entri tertua dibuang saat penuh.
+    """
 
     def __init__(self, ttl=ANSWER_CACHE_TTL, max_entries=ANSWER_CACHE_MAX_ENTRIES, clock=time.time):
         self.ttl = ttl
@@ -62,24 +76,31 @@ class AnswerCache:
         self.lock = threading.Lock()
         self.entries = {}
 
+    def _live(self, key):
+        entry = self.entries.get(key)
+
+        if entry is not None and self.clock() - entry[0] > self.ttl:
+            del self.entries[key]
+            return None
+
+        return entry
+
     def get(self, key):
         with self.lock:
-            entry = self.entries.get(key)
-
-            if entry is None:
-                return None
-
-            if self.clock() - entry[0] > self.ttl:
-                del self.entries[key]
-                return None
-
-            return entry[1]
+            entry = self._live(key)
+            return entry[1] if entry else None
 
     def put(self, key, answer):
+        answer = str(answer)
+
+        if len(answer.strip()) < MIN_ANSWER_CHARS:
+            return
+
         with self.lock:
-            # Ditimpa = pindah ke paling baru dalam urutan dict.
+            # Pertama kali ditanya: hanya dicatat. Kedua kali: jawabannya disimpan.
+            seen = self._live(key) is not None
             self.entries.pop(key, None)
-            self.entries[key] = (self.clock(), str(answer))
+            self.entries[key] = (self.clock(), answer if seen else None)
 
             while len(self.entries) > self.max_entries:
                 del self.entries[next(iter(self.entries))]

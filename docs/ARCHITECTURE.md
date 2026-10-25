@@ -391,10 +391,13 @@ Without thinking, tool routing depends more on the prompt's wording. In tests on
 
 Before step 1 reaches Langflow, the app checks an in-memory cache for repeated general questions:
 
-- **Who fills it:** only anonymous visitors, whose requests run without long-term memory, so the answer holds nothing personal. Logged-in answers are never stored.
-- **Who reads it:** everyone, but only for the first message of a new chat that is plain text: no images, attached or project files, tables, or Pro features. Questions about the asker (`aku`, `saya`, `namaku`) or about time (`hari ini`, `harga`, a year) are never cached.
-- **Matching:** exact match after lowercasing and dropping punctuation and extra spaces.
-- **Lifetime:** 3 days, at most 500 answers, oldest dropped first. The cache lives in the Streamlit process, so a reboot empties it.
+- **Who fills it:** only anonymous visitors, whose requests run without long-term memory, so the answer holds nothing personal. Logged-in answers are never stored. An answer is stored only when the same question comes in a second time, and only if it is at least 40 characters (shorter replies are usually apologies or failed tools).
+- **Who reads it:** everyone, but only for the first message of a new chat that is plain text: no images, attached or project files, tables, or Pro features. These are never cached:
+  - questions about the asker (`aku`, `sy`, `kita`, `namaku`);
+  - memory, dataset, or earlier-conversation requests (`ingat`, `lupakan`, `dataset`, `tadi`);
+  - questions about time (`hari ini`, `jam`, `tanggal`, `kapan`, `harga`, greetings like `selamat pagi`, a year).
+- **Matching:** exact match after lowercasing, collapsing spaces, and dropping `?!.,` at the ends. Punctuation inside the question stays, so `12/4` and `12*4` never share an answer. The key includes `FLOW_ID`, so a new flow does not reuse the old flow's answers.
+- **Lifetime:** 1 day, at most 500 questions, oldest dropped first. The cache lives in the Streamlit process, so a reboot empties it.
 - A cache hit uses no message quota and is marked `cached` on the reply. Langflow never saw that turn, so the next message in that chat carries the question and answer in its payload once.
 - Logs record only the first 8 characters of the key hash, never the question.
 

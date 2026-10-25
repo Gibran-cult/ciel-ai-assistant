@@ -23,6 +23,22 @@ class CacheableQuestionTest(unittest.TestCase):
         for text in ("apa itu perilaku konsumen", "rekomendasi buku statistik", "contoh bahasa baku", "suku bunga itu apa"):
             self.assertTrue(cacheable_question(text), text)
 
+    def test_review_personal_and_memory_requests_are_not_cacheable(self):
+        for text in (
+            "siapa nama ku", "tugas sy apa", "apa yang kita bahas terakhir kali", "lanjutkan pembahasan",
+            "what is our deadline", "ingat ya: jurusan teknik informatika",
+            "lupakan semua memori tentang jurusan", "tampilkan dataset tersimpan",
+        ):
+            self.assertFalse(cacheable_question(text), text)
+
+    def test_review_date_and_clock_questions_are_not_cacheable(self):
+        for text in ("jam berapa?", "tanggal berapa", "hari apa ini", "kapan pendaftaran snbp", "selamat pagi", "yesterday", "current president"):
+            self.assertFalse(cacheable_question(text), text)
+
+    def test_operators_keep_different_questions_apart(self):
+        for a, b in (("hitung 12/4", "hitung 12*4"), ("berapa 2^10", "berapa 2-10"), ("apakah 0.1 > 0.01", "apakah 0.1 < 0.01"), ("x != y", "x == y")):
+            self.assertNotEqual(question_key(a), question_key(b), (a, b))
+
     def test_time_sensitive_questions_are_not_cacheable(self):
         for text in ("berita hari ini apa", "harga emas sekarang", "jadwal UTBK 2026", "latest news"):
             self.assertFalse(cacheable_question(text), text)
@@ -34,23 +50,46 @@ class CacheableQuestionTest(unittest.TestCase):
         self.assertFalse(cacheable_question("a" * 301))
 
 
+ANSWER = "Machine learning adalah cabang AI yang belajar dari data."
+
+
+def asked_twice(cache, key, answer=ANSWER):
+    cache.put(key, answer)
+    cache.put(key, answer)
+
+
 class AnswerCacheTest(unittest.TestCase):
+    def test_answer_is_served_only_after_the_question_was_asked_twice(self):
+        cache = AnswerCache()
+        cache.put("k", ANSWER)
+        self.assertIsNone(cache.get("k"))
+        cache.put("k", ANSWER)
+        self.assertEqual(cache.get("k"), ANSWER)
+
+    def test_very_short_answers_are_not_stored(self):
+        cache = AnswerCache()
+        asked_twice(cache, "k", "Maaf.")
+        self.assertIsNone(cache.get("k"))
+
     def test_get_returns_stored_answer_until_ttl(self):
         now = [1000.0]
         cache = AnswerCache(ttl=60, clock=lambda: now[0])
-        cache.put("k", "jawaban")
-        self.assertEqual(cache.get("k"), "jawaban")
+        asked_twice(cache, "k")
+        self.assertEqual(cache.get("k"), ANSWER)
         now[0] += 61
         self.assertIsNone(cache.get("k"))
         self.assertIsNone(cache.get("tidak-ada"))
+        # Setelah kedaluwarsa, hitungan tanya mulai dari nol lagi.
+        cache.put("k", ANSWER)
+        self.assertIsNone(cache.get("k"))
 
     def test_oldest_entry_is_evicted_when_full(self):
         cache = AnswerCache(max_entries=2)
-        cache.put("a", "1")
-        cache.put("b", "2")
-        cache.put("c", "3")
+        asked_twice(cache, "a", ANSWER + " 1")
+        asked_twice(cache, "b", ANSWER + " 2")
+        asked_twice(cache, "c", ANSWER + " 3")
         self.assertIsNone(cache.get("a"))
-        self.assertEqual((cache.get("b"), cache.get("c")), ("2", "3"))
+        self.assertEqual((cache.get("b"), cache.get("c")), (ANSWER + " 2", ANSWER + " 3"))
 
 
 if __name__ == "__main__":

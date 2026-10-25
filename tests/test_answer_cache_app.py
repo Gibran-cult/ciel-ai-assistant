@@ -17,8 +17,8 @@ PLAIN = {"text": "Apa itu AI?", "payload": "Apa itu AI?", "images": []}
 SEND_PATH = SOURCE[SOURCE.rindex("\nif pending_request:"):]
 
 
-def load(chat_tables=lambda chat: {}):
-    return load_app(NAMES, chat_tables=chat_tables, question_key=question_key, cacheable_question=cacheable_question)
+def load(chat_tables=lambda chat: {}, flow_id="flow-a"):
+    return load_app(NAMES, chat_tables=chat_tables, question_key=question_key, cacheable_question=cacheable_question, FLOW_ID=flow_id)
 
 
 class AnswerCacheKeyTest(unittest.TestCase):
@@ -28,7 +28,16 @@ class AnswerCacheKeyTest(unittest.TestCase):
 
     def test_first_plain_message_gets_a_key(self):
         chat = {"messages": [{"role": "user", "content": "Apa itu AI?"}]}
-        self.assertEqual(self.app["answer_cache_key"](chat, PLAIN), question_key("apa itu ai"))
+        key = self.app["answer_cache_key"](chat, PLAIN)
+        self.assertEqual(key, self.app["answer_cache_key"](chat, {**PLAIN, "text": "apa itu ai", "payload": "apa itu ai"}))
+        self.assertIsNotNone(key)
+
+    def test_new_flow_version_does_not_reuse_old_answers(self):
+        chat = {"messages": [{"role": "user", "content": "Apa itu AI?"}]}
+        self.assertNotEqual(
+            load(flow_id="flow-a")["answer_cache_key"](chat, PLAIN),
+            load(flow_id="flow-b")["answer_cache_key"](chat, PLAIN),
+        )
 
     def test_ineligible_requests_get_no_key(self):
         one = {"messages": [{"role": "user", "content": "x"}]}
