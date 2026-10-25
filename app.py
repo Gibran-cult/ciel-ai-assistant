@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from PIL import Image, ImageOps
 from pypdf import PdfReader
 
+from answer_cache import AnswerCache, cacheable_question, question_key
 from beranda import greeting, has_riset_map, latest_riset, relative_time, templates_for
 from chat_sources import answer_parts, count_line, source_buttons_html, source_label, summarize
 from chat_store import ChatStore
@@ -1897,6 +1898,55 @@ def rate_limit_full(store, limits, now):
 def rate_limit_state():
     # Dibagi semua sesi di proses server ini; reset saat app restart.
     return {"lock": threading.Lock(), "hits": {}}
+
+
+@st.cache_resource
+def answer_cache():
+    # Dibagi semua sesi di proses server ini; reset saat app restart.
+    return AnswerCache()
+
+
+def answer_cache_key(chat, pending_request):
+    """
+    Kunci cache untuk pesan pertama chat berupa teks saja, atau None.
+    Lampiran, file proyek, tabel, dan fitur Pro selalu dijawab segar.
+    """
+
+    text = pending_request["text"]
+
+    if (
+        len(chat["messages"]) != 1
+        or pending_request["payload"] != text
+        or pending_request["images"]
+        or chat_tables(chat)
+        or any(pending_request.get(feature) for feature in ("riset", "kerangka", "cek"))
+        or not cacheable_question(text)
+    ):
+        return None
+
+    return question_key(text)
+
+
+def cached_turn_context(chat):
+    """
+    Session Langflow tidak pernah melihat jawaban dari cache, jadi pesan
+    berikutnya membawa tanya-jawab itu sampai Agent menjawab sekali di chat ini.
+    """
+
+    earlier = chat["messages"][:-1]
+    replies = [m for m in earlier if m["role"] == "assistant" and not m.get("error")]
+
+    if len(replies) != 1 or not replies[0].get("cached"):
+        return ""
+
+    question = next(m for m in earlier if m["role"] == "user")
+
+    return (
+        "### Percakapan sebelumnya (dijawab tanpa riwayat Agent)\n"
+        f"Pengguna: {question['content']}\n"
+        f"Ciel: {replies[0]['content']}\n\n"
+        "### Pesan baru\n"
+    )
 
 
 # Kuota harian fitur Pro per akun: {fitur: (batas, kalimat untuk pesan saat habis)}.
@@ -4879,9 +4929,13 @@ if pending_request:
 
         tables = chat_tables(chat)
 
+        # Pertanyaan umum yang sudah pernah dijawab tidak memakai kuota pesan.
+        cache_key = answer_cache_key(chat, pending_request)
+        cached = answer_cache().get(cache_key) if cache_key else None
+
         # Riset Skripsi: status Pro dicek di server sebelum kuota dipakai, jadi
         # permintaan buatan sendiri tanpa Pro tidak pernah sampai ke flow riset.
-        answer = (
+        answer = cached or (
             riset_refusal() or check_rate_limit("riset")
             if riset
             else kerangka_refusal() or missing_map(chat, kerangka, "Susun kerangka Bab 1–3") or check_rate_limit("kerangka")
@@ -4937,7 +4991,7 @@ if pending_request:
                 answer = upload_error
             else:
                 answer = ask_langflow(
-                    pending_request["payload"],
+                    cached_turn_context(chat) + pending_request["payload"],
                     tweaks=build_tweaks(image_paths, tables),
                     session_id=session_id,
                 )
@@ -4945,7 +4999,7 @@ if pending_request:
         elif answer is None:
 
             answer = ask_langflow(
-                pending_request["payload"],
+                cached_turn_context(chat) + pending_request["payload"],
                 tweaks=build_tweaks(tables=tables),
                 session_id=session_id,
             )
@@ -4953,6 +5007,11 @@ if pending_request:
         working_slot.empty()
 
     failed = is_error_answer(answer)
+
+    # Hanya jawaban pengunjung anonim yang disimpan: tanpa long-term memory,
+    # jadi aman disajikan ke siapa pun yang bertanya hal yang sama.
+    if cache_key and not cached and not failed and not memory_owner_id():
+        answer_cache().put(cache_key, answer)
 
     # Lampiran asli hanya perlu disimpan untuk tombol Retry.
     if not failed:
@@ -4976,6 +5035,10 @@ if pending_request:
         "error": failed,
         "elapsed": int(time.time() - started),
     }
+
+    if cached:
+        reply["cached"] = True
+        logger.info("answer_cache_hit key=%s", cache_key[:8])
 
     # Penanda hasil Riset Skripsi: tombol Unduh DOCX dan konteks pertanyaan lanjutan.
     if riset and not failed:

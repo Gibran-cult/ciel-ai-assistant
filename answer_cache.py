@@ -19,6 +19,10 @@ MAX_QUESTION_CHARS = 300
 # salah jika disajikan ke pengguna login yang punya memory.
 PERSONAL_WORDS = re.compile(r"\b(aku|saya|gue|gw|gua|ane|i|me|my|mine)\b")
 
+# Akhiran milik "-ku" (namaku, skripsiku), kecuali kata umum yang memang berakhiran "ku".
+POSSESSIVE_KU = re.compile(r"\b\w{2,}ku\b")
+WORDS_ENDING_IN_KU = {"buku", "suku", "kuku", "paku", "saku", "laku", "baku", "beku", "perilaku", "selaku", "berlaku"}
+
 # Pertanyaan yang jawabannya berubah seiring waktu cepat basi.
 TIME_WORDS = re.compile(
     r"\b(hari ini|sekarang|terbaru|terkini|kemarin|besok|minggu ini|bulan ini|tahun ini"
@@ -38,7 +42,10 @@ def cacheable_question(text):
     if not question or len(question) > MAX_QUESTION_CHARS:
         return False
 
-    return not (PERSONAL_WORDS.search(question) or TIME_WORDS.search(question))
+    if PERSONAL_WORDS.search(question) or TIME_WORDS.search(question):
+        return False
+
+    return all(word in WORDS_ENDING_IN_KU for word in POSSESSIVE_KU.findall(question))
 
 
 def question_key(text):

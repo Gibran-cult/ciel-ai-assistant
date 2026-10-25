@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Repeated general questions are answered from a cache
+- New `answer_cache.py`: an in-memory cache (3 days, 500 answers) for the first message of a new chat when it is plain text. A hit answers instantly, costs no DeepSeek call, and uses no message quota.
+- Only anonymous answers fill the cache, because they run without long-term memory. Logged-in users can still get cached answers, but their own answers are never stored.
+- Questions about the asker (`aku`, `saya`, `namaku`) or about time (`hari ini`, `harga`, `berita`, a year) are never cached.
+- The message after a cached answer carries that question and answer to Langflow, so follow-ups like "jelasin lebih detail" still have context.
+- Tests: new `tests/test_answer_cache.py` and `tests/test_answer_cache_app.py`, both in CI.
+
 ### Cek kutipan: the thesis title no longer counts as copying
 - On the live app, a draft sentence that restated the thesis title was flagged at 44% against the source map, because the map's heading and summary repeat the same title. Five-word sequences from the topic are now left out of the comparison. A sentence copied from the map is still flagged at 100%.
 

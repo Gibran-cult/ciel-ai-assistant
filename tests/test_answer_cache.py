@@ -17,6 +17,12 @@ class CacheableQuestionTest(unittest.TestCase):
         for text in ("siapa namaku? aku lupa", "Tugas saya apa ya", "gw harus belajar apa", "what is my name"):
             self.assertFalse(cacheable_question(text), text)
 
+    def test_possessive_ku_suffix_is_personal(self):
+        for text in ("siapa namaku", "skripsiku tentang apa", "ingat tugasku?"):
+            self.assertFalse(cacheable_question(text), text)
+        for text in ("apa itu perilaku konsumen", "rekomendasi buku statistik", "contoh bahasa baku", "suku bunga itu apa"):
+            self.assertTrue(cacheable_question(text), text)
+
     def test_time_sensitive_questions_are_not_cacheable(self):
         for text in ("berita hari ini apa", "harga emas sekarang", "jadwal UTBK 2026", "latest news"):
             self.assertFalse(cacheable_question(text), text)

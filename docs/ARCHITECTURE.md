@@ -387,6 +387,17 @@ Without thinking, tool routing depends more on the prompt's wording. In tests on
 9. Chat Output returns the final response
 ```
 
+### Answer cache (`answer_cache.py`)
+
+Before step 1 reaches Langflow, the app checks an in-memory cache for repeated general questions:
+
+- **Who fills it:** only anonymous visitors, whose requests run without long-term memory, so the answer holds nothing personal. Logged-in answers are never stored.
+- **Who reads it:** everyone, but only for the first message of a new chat that is plain text: no images, attached or project files, tables, or Pro features. Questions about the asker (`aku`, `saya`, `namaku`) or about time (`hari ini`, `harga`, a year) are never cached.
+- **Matching:** exact match after lowercasing and dropping punctuation and extra spaces.
+- **Lifetime:** 3 days, at most 500 answers, oldest dropped first. The cache lives in the Streamlit process, so a reboot empties it.
+- A cache hit uses no message quota and is marked `cached` on the reply. Langflow never saw that turn, so the next message in that chat carries the question and answer in its payload once.
+- Logs record only the first 8 characters of the key hash, never the question.
+
 ## Security Boundaries
 
 The architecture separates:
