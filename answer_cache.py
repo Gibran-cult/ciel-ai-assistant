@@ -19,6 +19,19 @@ MAX_QUESTION_CHARS = 300
 # Jawaban sependek ini biasanya permintaan maaf atau tool yang gagal, bukan jawaban.
 MIN_ANSWER_CHARS = 40
 
+# Link di jawaban bersama bisa berasal dari prompt injection di halaman web
+# dan akan sampai ke semua pengguna; jawaban seperti itu selalu dijawab segar.
+# Repo ini publik, jadi daftar TLD saja tidak cukup: link markdown, "//host",
+# domain apa pun yang diikuti path, dan alamat IP juga dianggap link.
+LINK = re.compile(
+    r"https?://|\bwww\.|\]\(\s*[^)\s]|(?<![\w/:])//[a-z0-9-]+\."
+    r"|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,24}/\S"
+    r"|\b\d{1,3}(?:\.\d{1,3}){3}\b"
+    r"|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|id|io|co|xyz|app|dev|link|site|me|info|ly|gl|top|click|online|shop"
+    r"|ai|in|cc|biz|tk|ml|ga|cf|gq|us|to|gg|tv|vip|live|store|pro|page|icu|cn|ru|my|sg|gy|gd|zip|mov)\b",
+    re.IGNORECASE,
+)
+
 # Pertanyaan tentang diri penanya, memory, dataset, atau percakapan sebelumnya:
 # jawaban anonim ("aku belum tahu namamu") salah jika disajikan ke pengguna login.
 PERSONAL_WORDS = re.compile(
@@ -59,6 +72,10 @@ def cacheable_question(text):
     return all(word in WORDS_ENDING_IN_KU for word in POSSESSIVE_KU.findall(question))
 
 
+def has_link(text):
+    return bool(LINK.search(str(text)))
+
+
 def question_key(text):
     return hashlib.sha256(normalize_question(text).encode("utf-8")).hexdigest()
 
@@ -93,7 +110,7 @@ class AnswerCache:
     def put(self, key, answer):
         answer = str(answer)
 
-        if len(answer.strip()) < MIN_ANSWER_CHARS:
+        if len(answer.strip()) < MIN_ANSWER_CHARS or has_link(answer):
             return
 
         with self.lock:

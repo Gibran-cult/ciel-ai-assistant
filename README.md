@@ -84,7 +84,8 @@ schtasks /Create /TN "Ciel prune chat history" /SC DAILY /ST 03:00 /TR "cmd /c c
 ├── privacy.py                   privacy page
 ├── quality_dashboard.py
 ├── langflow_client.py           minimal command-line client
-├── requirements.txt
+├── requirements.in              direct dependencies
+├── requirements.txt             lock with hashes, built from requirements.in
 ├── CHANGELOG.md
 ├── RELEASE_CHECKLIST.md
 └── README.md
@@ -92,7 +93,7 @@ schtasks /Create /TN "Ciel prune chat history" /SC DAILY /ST 03:00 /TR "cmd /c c
 
 ## Requirements
 
-Python and the dependencies in `requirements.txt` (`streamlit[auth]>=1.54`, `requests`, `python-dotenv`, `pypdf>=6`) for the app. The backend host needs Langflow 1.12.4, Ollama (`qwen2.5vl:3b` for images, `nomic-embed-text-v2-moe` for memory embeddings), Chroma, and ngrok.
+Python 3.14 (the Streamlit Cloud version) and the app's dependencies. `requirements.in` lists them (`streamlit[auth]>=1.54`, `requests`, `python-dotenv`, `pypdf>=6.20.1`, `python-docx>=1.1`); `requirements.txt` is the lock built from it with exact versions and hashes. To add or change a dependency, edit `requirements.in`, then run the command at the top of `requirements.txt`. The backend host needs Langflow 1.12.4, Ollama (`qwen2.5vl:3b` for images, `nomic-embed-text-v2-moe` for memory embeddings), Chroma, and ngrok.
 
 ## Environment Variables
 

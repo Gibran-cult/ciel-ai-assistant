@@ -31,37 +31,21 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.10'
+          python-version: '3.14'
 
-      - name: Install test dependencies
+      - name: Install app dependencies (the lock production installs)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install requests python-dotenv chromadb "streamlit>=1.45" "pypdf>=6" "python-docx>=1.1"
+          python -m pip install --require-hashes -r requirements.txt
 
-      # TEMPORARY (2026-10-24, Ciel's decision): the Pillow 12.3.0 advisories
-      # below are fixed only in Pillow 13.0.0, which no Streamlit release
-      # allows yet (streamlit requires pillow<13) and which needs Python 3.11+.
-      # Remove PILLOW_IGNORED, and raise the Python version if needed, as
-      # soon as Streamlit accepts Pillow 13. Only these IDs are skipped; any
-      # other advisory, including a new one for Pillow, still fails the build.
+      # Test-only: memory component tests need chromadb, which the app never imports.
+      - name: Install test dependencies
+        run: python -m pip install chromadb
+
       - name: Audit app dependencies for known vulnerabilities
-        env:
-          PILLOW_IGNORED: >-
-            CVE-2026-112390 CVE-2026-112391 CVE-2026-112392 CVE-2026-112393
-            CVE-2026-112395 CVE-2026-112396 CVE-2026-112397 CVE-2026-112398
-            CVE-2026-112399 CVE-2026-112400 CVE-2026-112401 CVE-2026-112402
-            CVE-2026-112404 CVE-2026-112405 CVE-2026-112406 CVE-2026-112891
-            CVE-2026-112892 CVE-2026-112893 CVE-2026-112894 CVE-2026-112895
-            CVE-2026-112896 CVE-2026-112897 CVE-2026-112899 CVE-2026-112900
-            CVE-2026-112901 CVE-2026-114501 CVE-2026-96636 CVE-2026-96637
-            CVE-2026-96638 CVE-2026-96639 CVE-2026-96640 CVE-2026-96641
-            CVE-2026-96642 CVE-2026-96643 CVE-2026-96644 CVE-2026-96778
-            GHSA-78g4-xqwv-q3g8
         run: |
           python -m pip install pip-audit
-          ignored=""
-          for id in $PILLOW_IGNORED; do ignored="$ignored --ignore-vuln $id"; done
-          pip-audit -r requirements.txt $ignored
+          pip-audit -r requirements.txt
 
       - name: Validate flow JSON
         run: |
@@ -119,6 +103,8 @@ jobs:
             tests.test_cek_kutipan_app \
             tests.test_gateway_policy \
             tests.test_app_security \
+            tests.test_secrets \
+            tests.test_supply_chain \
             tests.test_source_guard \
             tests.test_vision_images \
             tests.test_vision_router \
