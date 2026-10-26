@@ -1,5 +1,7 @@
 """Landing page contract: prices from pricing.py, known app links, honest claims."""
 
+import base64
+import hashlib
 import re
 import sys
 import unittest
@@ -19,6 +21,11 @@ CONTACT = "gibranahmadn6@gmail.com"
 
 def page():
     return LANDING.read_text(encoding="utf-8")
+
+
+def csp(source):
+    match = re.search(r'<meta http-equiv="Content-Security-Policy" content="([^"]+)">', source)
+    return match.group(1) if match else ""
 
 
 def visible_text(source):
@@ -126,6 +133,24 @@ class LandingContentTest(unittest.TestCase):
         source = page()
         self.assertIn("@media (prefers-reduced-motion: no-preference)", source)
         self.assertIn("matchMedia('(prefers-reduced-motion: reduce)')", source)
+
+    def test_csp_hash_matches_inline_script(self):
+        source = page().replace("\r\n", "\n")
+        scripts = re.findall(r"<script>(.*?)</script>", source, flags=re.S)
+        self.assertEqual(len(scripts), 1)
+        # Browsers normalize newlines to LF before hashing, as done above.
+        digest = base64.b64encode(hashlib.sha256(scripts[0].encode("utf-8")).digest()).decode()
+        self.assertIn(f"script-src 'sha256-{digest}'", csp(source))
+
+    def test_csp_is_strict(self):
+        source = page()
+        policy = csp(source)
+        for directive in ("default-src 'none'", "base-uri 'none'", "form-action 'none'", "object-src 'none'"):
+            with self.subTest(directive=directive):
+                self.assertIn(directive, policy)
+        self.assertNotIn("'unsafe-eval'", policy)
+        self.assertNotRegex(policy, r"(^|\s)\*(\s|;|$)")
+        self.assertIn('<meta name="referrer" content="strict-origin-when-cross-origin">', source)
 
     def test_page_basics(self):
         source = page()
