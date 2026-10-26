@@ -7,6 +7,7 @@ by concatenation so this file never matches its own patterns.
 
 import re
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -27,6 +28,16 @@ def find_secrets(text):
     return [name for name, pattern in SECRET_PATTERNS.items() if pattern.search(text)]
 
 
+def file_text(path):
+    """Text of a file, or None for binary. UTF-16 (with BOM) is read too, not skipped."""
+    data = path.read_bytes()
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return data.decode("utf-16", errors="ignore")
+    if b"\0" in data:
+        return None
+    return data.decode("utf-8", errors="ignore")
+
+
 def tracked_files():
     output = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True).stdout
     return [ROOT / name for name in output.decode("utf-8").split("\0") if name]
@@ -37,9 +48,8 @@ class SecretScanTest(unittest.TestCase):
         found = []
 
         for path in tracked_files():
-            try:
-                text = path.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, FileNotFoundError):
+            text = file_text(path) if path.is_file() else None
+            if text is None:
                 continue
 
             names = find_secrets(text)
@@ -64,6 +74,13 @@ class SecretScanTest(unittest.TestCase):
         for name, texts in samples.items():
             for text in texts:
                 self.assertIn(name, find_secrets(text), text)
+
+    def test_utf16_files_are_scanned(self):
+        # PowerShell 5.1 `>` and Out-File write UTF-16LE; such a file must not be skipped.
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "out.txt"
+            path.write_bytes(("API_KEY=" + "sk-" + "Ab3_" * 6).encode("utf-16"))
+            self.assertIn("langflow", find_secrets(file_text(path)))
 
     def test_placeholders_are_not_secrets(self):
         example = (ROOT / ".streamlit" / "secrets.toml.example").read_text(encoding="utf-8")

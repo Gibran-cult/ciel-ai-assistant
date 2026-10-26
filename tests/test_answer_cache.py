@@ -97,6 +97,9 @@ class SharedAnswerSafetyTest(unittest.TestCase):
         for link in (
             "https://contoh.com/a", "http://x.id", "www.contoh.com", "[klik](https://a.b)",
             "buka masuk-akun-ciel.com sekarang", "daftar di ciel-login.xyz",
+            # Final review: TLD lain, link protocol-relative, pemendek URL, alamat IP.
+            "masuk ke ciel-login.ai", "[Login](//ciel-login.ai/a)", "[Login](ciel-login.zz)",
+            "rb.gy/abc123", "lnkd.in/xyz", "http-nya 10.0.0.5/login", "buka promo.vip",
         ):
             cache = AnswerCache()
             asked_twice(cache, "k", f"{ANSWER} Lihat juga {link} untuk detailnya.")
