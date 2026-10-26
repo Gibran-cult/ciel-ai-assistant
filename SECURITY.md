@@ -55,13 +55,12 @@ Restore from the backups in `docs/BACKUP_AND_DISASTER_RECOVERY.md` if needed. Ru
 
 ## Owner checklist
 
-- Revoke the Langflow key that was hardcoded in flow v1.0.0/v1.1.0 (prefix `sk-Qcdm`, in Git history of this public repo; removed from the files 2026-10-26). Langflow → Settings → API Keys.
 - Two-factor authentication on GitHub, the Google account that owns the OAuth client, Streamlit Cloud, Supabase, ngrok, DeepSeek, Exa and Google AI Studio.
 - Hard spending limits: DeepSeek without automatic top-up, a quota or budget on the Gemini project, and Exa's usage limit.
 - `[auth] cookie_secret` of at least 32 random bytes.
 - On the Langflow host: automatic Windows Update, BitLocker, Defender and the firewall on (both checked 2026-10-18), Langflow Desktop kept up to date, and never start ngrok from an administrator window.
 - On the home router: no port forwards and UPnP off. The tunnel needs neither.
-- The old Langflow key in this public repository's history (prefix `sk-Qcdm`) must stay deleted from Langflow's API key list.
+- The Langflow key that was hardcoded in flow v1.0.0/v1.1.0 (prefix `sk-Qcdm`, still in this public repository's history) was revoked on 2026-10-26 and removed from the files the same day. It must stay deleted from Langflow's API key list.
 
 ## Known limits
 
