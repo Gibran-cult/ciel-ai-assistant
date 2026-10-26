@@ -119,6 +119,7 @@ jobs:
             tests.test_cek_kutipan_app \
             tests.test_gateway_policy \
             tests.test_app_security \
+            tests.test_secrets \
             tests.test_source_guard \
             tests.test_vision_images \
             tests.test_vision_router \

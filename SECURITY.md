@@ -15,7 +15,7 @@ No system is unbreakable. Ciel's controls aim to close the holes that can realis
 | One user's data reaching another | The app derives each user's owner ID from the Google account and sends it through tweaks, never through the model. Memory, datasets, chat history (Supabase, RLS with no policies plus an owner filter on every request) and Langflow sessions are all scoped by it. Guests get no memory or saved data. |
 | Prompt injection (web pages, files, photos, memory) | Prompt v14.7, section "10. KEAMANAN": content from tools is data, not instructions; memory and datasets are saved only from the user's own message; no images, HTML or URLs carrying conversation data. The app removes markdown images from answers before showing them, so an injected image cannot send chat data anywhere. Ciel Source Guard drops sources whose URL no search returned. Users see and delete their memories and datasets under "Data saya". |
 | Abuse and API bills | Per-user, guest and global hourly and daily message limits in the app; a per-IP limit at ngrok; caps on message length, upload size and image pixels; spending caps at each provider (see the owner checklist). |
-| Leaked or vulnerable code and secrets | Secrets live only in Streamlit Secrets, the host's `.env` and Langflow global variables, never in Git. GitHub secret scanning with push protection, Dependabot (pip and GitHub Actions), `pip-audit` in CI, and Actions pinned to commit SHAs. |
+| Leaked or vulnerable code and secrets | Secrets live only in Streamlit Secrets, the host's `.env` and Langflow global variables, never in Git. GitHub secret scanning with push protection, Dependabot (pip and GitHub Actions), `pip-audit` in CI, and Actions pinned to commit SHAs. `tests/test_secrets.py` fails CI when a tracked file holds a key-shaped string (Langflow, Supabase JWT, Google, GitHub, Midtrans, private keys); it covers keys GitHub's scanner does not know. |
 
 ## Incident runbook
 
@@ -54,6 +54,7 @@ Restore from the backups in `docs/BACKUP_AND_DISASTER_RECOVERY.md` if needed. Ru
 
 ## Owner checklist
 
+- Revoke the Langflow key that was hardcoded in flow v1.0.0/v1.1.0 (prefix `sk-Qcdm`, in Git history of this public repo; removed from the files 2026-10-26). Langflow → Settings → API Keys.
 - Two-factor authentication on GitHub, the Google account that owns the OAuth client, Streamlit Cloud, Supabase, ngrok, DeepSeek, Exa and Google AI Studio.
 - Hard spending limits: DeepSeek without automatic top-up, a quota or budget on the Gemini project, and Exa's usage limit.
 - `[auth] cookie_secret` of at least 32 random bytes.
