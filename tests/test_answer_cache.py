@@ -92,5 +92,23 @@ class AnswerCacheTest(unittest.TestCase):
         self.assertEqual((cache.get("b"), cache.get("c")), (ANSWER + " 2", ANSWER + " 3"))
 
 
+class SharedAnswerSafetyTest(unittest.TestCase):
+    def test_answers_with_links_are_not_cached(self):
+        for link in (
+            "https://contoh.com/a", "http://x.id", "www.contoh.com", "[klik](https://a.b)",
+            "buka masuk-akun-ciel.com sekarang", "daftar di ciel-login.xyz",
+        ):
+            cache = AnswerCache()
+            asked_twice(cache, "k", f"{ANSWER} Lihat juga {link} untuk detailnya.")
+            self.assertIsNone(cache.get("k"), link)
+
+    def test_answers_without_links_are_still_cached(self):
+        for detail in ("simpan sebagai data.csv", "pakai Python 3.12", "nilai 2.5 dan 3.75", "file laporan.docx", "contoh: a.b = c"):
+            cache = AnswerCache()
+            answer = f"{ANSWER} Contohnya {detail}."
+            asked_twice(cache, "k", answer)
+            self.assertEqual(cache.get("k"), answer, detail)
+
+
 if __name__ == "__main__":
     unittest.main()
