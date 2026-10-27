@@ -17,9 +17,9 @@ import pricing  # noqa: E402
 
 LANDING = ROOT / "landing" / "index.html"
 PAGES = ROOT / ".github" / "workflows" / "pages.yml"
-APP = "https://ciel-ai-assistant-hywsyrnfpyhxc5e9pjgaho.streamlit.app/"
+APP = "https://app.ciel-ai.web.id/"
 CONTACT = "gibranahmadn6@gmail.com"
-SITE = "https://ciel-ai.my.id/"
+SITE = "https://ciel-ai.web.id/"
 
 
 def page():
@@ -81,6 +81,7 @@ class LandingContentTest(unittest.TestCase):
         links = re.findall(r'href="([^"]+)"', page())
         app_links = [link for link in links if link.startswith(APP)]
         self.assertTrue(app_links)
+        self.assertNotIn("streamlit.app", page())
         for link in app_links:
             with self.subTest(link=link):
                 self.assertIn(link, {APP, f"{APP}?page=login", f"{APP}?page=pricing", f"{APP}?page=privacy"})

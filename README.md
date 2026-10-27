@@ -6,6 +6,8 @@ Ciel is a research assistant and study companion built on Langflow. It answers i
 
 The Streamlit app (`app.py`) is a thin public frontend; the Langflow flow, the local models and the memory database run on a separate host behind an ngrok tunnel.
 
+Live at **https://ciel-ai.web.id/** (landing page, GitHub Pages) and **https://app.ciel-ai.web.id/** (the app; a Cloudflare redirect rule sends it to the Streamlit Community Cloud URL, keeping the query string, because Community Cloud has no custom domains).
+
 ## Features
 
 - **Two persona modes:** warm and casual by default; a terse "Great Sage" analysis mode (conclusion, evidence labeled [Terverifikasi] or [Dugaan], confidence, limits) when the user asks for analysis.

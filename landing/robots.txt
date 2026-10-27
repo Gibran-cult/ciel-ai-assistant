@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ciel-ai.my.id/sitemap.xml
+Sitemap: https://ciel-ai.web.id/sitemap.xml
