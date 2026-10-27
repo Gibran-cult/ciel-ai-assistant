@@ -2,7 +2,9 @@
 
 import base64
 import hashlib
+import json
 import re
+import struct
 import sys
 import unittest
 from html import unescape
@@ -17,6 +19,7 @@ LANDING = ROOT / "landing" / "index.html"
 PAGES = ROOT / ".github" / "workflows" / "pages.yml"
 APP = "https://ciel-ai-assistant-hywsyrnfpyhxc5e9pjgaho.streamlit.app/"
 CONTACT = "gibranahmadn6@gmail.com"
+SITE = "https://ciel-ai.my.id/"
 
 
 def page():
@@ -28,9 +31,28 @@ def csp(source):
     return match.group(1) if match else ""
 
 
+def meta(source, key):
+    match = re.search(rf'<meta (?:name|property)="{re.escape(key)}" content="([^"]*)">', source)
+    return unescape(match.group(1)) if match else None
+
+
+def structured_data(source):
+    items = []
+    for block in re.findall(r'<script type="application/ld\+json">(.*?)</script>', source, flags=re.S):
+        data = json.loads(block)
+        items.extend(data.get("@graph", [data]))
+    return items
+
+
 def visible_text(source):
     source = re.sub(r"<(script|style)\b.*?</\1>", " ", source, flags=re.S)
     return " ".join(unescape(re.sub(r"<[^>]+>", " ", source)).split())
+
+
+def png_size(path):
+    data = path.read_bytes()[:24]
+    assert data[:8] == b"\x89PNG\r\n\x1a\n", path
+    return struct.unpack(">II", data[16:24])
 
 
 class LandingContentTest(unittest.TestCase):
@@ -125,9 +147,10 @@ class LandingContentTest(unittest.TestCase):
         self.assertEqual(re.findall(r"<script[^>]+src=", source), [])
         for href in re.findall(r'<link[^>]+href="([^"]+)"', source):
             with self.subTest(href=href):
-                # Google Fonts, or a file that ships in landing/ itself.
+                # Google Fonts, a file that ships in landing/ itself, or the
+                # canonical link to the site's own address (loads nothing).
                 local = "://" not in href and (LANDING.parent / href).is_file()
-                self.assertTrue(local or href.startswith(("https://fonts.googleapis.com", "https://fonts.gstatic.com")))
+                self.assertTrue(local or href == SITE or href.startswith(("https://fonts.googleapis.com", "https://fonts.gstatic.com")))
 
     def test_reduced_motion_is_respected(self):
         source = page()
@@ -158,6 +181,72 @@ class LandingContentTest(unittest.TestCase):
         self.assertIn('<meta name="viewport" content="width=device-width, initial-scale=1">', source)
         self.assertRegex(source, r"<title>[^<]{2,40}</title>")
         self.assertIn('name="description"', source)
+
+
+class LandingAssetsTest(unittest.TestCase):
+
+    def test_share_image_is_1200_by_630(self):
+        self.assertEqual(png_size(LANDING.parent / "og.png"), (1200, 630))
+        self.assertLess((LANDING.parent / "og.png").stat().st_size, 300_000)
+
+    def test_png_icons_match_brand_files(self):
+        for size in (192, 512):
+            with self.subTest(size=size):
+                name = f"ciel-icon-{size}.png"
+                self.assertEqual((LANDING.parent / name).read_bytes(), (ROOT / "assets" / "brand" / name).read_bytes())
+
+
+class SearchTagsTest(unittest.TestCase):
+
+    def test_title_names_ciel_ai(self):
+        self.assertIn("<title>Ciel AI: riset yang nggak ngarang</title>", page())
+
+    def test_canonical_url_is_consistent(self):
+        source = page()
+        self.assertIn(f'<link rel="canonical" href="{SITE}">', source)
+        self.assertEqual(meta(source, "og:url"), SITE)
+        self.assertIn(f"<loc>{SITE}</loc>", (LANDING.parent / "sitemap.xml").read_text(encoding="utf-8"))
+        self.assertIn(f"Sitemap: {SITE}sitemap.xml", (LANDING.parent / "robots.txt").read_text(encoding="utf-8"))
+
+    def test_open_graph_and_twitter_tags(self):
+        source = page()
+        expected = {
+            "og:type": "website", "og:site_name": "Ciel AI", "og:locale": "id_ID",
+            "og:title": "Ciel AI: riset yang nggak ngarang",
+            "og:image": f"{SITE}og.png", "og:image:width": "1200", "og:image:height": "630",
+            "twitter:card": "summary_large_image",
+        }
+        for key, value in expected.items():
+            with self.subTest(key=key):
+                self.assertEqual(meta(source, key), value)
+        self.assertEqual(meta(source, "og:description"), meta(source, "description"))
+        self.assertTrue(meta(source, "og:image:alt"))
+
+    def test_robots_allow_everything(self):
+        robots = (LANDING.parent / "robots.txt").read_text(encoding="utf-8")
+        self.assertIn("User-agent: *", robots)
+        self.assertNotRegex(robots, r"(?m)^Disallow:\s*/\s*$")
+        self.assertNotIn('name="robots"', page())
+
+    def test_site_name_for_google(self):
+        site = next(item for item in structured_data(page()) if item["@type"] == "WebSite")
+        self.assertEqual((site["name"], site["url"]), ("Ciel AI", SITE))
+        self.assertIn("Ciel", site["alternateName"])
+
+    def test_structured_data_prices_match_pricing_py(self):
+        app = next(item for item in structured_data(page()) if item["@type"] == "WebApplication")
+        self.assertEqual(app["url"], SITE)
+        offers = {offer["name"]: offer for offer in app["offers"]}
+        for plan in pricing.PLANS:
+            if plan["id"] in ("free", "pro"):
+                with self.subTest(plan=plan["id"]):
+                    self.assertEqual(offers[plan["name"]]["price"], str(plan["monthly"]))
+                    self.assertEqual(offers[plan["name"]]["priceCurrency"], "IDR")
+
+    def test_organization_links_ciels_accounts(self):
+        org = next(item for item in structured_data(page()) if item["@type"] == "Organization")
+        self.assertEqual(org["logo"], f"{SITE}ciel-icon-512.png")
+        self.assertEqual(set(org["sameAs"]), {"https://www.instagram.com/ciel_ai.1/", "https://www.tiktok.com/@ciel_ai.1"})
 
 
 class PagesWorkflowTest(unittest.TestCase):
