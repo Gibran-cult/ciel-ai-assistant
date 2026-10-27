@@ -1,6 +1,7 @@
 name: Publish landing page
 
-# Publishes landing/ to GitHub Pages (https://gibran-cult.github.io/ciel-ai-assistant/).
+# Publishes landing/ to GitHub Pages at https://ciel-ai.web.id/ (custom domain;
+# gibran-cult.github.io/ciel-ai-assistant/ redirects there).
 # Needs Pages turned on in the repository settings with "GitHub Actions" as
 # the source; until then the deploy step fails and nothing is published.
 
