@@ -54,7 +54,7 @@
 
 - [ ] **Step 1: Ciel registers `ciel-ai.web.id`**
 
-Use an Indonesian registrar that sells `.my.id` (for example Domainesia or Rumahweb). PANDI requires a KTP for `.my.id`. Turn on auto-renew. On 2026-10-27, PANDI's RDAP returned 404 for the name, so it looked unregistered, but the registrar's search is the real check. If it is taken, stop and ask Ciel for another name; every later value depends on it.
+Use an Indonesian registrar that sells PANDI domains (for example Domainesia or Rumahweb); PANDI asks for a KTP. Turn on auto-renew. The plan first priced `.my.id`; Ciel registered `ciel-ai.web.id` on 2026-10-27 (PANDI RDAP shows it on Cloudflare nameservers). If a chosen name is taken, stop and ask Ciel for another; every later value depends on it.
 
 - [ ] **Step 2: Ciel adds the domain to Cloudflare (free plan)**
 
