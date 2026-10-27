@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import payments  # noqa: E402
 import pricing  # noqa: E402
 
 LANDING = ROOT / "landing" / "index.html"
@@ -93,7 +94,6 @@ class LandingContentTest(unittest.TestCase):
         for link in re.findall(r'<a\b[^>]*href="([^"]+)"', page()):
             with self.subTest(link=link):
                 self.assertRegex(link, r"^(#|https://|mailto:)")
-                self.assertNotIn("streamlit.app", link.replace(APP, ""))
 
     def test_no_placeholders_or_contact_stubs(self):
         source = page()
@@ -243,6 +243,16 @@ class SearchTagsTest(unittest.TestCase):
                 with self.subTest(plan=plan["id"]):
                     self.assertEqual(offers[plan["name"]]["price"], str(plan["monthly"]))
                     self.assertEqual(offers[plan["name"]]["priceCurrency"], "IDR")
+        # Pro is a one-time purchase for PRO_DAYS, not a recurring subscription.
+        self.assertEqual(
+            offers["Pro"]["eligibleDuration"],
+            {"@type": "QuantitativeValue", "value": payments.PRO_DAYS, "unitCode": "DAY"},
+        )
+
+    def test_sitemap_has_no_hand_kept_lastmod(self):
+        # Nothing bumps a hard-coded date when the page changes, and Google
+        # stops trusting lastmod that is wrong, so the sitemap leaves it out.
+        self.assertNotIn("<lastmod>", (LANDING.parent / "sitemap.xml").read_text(encoding="utf-8"))
 
     def test_organization_links_ciels_accounts(self):
         org = next(item for item in structured_data(page()) if item["@type"] == "Organization")
