@@ -16,6 +16,17 @@ from dotenv import load_dotenv
 from PIL import Image, ImageOps
 from pypdf import PdfReader
 
+from account_settings import (
+    LOGIN_TABS,
+    PROFILE_LIMITS,
+    SETTINGS_TABS,
+    call_name,
+    clean_profile,
+    display_name,
+    export_chats_json,
+    profile_context,
+    settings_tab,
+)
 from answer_cache import AnswerCache, cacheable_question, question_key
 from beranda import greeting, has_riset_map, latest_riset, relative_time, templates_for
 from chat_sources import answer_parts, count_line, source_buttons_html, source_label, summarize
@@ -294,33 +305,102 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 .ciel-mark-ring { fill: var(--c-accent); }
 .ciel-mark-piece { fill: var(--c-mark-piece); }
 
-/* Theme toggle (THEME_TOGGLE_HTML): sun in dark mode (the default), moon in light mode,
-   drawn as a mask so it takes the button's text colour. */
-.ciel-theme-toggle {
-    --ciel-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='4' fill='none' stroke='black' stroke-width='1.8'/%3E%3Cpath d='M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.2rem;
-    height: 2.2rem;
-    padding: 0;
+/* Theme choice (THEME_CHOICE_HTML, Pengaturan > Tampilan): two pills, the
+   current theme raised. UI_JS keeps aria-pressed in step with the theme. */
+.ciel-theme-choices { display: inline-flex; gap: 0.4rem; padding: 0.25rem; border: 1px solid var(--c-line); border-radius: 999px; }
+.ciel-theme-choice {
+    min-width: 6.5rem;
+    min-height: 2.4rem;
+    padding: 0 1.1rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--c-muted);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.3s var(--ease), background-color 0.3s var(--ease);
+}
+.ciel-theme-choice:hover { color: var(--c-text); background: var(--c-raised); }
+.ciel-theme-choice[aria-pressed="true"] { color: var(--c-text); background: var(--c-raised-strong); border-color: var(--c-line-strong); }
+
+/* Pengaturan dialog, like Settings in the Claude app: a menu on the left
+   (quiet rows, the current one raised) and the tab on the right, which
+   scrolls on its own so the menu stays put. Dialogs render outside .stApp. */
+[data-testid="stDialog"] .st-key-settingsnav { gap: 0.15rem; padding-right: 0.75rem; border-right: 1px solid var(--c-line); }
+[data-testid="stDialog"] .st-key-settingsnav .stButton > button {
+    justify-content: flex-start;
+    min-height: 2.4rem;
+    padding: 0 0.7rem;
     border: 0;
     border-radius: 8px;
     background: transparent;
     color: var(--c-muted);
-    cursor: pointer;
-    transition: color 0.3s var(--ease), background-color 0.3s var(--ease);
+    font-weight: 500;
 }
-.ciel-theme-toggle::before {
-    content: "";
-    width: 18px;
-    height: 18px;
-    background: currentColor;
-    -webkit-mask: var(--ciel-toggle-icon) center / contain no-repeat;
-    mask: var(--ciel-toggle-icon) center / contain no-repeat;
+[data-testid="stDialog"] .st-key-settingsnav .stButton > button > div { justify-content: flex-start; }
+[data-testid="stDialog"] .st-key-settingsnav .stButton > button:hover { background: var(--c-raised); color: var(--c-text); }
+[data-testid="stDialog"] .st-key-settingsnav [class*="st-key-settabactive_"] button { background: var(--c-raised-strong); color: var(--c-text); }
+[data-testid="stDialog"] .st-key-settingsnav [data-testid="stIconMaterial"] { color: inherit; }
+[data-testid="stDialog"] .st-key-settingspanel {
+    max-height: min(68vh, 640px);
+    overflow-y: auto;
+    padding-right: 0.5rem;
 }
-.ciel-theme-toggle:hover { color: var(--c-text); background: var(--c-raised); }
-:root[data-ciel-theme="light"] .ciel-theme-toggle { --ciel-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+/* Page headings (Paket, Privasi) sized for a panel, not a page. */
+/* [role="dialog"] outranks the dialog's own sans-serif heading rule. */
+[data-testid="stDialog"] [role="dialog"] .st-key-settingspanel h1 {
+    margin: 0 0 0.4rem;
+    padding: 0;
+    font-family: var(--font-serif);
+    font-size: 1.6rem;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    color: var(--c-text);
+}
+[data-testid="stDialog"] .ciel-settings-head p { margin: 0 0 1.2rem; font-size: 0.9rem; line-height: 1.6; color: var(--c-muted); }
+/* Akun card (account_card_html): labelled rows, like a settings list. */
+[data-testid="stDialog"] .ciel-account-card { border: 1px solid var(--c-line); border-radius: 12px; background: var(--c-surface); overflow: hidden; margin-bottom: 1.4rem; }
+[data-testid="stDialog"] .ciel-account-row {
+    display: grid;
+    grid-template-columns: 9.5rem minmax(0, 1fr);
+    gap: 1rem;
+    align-items: baseline;
+    padding: 0.8rem 1rem;
+    font-size: 0.9rem;
+    line-height: 1.55;
+}
+[data-testid="stDialog"] .ciel-account-row + .ciel-account-row { border-top: 1px solid var(--c-line); }
+[data-testid="stDialog"] .ciel-account-label { color: var(--c-muted); }
+[data-testid="stDialog"] .ciel-account-value { color: var(--c-text); overflow-wrap: anywhere; }
+[data-testid="stDialog"] .ciel-account-muted { color: var(--c-muted); }
+[data-testid="stDialog"] .ciel-account-value code { padding: 0.1rem 0.4rem; border-radius: 6px; background: var(--c-raised); color: var(--c-text); font-family: var(--font-mono); font-size: 0.82rem; }
+[data-testid="stDialog"] .ciel-plan-pill {
+    display: inline-block;
+    margin-right: 0.45rem;
+    padding: 0.05rem 0.55rem;
+    border-radius: 999px;
+    background: var(--c-raised-strong);
+    color: var(--c-text);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+[data-testid="stDialog"] .ciel-plan-pill.ciel-plan-pro { background: var(--c-accent-soft); color: var(--c-accent); }
+@media (max-width: 640px) {
+    [data-testid="stDialog"] .ciel-account-row { grid-template-columns: 1fr; gap: 0.15rem; }
+}
+[data-testid="stDialog"] .ciel-settings-h { margin: 1.8rem 0 0.6rem; padding: 0; font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; color: var(--c-text); }
+/* Phones: the menu becomes a wrapping row above the tab, and the dialog
+   itself scrolls. */
+@media (max-width: 640px) {
+    [data-testid="stDialog"] .st-key-settingsnav { flex-direction: row; flex-wrap: wrap; padding: 0 0 0.6rem; border-right: 0; border-bottom: 1px solid var(--c-line); }
+    [data-testid="stDialog"] .st-key-settingsnav [data-testid="stElementContainer"],
+    [data-testid="stDialog"] .st-key-settingsnav .stButton,
+    [data-testid="stDialog"] .st-key-settingsnav .stButton > button { width: auto; }
+    [data-testid="stDialog"] .st-key-settingspanel { max-height: none; overflow-y: visible; padding-right: 0; }
+}
 
 /* Top bar nav, in the style of the claude.ai app: quiet ghost buttons with
    no border and 8px corners, a soft grey background on hover, and Masuk a
@@ -381,22 +461,48 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     color: var(--c-muted);
     overflow-wrap: anywhere;
 }
-/* Account menu rows (Pricing, Privasi, Keluar), like a menu list: full
-   width, left aligned, a soft grey background on hover and for the current
-   page, with lines between the groups. */
-[data-testid="stPopoverBody"] .st-key-accountnav {
-    gap: 0.1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--c-line);
+/* Account row: the menu (email, Pro status, Keluar) takes the width, the
+   ⚙ button (Pengaturan) sits square on its right. The label stays in the
+   button for screen readers and is hidden on screen. */
+[data-testid="stSidebar"] .st-key-accountrow { flex-wrap: nowrap; gap: 0.25rem; }
+[data-testid="stSidebar"] .st-key-accountrow > :first-child { flex: 1 1 0; min-width: 0; }
+/* ⚙ Pengaturan: a bare icon, no text and no box, signed in or not. The label
+   stays in the button for screen readers and is hidden on screen; keyboard
+   focus keeps the app-wide outline. */
+[data-testid="stSidebar"] .st-key-sideaccount .st-key-opensettings button {
+    justify-content: center;
+    width: 2.6rem;
+    min-width: 2.6rem;
+    min-height: 2.6rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--c-muted);
 }
+[data-testid="stSidebar"] .st-key-sideaccount .st-key-opensettings button:hover,
+[data-testid="stSidebar"] .st-key-sideaccount .st-key-opensettings button:active {
+    background: transparent;
+    color: var(--c-text);
+}
+[data-testid="stSidebar"] .st-key-sideaccount .st-key-opensettings [data-testid="stMarkdownContainer"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+[data-testid="stSidebar"] .st-key-sideaccount .st-key-opensettings [data-testid="stIconMaterial"] { margin: 0; font-size: 1.3rem; color: inherit; }
+/* Account menu rows (Keluar), like a menu list: full width, left aligned,
+   a soft grey background on hover, with a line above. */
 [data-testid="stPopoverBody"] .st-key-accountexit {
     padding-top: 0.5rem;
     border-top: 1px solid var(--c-line);
 }
-[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) [data-testid="stElementContainer"]:has(.stButton),
-[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) .stButton,
-[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) .stButton > button { width: 100%; }
-[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) .stButton > button {
+[data-testid="stPopoverBody"] .st-key-accountexit [data-testid="stElementContainer"]:has(.stButton),
+[data-testid="stPopoverBody"] .st-key-accountexit .stButton,
+[data-testid="stPopoverBody"] .st-key-accountexit .stButton > button { width: 100%; }
+[data-testid="stPopoverBody"] .st-key-accountexit .stButton > button {
     justify-content: flex-start;
     min-height: 2.2rem;
     padding: 0 0.6rem;
@@ -406,15 +512,14 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     color: var(--c-text);
     font-weight: 500;
 }
-[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) .stButton > button:hover,
-[data-testid="stPopoverBody"] .st-key-accountnav [class*="st-key-navactive_"] button {
+[data-testid="stPopoverBody"] .st-key-accountexit .stButton > button:hover {
     border-color: transparent;
     background: var(--c-raised);
     color: var(--c-text);
 }
 /* Streamlit centres the icon and label in an inner wrapper. */
-[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) .stButton > button > div { justify-content: flex-start; }
-[data-testid="stPopoverBody"] :is(.st-key-accountnav, .st-key-accountexit) [data-testid="stIconMaterial"] { color: var(--c-muted); }
+[data-testid="stPopoverBody"] .st-key-accountexit .stButton > button > div { justify-content: flex-start; }
+[data-testid="stPopoverBody"] .st-key-accountexit [data-testid="stIconMaterial"] { color: var(--c-muted); }
 .stApp .st-key-topbar { flex-wrap: nowrap; }
 .stApp .st-key-topbar > [data-testid="stElementContainer"]:first-child { flex: 1 1 0; min-width: 0; }
 
@@ -1165,7 +1270,7 @@ NAV_SCROLL_JS = """
 # Page details Streamlit gives no option for. One observer on <body> keeps
 # them applied as Streamlit re-renders:
 # - Theme: data-ciel-theme on <html> is "dark" unless the visitor chose
-#   light with the toggle (THEME_TOGGLE_HTML); the choice is kept in
+#   light in Pengaturan > Tampilan (THEME_CHOICE_HTML); the choice is kept in
 #   localStorage, and the page still works (dark) if storage is blocked.
 # - Hosted on Streamlit Cloud (inside its iframe): data-ciel-hosted on
 #   <html> lets CSS lift the composer above Cloud's corner badges.
@@ -1200,7 +1305,7 @@ UI_JS = """
     } catch (error) { /* no curtain */ }
     const UPLOAD_HINT = 'Lampirkan file atau foto';
 
-    // Dark unless the visitor chose light with the toggle.
+    // Dark unless the visitor chose light in Pengaturan > Tampilan.
     const effectiveTheme = () => root.dataset.cielTheme;
 
     try {
@@ -1298,12 +1403,9 @@ UI_JS = """
     const apply = () => {
         addCopyButtons();
         tagBadges();
-        const label = effectiveTheme() === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap';
-        document.querySelectorAll('[data-ciel-theme-toggle]').forEach((button) => {
-            if (button.getAttribute('aria-label') !== label) {
-                button.setAttribute('aria-label', label);
-                button.title = label;
-            }
+        document.querySelectorAll('[data-ciel-theme-set]').forEach((button) => {
+            const pressed = String(button.dataset.cielThemeSet === effectiveTheme());
+            if (button.getAttribute('aria-pressed') !== pressed) button.setAttribute('aria-pressed', pressed);
         });
         document.querySelectorAll('[data-testid="stTooltipContent"]').forEach((tip) => {
             if (tip.textContent.startsWith('Upload or drag and drop')) tip.textContent = UPLOAD_HINT;
@@ -1323,8 +1425,10 @@ UI_JS = """
     });
 
     document.addEventListener('click', (event) => {
-        if (!event.target.closest('[data-ciel-theme-toggle]')) return;
-        const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+        const choice = event.target.closest('[data-ciel-theme-set]');
+        if (!choice) return;
+        const next = choice.dataset.cielThemeSet;
+        if (next !== 'light' && next !== 'dark') return;
         root.dataset.cielTheme = next;
         try { localStorage.setItem(KEY, next); } catch (error) { /* keep it for this visit only */ }
         apply();
@@ -1335,13 +1439,6 @@ UI_JS = """
 })();
 </script>
 """
-
-# The icon is drawn in CSS (st.html's sanitizer strips inline SVG); UI_JS
-# handles clicks and keeps the accessible name in step with the theme.
-THEME_TOGGLE_HTML = (
-    '<button type="button" class="ciel-theme-toggle" data-ciel-theme-toggle '
-    'aria-label="Ganti tema"></button>'
-)
 
 with st.container(key="pagejs"):
     st.html(NAV_SCROLL_JS, unsafe_allow_javascript=True)
@@ -1568,6 +1665,10 @@ if "pending" not in st.session_state:
 if "upload_nonce" not in st.session_state:
     st.session_state.upload_nonce = 0
 
+# Profil dari halaman Pengaturan; dimuat ulang saat akun berganti (sync_profile_owner).
+if "profile" not in st.session_state:
+    st.session_state.profile = clean_profile({})
+
 # Identitas anonim per sesi browser, dipakai untuk session_id dan rate limit.
 if "visitor_id" not in st.session_state:
     st.session_state.visitor_id = uuid.uuid4().hex[:16]
@@ -1668,7 +1769,91 @@ def persist_project(project):
         store_notice("Proyek gagal disimpan.")
 
 
+def account_name():
+    """Nama akun Google (atau email) untuk sidebar dan Pengaturan."""
+    return st.user.get("name") or st.user.get("email") or "Akun"
+
+
+def forget_profile_inputs():
+    """Isian form Profil dibuang, supaya form menampilkan profil yang baru."""
+    for key in ("profile_full_name", "profile_nickname", "profile_field", "profile_preferences"):
+        st.session_state.pop(key, None)
+
+
+def sync_profile_owner():
+    """
+    Profil ikut akun yang login, terpisah dari sync_chat_owner: tanpa
+    database, pemilik chat selalu kosong, tapi profil akun lama tetap harus
+    dibuang saat berganti akun.
+    """
+    owner = memory_owner_id()
+
+    if owner == st.session_state.get("profile_owner", ""):
+        return
+
+    st.session_state.profile_owner = owner
+    st.session_state.profile = clean_profile({})
+    st.session_state.profile_load_failed = False
+    forget_profile_inputs()
+
+    if not (owner and CHAT_STORE):
+        return
+
+    if load_profile() is None and "store_notice" not in st.session_state:
+        # Satu notifikasi per sesi: pesan riwayat chat yang gagal lebih penting.
+        store_notice("Profil tersimpan gagal dimuat.")
+
+
+def load_profile():
+    """
+    Muat profil akun ini dari database ke sesi. Selama gagal,
+    profile_load_failed membuat form Profil tidak bisa disimpan, supaya
+    form kosong tidak menimpa profil yang tersimpan.
+    """
+    loaded = CHAT_STORE.load_profile(chat_owner())
+    st.session_state.profile_load_failed = loaded is None
+
+    if loaded is not None:
+        st.session_state.profile = loaded
+        forget_profile_inputs()
+
+    return loaded
+
+
+def save_profile_form():
+    """Simpan isian form Profil di Pengaturan (sesi, lalu database jika ada)."""
+    profile = clean_profile({
+        "full_name": st.session_state.get("profile_full_name"),
+        "nickname": st.session_state.get("profile_nickname"),
+        "field": st.session_state.get("profile_field"),
+        "preferences": st.session_state.get("profile_preferences"),
+    })
+    st.session_state.profile = profile
+    owner = chat_owner()
+
+    if not owner:
+        st.session_state.settings_notice = ("success", "Profil tersimpan untuk sesi ini.")
+    elif CHAT_STORE.save_profile(owner, profile):
+        st.session_state.settings_notice = ("success", "Profil tersimpan.")
+    else:
+        st.session_state.settings_notice = ("error", "Profil gagal disimpan. Silakan coba lagi.")
+
+
+def clear_profile():
+    owner = chat_owner()
+
+    if owner and not CHAT_STORE.delete_profile(owner):
+        st.session_state.settings_notice = ("error", "Profil gagal dikosongkan. Silakan coba lagi.")
+    else:
+        st.session_state.profile = clean_profile({})
+        forget_profile_inputs()
+        st.session_state.settings_notice = ("success", "Profil dikosongkan.")
+
+    st.session_state.confirm_clear_profile = False
+
+
 sync_chat_owner()
+sync_profile_owner()
 
 
 # ============================================================
@@ -1945,6 +2130,11 @@ def answer_cache_key(chat, pending_request):
 
     # Flow baru (prompt atau tool berubah) tidak memakai jawaban flow lama.
     return question_key(f"{FLOW_ID} {text}")
+
+
+def profile_note():
+    """Blok profil di depan pesan chat biasa; kosong untuk pengunjung anonim."""
+    return profile_context(st.session_state.profile) if logged_in() else ""
 
 
 def cached_turn_context(chat):
@@ -3274,43 +3464,58 @@ def unpack_chat_input(value):
     return value["text"], list(value["files"] or [])
 
 
-def current_view():
-    # Disimpan di URL (?page=pricing, ?page=privacy, ?page=login) agar halaman bisa dibagikan.
+def current_page():
+    # Disimpan di URL (?page=login) agar halaman bisa dibagikan.
     # Midtrans menambahkan parameternya sendiri ke URL kembali, kadang dengan
     # "?" kedua ("pricing?order_id=..."), jadi hanya bagian depannya yang dipakai.
-    page = (st.query_params.get("page") or "").split("?", 1)[0]
-    return page if page in ("pricing", "privacy", "login") else "chat"
+    return (st.query_params.get("page") or "").split("?", 1)[0]
+
+
+def current_view():
+    return "login" if current_page() == "login" else "chat"
+
+
+def open_settings_from_url():
+    """
+    ?page=settings&tab=..., dan alamat lama ?page=pricing / ?page=privacy
+    (landing, kembali dari Midtrans), membuka dialog Pengaturan sekali di tab
+    itu. Parameternya dibuang supaya dialog tidak terbuka lagi saat dimuat ulang.
+    """
+    page = current_page()
+
+    if page in ("settings", "pricing", "privacy"):
+        st.session_state.settings_open = settings_tab(page, st.query_params.get("tab"), logged_in())
+        st.query_params.pop("page", None)
+        st.query_params.pop("tab", None)
+
+
+def open_settings(tab="profil"):
+    # Tab yang terbuka, atau None jika dialog tertutup. Selama tidak None, dialog
+    # digambar ulang di setiap rerun (lihat bagian SETTINGS DIALOG).
+    st.session_state.settings_open = tab
+
+
+def close_settings():
+    st.session_state.settings_open = None
 
 
 def show_chat():
+    close_settings()
     st.query_params.pop("page", None)
+    st.query_params.pop("tab", None)
 
 
 def show_pricing():
-    st.query_params["page"] = "pricing"
+    open_settings("paket")
 
 
 def show_privacy():
-    st.query_params["page"] = "privacy"
+    open_settings("privasi")
 
 
 def show_login():
+    close_settings()
     st.query_params["page"] = "login"
-
-
-def page_nav_buttons():
-    """Pricing dan Privasi sebagai baris menu akun (hanya setelah login)."""
-    for label, view, icon, on_click in (
-        ("Pricing", "pricing", ":material/sell:", show_pricing),
-        ("Privasi", "privacy", ":material/shield:", show_privacy),
-    ):
-        st.button(
-            label,
-            key=("navactive_" if current_view() == view else "nav_") + view,
-            type="tertiary",
-            icon=icon,
-            on_click=on_click,
-        )
 
 
 def new_chat():
@@ -3596,7 +3801,7 @@ def render_beranda():
         chat for chat in st.session_state.chats.values()
         if not chat.get("archived") and (project_id is None or chat["project_id"] == project_id)
     ]
-    name = (st.user.get("name") or "") if logged_in() else None
+    name = call_name(st.session_state.profile, st.user.get("name") or "") if logged_in() else None
     subline = (
         f"{short(project['name'], 40)} · {len(visible)} chat · {len(project['files'])} file proyek"
         if project
@@ -4428,192 +4633,63 @@ with st.sidebar:
     # ACCOUNT (bawah sidebar, seperti menu akun claude.ai)
     # --------------------------------------------------------
 
-    if logged_in():
+    with st.container(key="sideaccount"):
 
-        account_name = st.user.get("name") or st.user.get("email") or "Akun"
+        if not logged_in():
 
-        with st.container(key="sideaccount"):
+            # Tanpa login: Pengaturan tetap terbuka untuk tema, Paket, dan Privasi.
+            st.button(
+                "Pengaturan",
+                key="opensettings",
+                type="tertiary",
+                icon=":material/settings:",
+                on_click=open_settings,
+                args=("tampilan",),
+            )
 
-            with st.popover(
-                short(account_name, 22),
-                icon=":material/account_circle:",
-                width="stretch",
-            ):
+        else:
 
-                # HTML, bukan st.caption: markdown mengubah email jadi link mailto.
-                st.markdown(
-                    '<div class="ciel-account-email">'
-                    f'{html.escape(st.user.get("email") or account_name)}'
-                    "</div>",
-                    unsafe_allow_html=True,
-                )
+            name = display_name(st.session_state.profile, account_name())
 
-                with st.container(key="accountnav"):
-                    page_nav_buttons()
+            with st.container(key="accountrow", horizontal=True, vertical_alignment="center"):
 
-                st.markdown(
-                    '<div class="ciel-note">'
-                    "<p>Long-term memory aktif dan hanya milik akunmu. Ciel bisa "
-                    "mengingat konteks penting lintas percakapan.</p>"
-                    f"<p>ID memory: <code>{memory_owner_id()}</code></p>"
-                    f"{pro_status_html()}"
-                    "</div>",
-                    unsafe_allow_html=True,
-                )
+                with st.popover(
+                    short(name, 22),
+                    icon=":material/account_circle:",
+                    width="stretch",
+                ):
 
-                with st.expander("Data saya"):
-
-                    if not MEMORY_ADMIN_FLOW_ID:
-
-                        st.caption("Pengelolaan data belum aktif di deployment ini.")
-
-                    else:
-
-                        notice = st.session_state.pop("data_notice", None)
-
-                        if notice:
-                            (st.success if notice[0] == "success" else st.error)(notice[1])
-
-                        st.button(
-                            "Tampilkan memoriku",
-                            key="load_memories",
-                            icon=":material/visibility:",
-                            on_click=load_my_memories,
-                        )
-
-                        listing = st.session_state.get("my_memories")
-
-                        if listing is not None and not listing.get("ok"):
-                            st.caption("Memory belum bisa dimuat. Silakan coba lagi.")
-
-                        elif listing is not None and not listing.get("memories"):
-                            st.caption("Belum ada memory yang tersimpan.")
-
-                        elif listing is not None:
-
-                            st.caption(f"{listing.get('total', 0)} memory tersimpan")
-
-                            for item in listing["memories"]:
-
-                                st.markdown(
-                                    '<div class="ciel-projfile">'
-                                    f"<span>{html.escape(short(item['text'], 90))}</span>"
-                                    "</div>",
-                                    unsafe_allow_html=True,
-                                )
-
-                                st.button(
-                                    "Hapus",
-                                    key=f"delmem_{item['id']}",
-                                    icon=":material/close:",
-                                    on_click=delete_my_memory,
-                                    args=(item["id"],),
-                                )
-
-                        st.checkbox(
-                            "Saya yakin ingin menghapus semua memoriku",
-                            key="confirm_delete_memories",
-                        )
-
-                        st.button(
-                            "Hapus semua memoriku",
-                            key="delete_all_memories",
-                            icon=":material/delete:",
-                            disabled=not st.session_state.get("confirm_delete_memories"),
-                            on_click=delete_all_my_memories,
-                        )
-
-                        st.button(
-                            "Tampilkan datasetku",
-                            key="load_datasets",
-                            icon=":material/table_chart:",
-                            on_click=load_my_datasets,
-                        )
-
-                        datasets = st.session_state.get("my_datasets")
-
-                        if datasets is not None and not datasets.get("ok"):
-                            st.caption("Dataset belum bisa dimuat. Silakan coba lagi.")
-
-                        elif datasets is not None and not datasets.get("datasets"):
-                            st.caption("Belum ada dataset yang tersimpan.")
-
-                        elif datasets is not None:
-
-                            st.caption(f"{datasets.get('total', 0)} dataset tersimpan")
-                            exported = st.session_state.get("dataset_export")
-
-                            for item in datasets["datasets"]:
-
-                                st.markdown(
-                                    '<div class="ciel-projfile">'
-                                    f"<span>{html.escape(short(item['name'], 28))}</span>"
-                                    f"<em>{item['rows']} baris</em>"
-                                    "</div>",
-                                    unsafe_allow_html=True,
-                                )
-
-                                if exported and exported[0] == item["name"]:
-                                    st.download_button(
-                                        "Unduh CSV",
-                                        data=exported[1].encode("utf-8"),
-                                        file_name=f"{item['name']}.csv",
-                                        mime="text/csv",
-                                        key=f"dl_{item['name']}",
-                                        icon=":material/download:",
-                                    )
-                                else:
-                                    st.button(
-                                        "Siapkan unduhan",
-                                        key=f"exp_{item['name']}",
-                                        icon=":material/download:",
-                                        on_click=export_my_dataset,
-                                        args=(item["name"],),
-                                    )
-
-                                st.button(
-                                    "Hapus",
-                                    key=f"deldata_{item['name']}",
-                                    icon=":material/close:",
-                                    on_click=delete_my_dataset,
-                                    args=(item["name"],),
-                                )
-
-                        st.checkbox(
-                            "Saya yakin ingin menghapus semua datasetku",
-                            key="confirm_delete_datasets",
-                        )
-
-                        st.button(
-                            "Hapus semua datasetku",
-                            key="delete_all_datasets",
-                            icon=":material/delete:",
-                            disabled=not st.session_state.get("confirm_delete_datasets"),
-                            on_click=delete_all_my_datasets,
-                        )
-
-                        st.checkbox(
-                            "Saya yakin ingin menghapus riwayat chat-ku di server",
-                            key="confirm_delete_history",
-                        )
-
-                        st.button(
-                            "Hapus riwayat chat-ku di server",
-                            key="delete_history",
-                            icon=":material/history:",
-                            disabled=not st.session_state.get("confirm_delete_history"),
-                            on_click=delete_my_chat_history,
-                        )
-
-                with st.container(key="accountexit"):
-
-                    st.button(
-                        "Keluar",
-                        key="logout",
-                        type="tertiary",
-                        icon=":material/logout:",
-                        on_click=st.logout,
+                    # HTML, bukan st.caption: markdown mengubah email jadi link mailto.
+                    st.markdown(
+                        '<div class="ciel-account-email">'
+                        f'{html.escape(st.user.get("email") or name)}'
+                        "</div>",
+                        unsafe_allow_html=True,
                     )
+
+                    plan_line = pro_status_html()
+
+                    if plan_line:
+                        st.markdown(f'<div class="ciel-note ciel-account-plan">{plan_line}</div>', unsafe_allow_html=True)
+
+                    with st.container(key="accountexit"):
+
+                        st.button(
+                            "Keluar",
+                            key="logout",
+                            type="tertiary",
+                            icon=":material/logout:",
+                            on_click=st.logout,
+                        )
+
+                # Tanpa help=: tooltip membungkus tombol sehingga aturan CSS-nya tidak berlaku.
+                st.button(
+                    "Pengaturan",
+                    key="opensettings",
+                    type="tertiary",
+                    icon=":material/settings:",
+                    on_click=open_settings,
+                )
 
 
 # ============================================================
@@ -4650,8 +4726,6 @@ with st.container(
         width="content",
     ):
 
-        st.html(THEME_TOGGLE_HTML, width="content")
-
         if not logged_in():
 
             st.button(
@@ -4684,32 +4758,374 @@ if cek_target and CHECK_ENABLED:
 
 
 # ============================================================
-# PRICING PAGE
+# SETTINGS PAGE
 # ============================================================
-# Dirender sebelum chat input supaya composer tidak muncul di halaman harga.
 
-if current_view() == "pricing":
-    render_pricing(
-        contact_url=CONTACT_URL,
-        on_start_chat=show_chat,
-        rate_limits=(RATE_LIMIT_PER_HOUR, RATE_LIMIT_PER_HOUR_LOGIN),
-        memory_enabled=AUTH_ENABLED,
-        pro_action=render_pro_action if PAYMENTS_ENABLED else None,
-        history_saved=CHAT_STORE is not None,
-    )
-    st.stop()
+# Pilihan tema; UI_JS menangani klik dan aria-pressed, dan menyimpan pilihan
+# di localStorage (gelap tetap default).
+THEME_CHOICE_HTML = (
+    '<div class="ciel-theme-choices" role="group" aria-label="Tema">'
+    '<button type="button" class="ciel-theme-choice" data-ciel-theme-set="dark" aria-pressed="true">Gelap</button>'
+    '<button type="button" class="ciel-theme-choice" data-ciel-theme-set="light" aria-pressed="false">Terang</button>'
+    "</div>"
+)
 
-if current_view() == "privacy":
-    render_privacy(
-        retention_days=CHAT_RETENTION_DAYS,
-        memory_enabled=AUTH_ENABLED,
-        data_controls=bool(MEMORY_ADMIN_FLOW_ID),
-        contact_url=safe_contact_url(CONTACT_URL),
-        operator=OPERATOR_NAME,
-        history_saved=CHAT_STORE is not None,
-        payments=PAYMENTS_ENABLED,
+
+def settings_head(title, text):
+    st.markdown(
+        '<div class="ciel-settings-head">'
+        f"<h1>{html.escape(title)}</h1>"
+        f"<p>{html.escape(text)}</p>"
+        "</div>",
+        unsafe_allow_html=True,
     )
-    st.stop()
+
+
+def plan_badge_html():
+    """Isi baris Paket di kartu Akun: lencana Pro/Gratis dan masa aktifnya."""
+
+    if not CHAT_STORE:
+        return '<span class="ciel-plan-pill">Gratis</span>'
+
+    until = pro_until()
+
+    if until is None:
+        return '<span class="ciel-account-muted">Status belum bisa dimuat.</span>'
+
+    if until > time.time():
+        return f'<span class="ciel-plan-pill ciel-plan-pro">Pro</span> Aktif sampai {format_date_id(until)}'
+
+    ended = f' <span class="ciel-account-muted">Masa Pro berakhir {format_date_id(until)}</span>' if until else ""
+    return f'<span class="ciel-plan-pill">Gratis</span>{ended}'
+
+
+def account_card_html():
+    """Kartu Akun di Pengaturan > Profil: label di kiri, nilai di kanan."""
+
+    # HTML, bukan markdown: markdown mengubah email jadi link mailto.
+    rows = (
+        ("Email", html.escape(st.user.get("email") or account_name())),
+        ("Paket", plan_badge_html()),
+        (
+            "Long-term memory",
+            "Aktif, hanya milik akunmu. Ciel mengingat konteks penting lintas percakapan.",
+        ),
+        ("ID memory", f"<code>{memory_owner_id()}</code>"),
+    )
+    return (
+        '<div class="ciel-account-card">'
+        + "".join(
+            f'<div class="ciel-account-row"><span class="ciel-account-label">{label}</span>'
+            f'<span class="ciel-account-value">{value}</span></div>'
+            for label, value in rows
+        )
+        + "</div>"
+    )
+
+
+def render_profile_settings():
+    # Muat ulang profil yang tadi gagal dimuat setiap kali tab ini dibuka.
+    if st.session_state.get("profile_load_failed"):
+        load_profile()
+
+    profile = st.session_state.profile
+    blocked = st.session_state.get("profile_load_failed", False)
+
+    settings_head("Profil", "Cara Ciel menyapamu, dan sedikit konteks supaya jawabannya pas untukmu.")
+
+    if blocked:
+        st.warning("Profil tersimpan belum bisa dimuat, jadi belum bisa diubah. Coba buka tab ini lagi sebentar lagi.")
+
+    with st.form("profile_form", border=False):
+
+        st.text_input(
+            "Nama lengkap",
+            value=profile["full_name"],
+            max_chars=PROFILE_LIMITS["full_name"],
+            key="profile_full_name",
+        )
+        st.text_input(
+            "Nama panggilan",
+            value=profile["nickname"],
+            max_chars=PROFILE_LIMITS["nickname"],
+            placeholder="Contoh: Raka",
+            help="Ciel memakai nama ini untuk menyapamu. Kosongkan untuk memakai nama depanmu.",
+            key="profile_nickname",
+        )
+        st.text_input(
+            "Bidang studi / jurusan",
+            value=profile["field"],
+            max_chars=PROFILE_LIMITS["field"],
+            placeholder="Contoh: Akuntansi, semester 7",
+            key="profile_field",
+        )
+        st.text_area(
+            "Preferensi jawaban",
+            value=profile["preferences"],
+            max_chars=PROFILE_LIMITS["preferences"],
+            placeholder="Contoh: jelaskan singkat dulu, pakai contoh angka.",
+            height=90,
+            key="profile_preferences",
+        )
+        st.form_submit_button("Simpan", key="profile_save", type="primary", disabled=blocked, on_click=save_profile_form)
+
+    if not CHAT_STORE:
+        st.caption("Profil hanya tersimpan selama sesi ini.")
+
+    st.markdown('<h2 class="ciel-settings-h">Akun</h2>' + account_card_html(), unsafe_allow_html=True)
+
+    st.checkbox("Saya yakin ingin mengosongkan profilku", key="confirm_clear_profile")
+
+    st.button(
+        "Kosongkan profil",
+        key="profile_clear",
+        icon=":material/delete:",
+        disabled=not st.session_state.get("confirm_clear_profile"),
+        on_click=clear_profile,
+    )
+
+
+def render_theme_settings():
+    settings_head("Tampilan", "Pilih tema. Pilihanmu disimpan di browser ini.")
+    st.html(THEME_CHOICE_HTML, width="content")
+
+
+def render_data_settings():
+    settings_head("Data saya", "Lihat, unduh, dan hapus data yang Ciel simpan untuk akunmu.")
+
+    st.download_button(
+        "Unduh riwayat chat (JSON)",
+        data=export_chats_json(st.session_state.chats).encode("utf-8"),
+        file_name="ciel-riwayat.json",
+        mime="application/json",
+        key="export_chats",
+        icon=":material/download:",
+    )
+
+
+    if not MEMORY_ADMIN_FLOW_ID:
+
+        st.caption("Pengelolaan memory dan dataset belum aktif di deployment ini.")
+
+    else:
+
+        notice = st.session_state.pop("data_notice", None)
+
+        if notice:
+            (st.success if notice[0] == "success" else st.error)(notice[1])
+
+        st.button(
+            "Tampilkan memoriku",
+            key="load_memories",
+            icon=":material/visibility:",
+            on_click=load_my_memories,
+        )
+
+        listing = st.session_state.get("my_memories")
+
+        if listing is not None and not listing.get("ok"):
+            st.caption("Memory belum bisa dimuat. Silakan coba lagi.")
+
+        elif listing is not None and not listing.get("memories"):
+            st.caption("Belum ada memory yang tersimpan.")
+
+        elif listing is not None:
+
+            st.caption(f"{listing.get('total', 0)} memory tersimpan")
+
+            for item in listing["memories"]:
+
+                st.markdown(
+                    '<div class="ciel-projfile">'
+                    f"<span>{html.escape(short(item['text'], 90))}</span>"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+
+                st.button(
+                    "Hapus",
+                    key=f"delmem_{item['id']}",
+                    icon=":material/close:",
+                    on_click=delete_my_memory,
+                    args=(item["id"],),
+                )
+
+        st.checkbox(
+            "Saya yakin ingin menghapus semua memoriku",
+            key="confirm_delete_memories",
+        )
+
+        st.button(
+            "Hapus semua memoriku",
+            key="delete_all_memories",
+            icon=":material/delete:",
+            disabled=not st.session_state.get("confirm_delete_memories"),
+            on_click=delete_all_my_memories,
+        )
+
+        st.button(
+            "Tampilkan datasetku",
+            key="load_datasets",
+            icon=":material/table_chart:",
+            on_click=load_my_datasets,
+        )
+
+        datasets = st.session_state.get("my_datasets")
+
+        if datasets is not None and not datasets.get("ok"):
+            st.caption("Dataset belum bisa dimuat. Silakan coba lagi.")
+
+        elif datasets is not None and not datasets.get("datasets"):
+            st.caption("Belum ada dataset yang tersimpan.")
+
+        elif datasets is not None:
+
+            st.caption(f"{datasets.get('total', 0)} dataset tersimpan")
+            exported = st.session_state.get("dataset_export")
+
+            for item in datasets["datasets"]:
+
+                st.markdown(
+                    '<div class="ciel-projfile">'
+                    f"<span>{html.escape(short(item['name'], 28))}</span>"
+                    f"<em>{item['rows']} baris</em>"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+
+                if exported and exported[0] == item["name"]:
+                    st.download_button(
+                        "Unduh CSV",
+                        data=exported[1].encode("utf-8"),
+                        file_name=f"{item['name']}.csv",
+                        mime="text/csv",
+                        key=f"dl_{item['name']}",
+                        icon=":material/download:",
+                    )
+                else:
+                    st.button(
+                        "Siapkan unduhan",
+                        key=f"exp_{item['name']}",
+                        icon=":material/download:",
+                        on_click=export_my_dataset,
+                        args=(item["name"],),
+                    )
+
+                st.button(
+                    "Hapus",
+                    key=f"deldata_{item['name']}",
+                    icon=":material/close:",
+                    on_click=delete_my_dataset,
+                    args=(item["name"],),
+                )
+
+        st.checkbox(
+            "Saya yakin ingin menghapus semua datasetku",
+            key="confirm_delete_datasets",
+        )
+
+        st.button(
+            "Hapus semua datasetku",
+            key="delete_all_datasets",
+            icon=":material/delete:",
+            disabled=not st.session_state.get("confirm_delete_datasets"),
+            on_click=delete_all_my_datasets,
+        )
+
+        st.checkbox(
+            "Saya yakin ingin menghapus riwayat chat-ku di server",
+            key="confirm_delete_history",
+        )
+
+        st.button(
+            "Hapus riwayat chat-ku di server",
+            key="delete_history",
+            icon=":material/history:",
+            disabled=not st.session_state.get("confirm_delete_history"),
+            on_click=delete_my_chat_history,
+        )
+
+
+@st.dialog("Pengaturan", width="large", on_dismiss=close_settings)
+def settings_dialog():
+    """
+    Pengaturan seperti di aplikasi Claude: menu di kiri, isi tab di kanan.
+    Tombol di dalam dialog hanya menjalankan ulang dialog ini; tombol yang
+    menutupnya (Mulai chat, Masuk untuk membeli) memanggil close_settings, lalu
+    st.rerun() di sini menutup dialog. X, Esc, atau klik di luar memanggil
+    close_settings lewat on_dismiss.
+    """
+
+    if not st.session_state.get("settings_open"):
+        st.rerun()
+
+    tab = settings_tab("settings", st.session_state.settings_open, logged_in())
+
+    menu, panel = st.columns([1, 3], gap="medium")
+
+    with menu, st.container(key="settingsnav", gap=None):
+
+        for key, label, icon in SETTINGS_TABS:
+
+            if key in LOGIN_TABS and not logged_in():
+                continue
+
+            st.button(
+                label,
+                key=("settabactive_" if key == tab else "settab_") + key,
+                type="tertiary",
+                icon=icon,
+                width="stretch",
+                on_click=open_settings,
+                args=(key,),
+            )
+
+    with panel, st.container(key="settingspanel"):
+        render_settings_tab(tab)
+
+
+def render_settings_tab(tab):
+    notice = st.session_state.pop("settings_notice", None)
+
+    if notice:
+        (st.success if notice[0] == "success" else st.error)(notice[1])
+
+    if tab == "profil":
+        render_profile_settings()
+
+    elif tab == "tampilan":
+        render_theme_settings()
+
+    elif tab == "data":
+        render_data_settings()
+
+    elif tab == "paket":
+        render_pricing(
+            contact_url=CONTACT_URL,
+            on_start_chat=show_chat,
+            rate_limits=(RATE_LIMIT_PER_HOUR, RATE_LIMIT_PER_HOUR_LOGIN),
+            memory_enabled=AUTH_ENABLED,
+            pro_action=render_pro_action if PAYMENTS_ENABLED else None,
+            history_saved=CHAT_STORE is not None,
+        )
+
+    else:
+        render_privacy(
+            retention_days=CHAT_RETENTION_DAYS,
+            memory_enabled=AUTH_ENABLED,
+            data_controls=bool(MEMORY_ADMIN_FLOW_ID),
+            contact_url=safe_contact_url(CONTACT_URL),
+            operator=OPERATOR_NAME,
+            history_saved=CHAT_STORE is not None,
+            payments=PAYMENTS_ENABLED,
+        )
+
+
+# Dialog Pengaturan (tombol ⚙ di sidebar, atau ?page=settings / pricing / privacy).
+open_settings_from_url()
+
+if st.session_state.get("settings_open"):
+    settings_dialog()
 
 if current_view() == "login":
     render_login(
@@ -5008,7 +5424,7 @@ if pending_request:
                 answer = upload_error
             else:
                 answer = ask_langflow(
-                    cached_turn_context(chat) + pending_request["payload"],
+                    profile_note() + cached_turn_context(chat) + pending_request["payload"],
                     tweaks=build_tweaks(image_paths, tables),
                     session_id=session_id,
                 )
@@ -5016,7 +5432,7 @@ if pending_request:
         elif answer is None:
 
             answer = ask_langflow(
-                cached_turn_context(chat) + pending_request["payload"],
+                profile_note() + cached_turn_context(chat) + pending_request["payload"],
                 tweaks=build_tweaks(tables=tables),
                 session_id=session_id,
             )

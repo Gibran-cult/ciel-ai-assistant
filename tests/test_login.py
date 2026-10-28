@@ -213,17 +213,16 @@ class TopBarNavTest(unittest.TestCase):
         self.assertFalse(at.exception)
         main_labels = [b.label for b in at.main.button]
         sidebar_labels = [b.label for b in at.sidebar.button]
-        for label in ("Masuk", "Pricing", "Privasi", "Keluar"):
+        for label in ("Masuk", "Pricing", "Privasi", "Keluar", "Pengaturan"):
             self.assertNotIn(label, main_labels)
-        # The menu holds Pricing and Privasi (once each, as rows with icons),
-        # the memory note, "Data saya" and Keluar.
-        self.assertEqual(sidebar_labels.count("Pricing"), 1)
-        self.assertEqual(sidebar_labels.count("Privasi"), 1)
-        self.assertIn("Keluar", sidebar_labels)
-        rows = [b for b in at.sidebar.button if b.label in ("Pricing", "Privasi", "Keluar")]
-        self.assertTrue(all(b.proto.icon for b in rows))
-        self.assertIn("Data saya", [e.label for e in at.sidebar.expander])
-        self.assertIn("Long-term memory aktif", page_text(at))
+        # The menu holds the email, Pro status and Keluar; Pricing, Privasi,
+        # the memory note and "Data saya" moved to Pengaturan (the ⚙ button).
+        for label in ("Pricing", "Privasi"):
+            self.assertNotIn(label, sidebar_labels)
+        self.assertEqual(sidebar_labels.count("Keluar"), 1)
+        self.assertEqual(sidebar_labels.count("Pengaturan"), 1)
+        self.assertNotIn("Data saya", [e.label for e in at.sidebar.expander])
+        self.assertNotIn("Long-term memory aktif", page_text(at))
         # Last in the sidebar, after the history.
         source = APP_PATH.read_text(encoding="utf-8")
         self.assertGreater(source.index('with st.container(key="sideaccount"):'), source.index('with st.container(key="history"):'))

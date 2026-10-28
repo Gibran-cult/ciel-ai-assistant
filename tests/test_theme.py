@@ -82,6 +82,45 @@ class ThemeTokensTest(unittest.TestCase):
         self.assertIn("background: var(--c-raised-strong);", nav)
         self.assertIn("font-weight: 600;", nav)
 
+    def rule(self, selector):
+        """Declarations of the first rule that lists `selector` (alone or grouped)."""
+        self.assertRegex(self.css, re.escape(selector) + r"\s*[{,]")
+        after = re.split(re.escape(selector) + r"\s*(?=[{,])", self.css, maxsplit=1)[1]
+        return after.split("{", 1)[1].split("}", 1)[0]
+
+    def test_pricing_and_privacy_styles_reach_the_settings_dialog(self):
+        import pricing
+        import privacy
+        for name, css in (("pricing", pricing.PRICING_CSS), ("privacy", privacy.PRIVACY_CSS)):
+            with self.subTest(module=name):
+                self.assertNotRegex(css, r"(?m)^\s*\.stApp ")
+                self.assertIn(':is(.stApp, [data-testid="stDialog"]) ', css)
+
+    def test_settings_dialog_has_a_menu_and_a_scrolling_panel(self):
+        self.assertIn('[data-testid="stDialog"] .st-key-settingsnav', self.css)
+        panel = self.rule('[data-testid="stDialog"] .st-key-settingspanel')
+        self.assertIn("overflow-y: auto;", panel)
+
+    def test_pro_badge_text_is_readable_on_its_tint(self):
+        # --c-accent-ink is for text on a solid accent; on the 10-14% tint it
+        # would nearly vanish (white on paper, ink on near-black).
+        pill = self.rule('[data-testid="stDialog"] .ciel-plan-pill.ciel-plan-pro')
+        self.assertIn("background: var(--c-accent-soft);", pill)
+        self.assertIn("color: var(--c-accent);", pill)
+
+    def test_settings_button_is_a_bare_icon(self):
+        # Ciel, 2026-10-28: the ⚙ needs no text and no box, signed in or not.
+        base = '[data-testid="stSidebar"] .st-key-sideaccount .st-key-opensettings'
+        button = self.rule(base + " button")
+        for line in ("border: 0;", "background: transparent;", "color: var(--c-muted);"):
+            self.assertIn(line, button)
+        hover = self.rule(base + " button:hover")
+        self.assertIn("background: transparent;", hover)
+        self.assertIn("color: var(--c-text);", hover)
+        self.assertNotIn("--c-raised", hover)
+        # The label stays for screen readers but is hidden on screen.
+        self.assertIn("clip-path: inset(50%);", self.rule(base + ' [data-testid="stMarkdownContainer"]'))
+
     def test_account_button_stays_at_the_bottom_of_the_sidebar(self):
         # Sticky on the wrapper Streamlit puts around the keyed container: a
         # sticky element only moves inside its parent, and the keyed block
@@ -194,16 +233,27 @@ class ThemeScriptTest(unittest.TestCase):
     def setUpClass(cls):
         constants = app_constants()
         cls.js = constants["UI_JS"]
-        cls.toggle = constants["THEME_TOGGLE_HTML"]
+        cls.choice = constants["THEME_CHOICE_HTML"]
+        cls.css = constants["CIEL_CSS"]
         cls.source = APP_PATH.read_text(encoding="utf-8")
 
-    def test_toggle_is_a_labelled_button_in_the_top_bar(self):
-        self.assertIn('<button type="button"', self.toggle)
-        self.assertIn("data-ciel-theme-toggle", self.toggle)
-        self.assertIn("aria-label=", self.toggle)
-        self.assertNotIn("<svg", self.toggle)  # st.html strips it; the icon is CSS
-        self.assertIn('st.html(THEME_TOGGLE_HTML, width="content")', self.source)
+    def test_theme_is_chosen_in_settings_not_the_top_bar(self):
+        self.assertNotIn("data-ciel-theme-toggle", self.source)
+        self.assertNotIn("THEME_TOGGLE_HTML", self.source)
+        self.assertIn('data-ciel-theme-set="dark" aria-pressed="true"', self.choice)
+        self.assertIn('data-ciel-theme-set="light" aria-pressed="false"', self.choice)
+        self.assertIn('st.html(THEME_CHOICE_HTML, width="content")', self.source)
         self.assertIn("st.html(UI_JS, unsafe_allow_javascript=True)", self.source)
+
+    def test_choice_buttons_set_the_theme_and_report_it(self):
+        self.assertIn("closest('[data-ciel-theme-set]')", self.js)
+        self.assertIn("if (next !== 'light' && next !== 'dark') return;", self.js)
+        self.assertIn("button.setAttribute('aria-pressed', pressed)", self.js)
+
+    def test_choice_buttons_follow_the_tokens(self):
+        self.assertIn('.ciel-theme-choice[aria-pressed="true"]', self.css)
+        # Keyboard focus comes from the app-wide rule for buttons in .stApp.
+        self.assertIn('.stApp :is(button, a, textarea, input, summary, [role="button"]):focus-visible', self.css)
 
     def test_choice_is_kept_on_html_and_survives_blocked_storage(self):
         self.assertIn("const root = document.documentElement;", self.js)

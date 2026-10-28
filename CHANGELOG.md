@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Settings page with a personal profile
+- New Pengaturan dialog over the app, like Settings in the Claude app: a menu on the left, the tab on the right (it scrolls on its own), closed with X, Esc, or a click outside. It opens from the ⚙ icon (no label, no box) to the right of the account name at the bottom of the sidebar. Signed-out visitors get the same icon, with the Tampilan, Paket, and Privasi tabs only. On phones the menu wraps into a row above the tab.
+- Tabs: Profil, Tampilan, Data saya, Paket (the old Pricing page), and Privasi. `?page=pricing`, `?page=privacy`, and `?page=settings&tab=<tab>` open the dialog on that tab once and are then removed from the address bar, so landing links and the Midtrans return URL are unchanged. Pricing and Privacy styles now also apply inside dialogs.
+- Profil: full name, the name Ciel should call you, field of study, and answer preferences (new `account_settings.py`, new Supabase table `profiles` in `docs/chat_store.sql`). The home greeting uses that name, and each normal chat message starts with a short profile block so Ciel uses it too. The tab also shows the account email, memory ID, and Pro status, and "Kosongkan profil" clears the profile.
+- Data saya moved out of the account menu, unchanged, and gained "Unduh riwayat chat (JSON)".
+- The light/dark toggle left the top bar. Pengaturan > Tampilan now has Gelap and Terang buttons, still saved in this browser, with dark as the default.
+- The account menu now holds only the email, the plan line, and Keluar.
+- The privacy page explains the profile and points to Pengaturan for data controls.
+
 ### Repeated general questions are answered from a cache
 - New `answer_cache.py`: an in-memory cache (1 day, 500 questions) for the first message of a new chat when it is plain text. A hit answers instantly, costs no DeepSeek call, and uses no message quota.
 - An answer is stored only after the same question is asked twice, and only if it is at least 40 characters. The key includes `FLOW_ID`.

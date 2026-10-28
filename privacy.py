@@ -39,13 +39,13 @@ PRIVACY_CSS = """
     letter-spacing: -0.01em;
     color: var(--c-text);
 }
-.stApp .ciel-privacy p,
-.stApp .ciel-privacy li { font-size: 0.92rem; line-height: 1.65; color: var(--c-muted); }
-.stApp .ciel-privacy .ciel-updated { margin-top: 0.3rem; font-size: 0.82rem; color: var(--c-faint); }
-.stApp .ciel-privacy ul { padding-left: 1.1rem; margin: 0; }
-.stApp .ciel-privacy li { margin: 0 0 0.45rem; }
-.stApp .ciel-privacy strong { color: var(--c-text); font-weight: 600; }
-.stApp .ciel-privacy a { color: var(--c-accent); }
+:is(.stApp, [data-testid="stDialog"]) .ciel-privacy p,
+:is(.stApp, [data-testid="stDialog"]) .ciel-privacy li { font-size: 0.92rem; line-height: 1.65; color: var(--c-muted); }
+:is(.stApp, [data-testid="stDialog"]) .ciel-privacy .ciel-updated { margin-top: 0.3rem; font-size: 0.82rem; color: var(--c-faint); }
+:is(.stApp, [data-testid="stDialog"]) .ciel-privacy ul { padding-left: 1.1rem; margin: 0; }
+:is(.stApp, [data-testid="stDialog"]) .ciel-privacy li { margin: 0 0 0.45rem; }
+:is(.stApp, [data-testid="stDialog"]) .ciel-privacy strong { color: var(--c-text); font-weight: 600; }
+:is(.stApp, [data-testid="stDialog"]) .ciel-privacy a { color: var(--c-accent); }
 </style>
 """
 
@@ -131,6 +131,21 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
             "tanpa permintaanmu dan tidak memakainya untuk pengguna lain."
         )
         stored.append(
+            "<strong>Profil</strong> (opsional, hanya setelah login): nama lengkap, "
+            "nama panggilan, bidang studi, dan preferensi jawaban yang kamu isi di "
+            "Pengaturan. "
+            + (
+                "Disimpan di database Ciel sampai kamu menghapusnya"
+                if history_saved
+                else "Hanya disimpan selama sesi ini"
+            )
+            + ", dan dikirim ke model AI bersama pesanmu supaya Ciel menyapamu "
+            "dengan nama pilihanmu. Hapus kapan saja lewat <strong>Kosongkan "
+            "profil</strong> di Pengaturan. Karena ikut terkirim di setiap pesan, "
+            f"isinya juga ikut tersimpan di riwayat pesan di server (paling lama {days} "
+            "hari) dan di cadangan (paling lama 5 minggu)."
+        )
+        stored.append(
             "<strong>Akun Google:</strong> nama dan email dipakai untuk "
             "menampilkan status login. Memory memakai kode yang diturunkan dari "
             "akunmu, bukan emailmu."
@@ -164,9 +179,11 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
 
     if memory_enabled and data_controls:
         rights.append(
-            "Setelah login, buka menu akun di kanan atas lalu <strong>Data saya</strong> untuk "
-            "melihat dan menghapus memory-mu, melihat, mengunduh, dan menghapus "
-            "dataset pribadimu, serta menghapus riwayat chat-mu di server."
+            "Setelah login, buka <strong>Pengaturan</strong> (ikon roda gigi di "
+            "samping namamu, di bawah sidebar), lalu <strong>Data saya</strong> untuk "
+            "mengunduh riwayat chat, melihat dan menghapus memory-mu, melihat, "
+            "mengunduh, dan menghapus dataset pribadimu, serta menghapus riwayat "
+            "chat-mu di server."
         )
     elif memory_enabled:
         rights.append(

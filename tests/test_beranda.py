@@ -111,7 +111,7 @@ class SentencePreviewTest(unittest.TestCase):
 class TimeTextTest(unittest.TestCase):
 
     def test_greeting_uses_wib(self):
-        self.assertEqual(greeting(wib(2026, 10, 20, 21, 0), "Raka Pradipta"), "Malam, Raka.")
+        self.assertEqual(greeting(wib(2026, 10, 20, 21, 0), "Kak Raka"), "Malam, Kak Raka.")
         self.assertEqual(greeting(wib(2026, 10, 20, 21, 0), None), "Malam.")
         self.assertEqual(greeting(wib(2026, 10, 20, 7, 0), "Raka"), "Pagi, Raka.")
         self.assertEqual(greeting(wib(2026, 10, 20, 12, 0), ""), "Siang.")

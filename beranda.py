@@ -80,12 +80,15 @@ def _wib(epoch):
 
 
 def greeting(now, name):
-    """"Malam, Raka." menurut jam WIB; tanpa nama jika belum masuk."""
+    """"Malam, Raka." menurut jam WIB; tanpa nama jika belum masuk.
+
+    `name` sudah berupa panggilan (account_settings.call_name), jadi dipakai utuh.
+    """
 
     hour = _wib(now).hour
     part = "Pagi" if 4 <= hour <= 10 else "Siang" if 11 <= hour <= 14 else "Sore" if 15 <= hour <= 17 else "Malam"
-    first = (name or "").split()
-    return f"{part}, {first[0]}." if first else f"{part}."
+    name = (name or "").strip()
+    return f"{part}, {name}." if name else f"{part}."
 
 
 def relative_time(then, now):

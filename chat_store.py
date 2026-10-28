@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 
 import requests
 
+from account_settings import clean_profile
+
 logger = logging.getLogger("ciel_ai.chat_store")
 
 OWNER_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
@@ -190,9 +192,10 @@ class ChatStore:
         return {item["id"]: item for item in items}
 
     def _upsert(self, action, table, row):
-        # Upsert lewat primary key (owner, id): PostgREST tidak memakai filter
-        # di POST, jadi owner dan id ada di badan baris dan divalidasi di sini.
-        if not OWNER_PATTERN.match(row["owner"] or "") or not ROW_ID_PATTERN.match(str(row["id"])):
+        # Upsert lewat primary key (owner, id), atau owner saja untuk profil:
+        # PostgREST tidak memakai filter di POST, jadi kuncinya ada di badan
+        # baris dan divalidasi di sini.
+        if not OWNER_PATTERN.match(row["owner"] or "") or ("id" in row and not ROW_ID_PATTERN.match(str(row["id"]))):
             logger.error("chat_store_rejected action=%s", action)
             return False
 
@@ -231,6 +234,33 @@ class ChatStore:
 
     def delete_project(self, owner, project_id):
         return self._request("DELETE", "delete_project", owner, "projects", row_id=project_id) is not None
+
+    def load_profile(self, owner):
+        """Profil Pengaturan akun ini (kosong jika belum diisi), atau None jika gagal."""
+
+        response = self._request(
+            "GET",
+            "load_profile",
+            owner,
+            "profiles",
+            params={"select": "full_name,nickname,field,preferences", "limit": "1"},
+        )
+
+        if response is None:
+            return None
+
+        try:
+            rows = response.json()
+            return clean_profile(rows[0] if rows else {})
+        except (ValueError, KeyError, TypeError, AttributeError) as error:
+            logger.error("chat_store_error action=load_profile type=%s error=%s", type(error).__name__, error)
+            return None
+
+    def save_profile(self, owner, profile):
+        return self._upsert("save_profile", "profiles", {"owner": owner, **clean_profile(profile)})
+
+    def delete_profile(self, owner):
+        return self._request("DELETE", "delete_profile", owner, "profiles") is not None
 
     def load_pro_until(self, owner):
         """
