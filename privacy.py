@@ -18,7 +18,7 @@ import streamlit as st
 
 
 # Ubah tanggal ini setiap kali isi halaman berubah (Pasal 21 ayat 2).
-PRIVACY_UPDATED = "18 Oktober 2026"
+PRIVACY_UPDATED = "28 Oktober 2026"
 
 
 PRIVACY_CSS = """
