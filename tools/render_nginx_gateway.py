@@ -18,16 +18,23 @@ Differences that come from nginx rather than from the rules:
   - Langflow receives $uri (the normalized path that matched the location),
     never $request_uri, so what Langflow sees is exactly the path the
     allowlist matched (not the raw, possibly encoded or dotted, request line).
-  - proxy_pass with variables ($uri) makes nginx resolve the host at request
-    time, which needs a `resolver` unless the host names an upstream group.
-    So the config declares `upstream langflow_backend` (resolved once at
-    start-up) and proxies to that.
+  - Langflow's container can get a new IP when it is restarted or recreated.
+    The config proxies to `upstream langflow_backend`, whose server has the
+    `resolve` flag (nginx 1.27.3 open source; it needs the shared `zone`), and
+    declares Docker's DNS (`resolver 127.0.0.11`), so nginx follows the new
+    address within 10 s instead of keeping the one it saw at start-up.
+  - The gateway's Basic Auth header is cleared (`proxy_set_header
+    Authorization ""`): Langflow authenticates with x-api-key and never sees
+    the gateway password.
   - nginx keeps only the limit_req lines of the innermost level, so the costly
     locations repeat the per-IP limit on every path.
 
-Settings come from the environment, then the repository's .env (same names as
-the ngrok policy: NGROK_USER, NGROK_PASSWORD, FLOW_ID, MEMORY_ADMIN_FLOW_ID,
-RESEARCH_FLOW_ID, WRITER_FLOW_ID), plus two optional limits:
+Settings use the same names as the ngrok policy (NGROK_USER, NGROK_PASSWORD,
+FLOW_ID, MEMORY_ADMIN_FLOW_ID, RESEARCH_FLOW_ID, WRITER_FLOW_ID). With
+--env-file the file is the source of truth: its values win over the
+environment, so a shell that still exports old flow IDs cannot leak them into
+the config. Without --env-file, the environment wins over the repository's .env
+(as for the ngrok policy). Two optional limits:
 
   GATEWAY_RUN_PER_MINUTE   per IP, flow runs and uploads (default 60)
   GATEWAY_ALL_PER_MINUTE   per IP, every path (default 300)
@@ -39,7 +46,7 @@ Two files are written, both git-ignored:
   deploy/vps/nginx/ciel.htpasswd   the Basic Auth user, salted SHA-1 ({SSHA})
                                    (mounted as /etc/nginx/ciel.htpasswd)
 
-Nothing secret is printed.
+Nothing secret is printed; the flow IDs used are, so a stale one shows.
 """
 
 import argparse
@@ -49,6 +56,8 @@ import os
 import sys
 import uuid
 from pathlib import Path
+
+from dotenv import dotenv_values
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -62,6 +71,7 @@ from render_ngrok_policy import (  # noqa: E402
 
 UPSTREAM_NAME = "langflow_backend"
 UPSTREAM_SERVER = "langflow:7860"
+DOCKER_DNS = "127.0.0.11"
 HTPASSWD_PATH = "/etc/nginx/ciel.htpasswd"
 READ_TIMEOUT = "600s"  # longer than the app's research timeout (420 s)
 COSTLY_PREFIXES = ("/api/v1/run/", "/api/v1/files/upload/")
@@ -97,6 +107,7 @@ def location(path, methods):
             "        limit_req zone=ciel_api burst=20 nodelay;",
         ]
     lines += [
+        '        proxy_set_header Authorization "";',
         f"        proxy_pass http://{UPSTREAM_NAME}$uri$is_args$args;",
         "    }",
     ]
@@ -128,7 +139,8 @@ def build_nginx_config(
             f"limit_req_zone $http_x_forwarded_for zone=ciel_all:10m rate={all_per_minute}r/m;",
             f"limit_req_zone $http_x_forwarded_for zone=ciel_api:10m rate={run_per_minute}r/m;",
             "",
-            f"upstream {UPSTREAM_NAME} {{ server {UPSTREAM_SERVER}; }}",
+            f"resolver {DOCKER_DNS} valid=10s ipv6=off;",
+            f"upstream {UPSTREAM_NAME} {{ zone {UPSTREAM_NAME} 64k; server {UPSTREAM_SERVER} resolve; }}",
             "",
             "server {",
             "    listen 8080;",
@@ -162,14 +174,31 @@ def write_text(path, text):
     path.write_bytes(text.encode("utf-8"))
 
 
+FLOW_ID_NAMES = ("FLOW_ID", "MEMORY_ADMIN_FLOW_ID", "RESEARCH_FLOW_ID", "WRITER_FLOW_ID")
+
+
+def gateway_settings(env_file):
+    """Settings for the renderer.
+
+    env_file None: the environment wins over the repository's .env (load_settings).
+    An explicit env_file is the source of truth: its values win over the environment.
+    """
+    if env_file is None:
+        return load_settings(ROOT / ".env")
+    values = {k: v for k, v in os.environ.items() if v}
+    if env_file.is_file():
+        values.update({k: v for k, v in dotenv_values(env_file).items() if v})
+    return values
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
+    parser.add_argument("--env-file", type=Path, help="its values win over the environment (default: .env, below it)")
     parser.add_argument("--conf-out", type=Path, default=ROOT / "deploy" / "vps" / "nginx" / "ciel.conf")
     parser.add_argument("--htpasswd-out", type=Path, default=ROOT / "deploy" / "vps" / "nginx" / "ciel.htpasswd")
     args = parser.parse_args(argv)
 
-    settings = load_settings(args.env_file)
+    settings = gateway_settings(args.env_file)
     user = settings.get("NGROK_USER", "").strip()
     password = settings.get("NGROK_PASSWORD", "").strip()
 
@@ -198,6 +227,9 @@ def main(argv=None):
     write_text(args.conf_out, conf)
     write_text(args.htpasswd_out, htpasswd_line(user, password, os.urandom(8)) + "\n")
     print(f"Config ditulis ke {args.conf_out} dan {args.htpasswd_out}.")
+    print("Flow ID yang dipakai: " + ", ".join(
+        f"{name}={settings.get(name, '').strip().lower() or '-'}" for name in FLOW_ID_NAMES
+    ))
     return 0
 
 

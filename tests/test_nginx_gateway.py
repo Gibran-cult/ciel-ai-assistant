@@ -48,14 +48,28 @@ class BuildNginxConfigTest(unittest.TestCase):
             len({path for _, path in allowed_requests(FLOW, ADMIN)}),
         )
 
-    def test_upstream_group_replaces_the_need_for_a_resolver(self):
-        # proxy_pass with variables resolves a plain host at request time (needs a resolver);
-        # a named upstream group is resolved at start-up.
+    def test_upstream_follows_langflows_address_after_a_restart(self):
+        # a recreated or restarted langflow container can get a new IP: the upstream
+        # re-resolves it through Docker's DNS instead of keeping the start-up address
         conf = build(FLOW, ADMIN)
-        self.assertIn("upstream langflow_backend { server langflow:7860; }", conf)
+        self.assertIn("resolver 127.0.0.11 valid=10s ipv6=off;", conf)
+        self.assertIn(
+            "upstream langflow_backend { zone langflow_backend 64k; server langflow:7860 resolve; }",
+            conf,
+        )
+        # http-context directives: before the server block, the resolver before the upstream
+        self.assertLess(conf.index("resolver "), conf.index("upstream langflow_backend"))
         self.assertLess(conf.index("upstream langflow_backend"), conf.index("server {"))
         self.assertNotIn("proxy_pass http://langflow:", conf)
-        self.assertNotIn("resolver", conf)
+
+    def test_gateway_basic_auth_never_reaches_langflow(self):
+        conf = build(FLOW, ADMIN)
+        blocks = [block.split("\n    }", 1)[0] for block in conf.split("    location = ")[1:]]
+        self.assertTrue(blocks)
+        for block in blocks:
+            self.assertIn("proxy_pass ", block)
+            self.assertIn('proxy_set_header Authorization "";', block)
+        self.assertEqual(conf.count('proxy_set_header Authorization "";'), conf.count("proxy_pass "))
 
     def test_long_research_requests_are_not_cut(self):
         self.assertIn("proxy_read_timeout 600s;", build(FLOW, ADMIN))  # > RESEARCH_TIMEOUT 420
@@ -120,14 +134,17 @@ class HtpasswdTest(unittest.TestCase):
 
 class MainTest(unittest.TestCase):
 
-    def run_main(self, env):
+    def run_main(self, env, env_file_text=None):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         conf, htpasswd = Path(tmp.name) / "ciel.conf", Path(tmp.name) / "ciel.htpasswd"
+        env_file = Path(tmp.name) / ("deploy.env" if env_file_text is not None else "missing.env")
+        if env_file_text is not None:
+            env_file.write_text(env_file_text, encoding="utf-8")
         out, err = io.StringIO(), io.StringIO()
         with patch.dict("os.environ", env, clear=True), redirect_stdout(out), redirect_stderr(err):
             code = nginx_tool.main([
-                "--env-file", str(Path(tmp.name) / "missing.env"),
+                "--env-file", str(env_file),
                 "--conf-out", str(conf),
                 "--htpasswd-out", str(htpasswd),
             ])
@@ -164,6 +181,43 @@ class MainTest(unittest.TestCase):
         self.assertFalse(conf.exists())
         self.assertFalse(htpasswd.exists())
         self.assertNotIn("short", output)
+
+    def test_an_explicit_env_file_wins_over_the_environment(self):
+        # README re-renders after `set -a; . ./.env`: a stale exported FLOW_ID must not win
+        stale = "99999999-9999-9999-9999-999999999999"
+        env_file = "".join(f"{k}={v}\n" for k, v in self.env().items())
+        code, conf, _, output = self.run_main(self.env(FLOW_ID=stale), env_file_text=env_file)
+        self.assertEqual(code, 0)
+        text = conf.read_text(encoding="utf-8")
+        self.assertIn(f"location = /api/v1/run/{FLOW}", text)
+        self.assertNotIn(stale, text)
+        self.assertNotIn(stale, output)
+
+    def test_without_env_file_flag_the_environment_still_wins(self):
+        # the default lookup keeps render_ngrok_policy.load_settings' precedence
+        calls = []
+
+        def fake_load_settings(env_file):
+            calls.append(env_file)
+            return self.env()
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        conf = Path(tmp.name) / "ciel.conf"
+        with patch.object(nginx_tool, "load_settings", fake_load_settings), \
+                redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            code = nginx_tool.main(["--conf-out", str(conf), "--htpasswd-out", str(Path(tmp.name) / "h")])
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, [nginx_tool.ROOT / ".env"])
+
+    def test_prints_the_flow_ids_it_used(self):
+        code, _, _, output = self.run_main(self.env(RESEARCH_FLOW_ID=RESEARCH))
+        self.assertEqual(code, 0)
+        self.assertIn(f"FLOW_ID={FLOW}", output)
+        self.assertIn(f"MEMORY_ADMIN_FLOW_ID={ADMIN}", output)
+        self.assertIn(f"RESEARCH_FLOW_ID={RESEARCH}", output)
+        self.assertIn("WRITER_FLOW_ID=-", output)
+        self.assertNotIn(PASSWORD, output)
 
     def test_bad_rate_limit_writes_nothing(self):
         code, conf, htpasswd, _ = self.run_main(self.env(GATEWAY_RUN_PER_MINUTE="banyak"))
