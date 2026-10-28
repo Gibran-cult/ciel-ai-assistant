@@ -63,7 +63,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "langflow", "-d", "langflow"]
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "langflow", "-d", "langflow"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -76,8 +76,14 @@ services:
     network_mode: "service:langflow"
     volumes:
       - ollama_models:/root/.ollama
+    # A langflow restart replaces the network namespace this container is
+    # attached to; restart: true restarts ollama with it. ollama_link_check.sh
+    # (cron, see README) catches the cases Compose does not, e.g. an OOM kill
+    # restarted by the Docker daemon.
     depends_on:
-      - langflow
+      langflow:
+        condition: service_started
+        restart: true
 
 volumes:
   langflow_home:

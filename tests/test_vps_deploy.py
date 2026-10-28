@@ -13,6 +13,7 @@ def read(path):
 COMPOSE = read(VPS / "docker-compose.yml")
 CADDYFILE = read(VPS / "Caddyfile")
 ENV_EXAMPLE = read(VPS / ".env.example")
+LINK_CHECK = read(VPS / "ollama_link_check.sh")
 README = read(VPS / "README.md")
 GITIGNORE = read(ROOT / ".gitignore")
 
@@ -79,7 +80,11 @@ class ComposeTest(unittest.TestCase):
     def test_langflow_waits_for_a_healthy_postgres(self):
         block = service_block("langflow")
         self.assertIn("condition: service_healthy", block)
-        self.assertIn("pg_isready", service_block("postgres"))
+        # TCP, not the socket: during first init the temporary server listens on the socket only
+        self.assertIn(
+            '["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "langflow", "-d", "langflow"]',
+            service_block("postgres"),
+        )
 
     def test_only_caddy_is_public_and_langflow_is_local(self):
         ports = re.findall(r"-\s*\"((?:127\.0\.0\.1:)?\d+:\d+)\"", COMPOSE)
@@ -95,6 +100,13 @@ class ComposeTest(unittest.TestCase):
     def test_ollama_shares_langflows_localhost(self):
         self.assertIn('network_mode: "service:langflow"', COMPOSE)  # calls 127.0.0.1:11434
         self.assertIn('network_mode: "service:langflow"', service_block("ollama"))
+
+    def test_ollama_restarts_when_langflow_restarts(self):
+        # it lives in langflow's network namespace, which a langflow restart replaces
+        self.assertRegex(
+            service_block("ollama"),
+            r"depends_on:\n\s+langflow:\n\s+condition: service_started\n\s+restart: true",
+        )
 
     def test_every_service_restarts(self):
         self.assertEqual(COMPOSE.count("restart: unless-stopped"), 5)
@@ -176,10 +188,46 @@ class ReadmeTest(unittest.TestCase):
             self.assertIn(text, README)
 
 
+class OllamaLinkCheckTest(unittest.TestCase):
+    def test_script_is_strict_and_probes_then_restarts_ollama(self):
+        self.assertIn("set -euo pipefail", LINK_CHECK)
+        self.assertIn("docker compose exec -T langflow python -c", LINK_CHECK)
+        self.assertIn("127.0.0.1:11434", LINK_CHECK)
+        self.assertIn("docker compose restart ollama", LINK_CHECK)
+        self.assertIn("date -u", LINK_CHECK)
+
+    def test_readme_schedules_it_every_minute_outside_the_backup_section(self):
+        cron = (
+            "* * * * * cd /opt/ciel/deploy/vps && ./ollama_link_check.sh"
+            " >> /var/log/ciel/ollama_link_check.log 2>&1"
+        )
+        self.assertIn(cron, README)
+        placeholder = README.index("Backups and scheduled jobs")
+        next_section = README.index("\n## ", placeholder)
+        self.assertNotIn(cron, README[placeholder:next_section])  # Task 5 replaces that section
+
+    def test_readme_does_not_say_a_langflow_restart_needs_nothing(self):
+        self.assertNotIn("needs nothing", README)
+        self.assertIn("docker compose restart langflow ollama", README)
+
+
+class SecretsBackupNoteTest(unittest.TestCase):
+    def test_readme_asks_for_the_keys_in_a_password_manager(self):
+        paragraphs = [p for p in README.split("\n\n") if "password manager" in p]
+        self.assertTrue(
+            any("LANGFLOW_SECRET_KEY" in p and "RESTIC_PASSWORD" in p for p in paragraphs)
+        )
+
+
 class LineEndingsTest(unittest.TestCase):
     def test_deploy_files_use_unix_line_endings(self):
         # they are read on Linux
-        for path in (VPS / "docker-compose.yml", VPS / "Caddyfile", VPS / ".env.example"):
+        for path in (
+            VPS / "docker-compose.yml",
+            VPS / "Caddyfile",
+            VPS / ".env.example",
+            VPS / "ollama_link_check.sh",
+        ):
             self.assertNotIn(b"\r", path.read_bytes(), path.name)
 
 

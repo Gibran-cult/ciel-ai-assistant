@@ -78,8 +78,13 @@ nano .env
 ```
 
 `.env` is git-ignored. Every name is described in `.env.example`; enter the values
-yourself (generate `LANGFLOW_SECRET_KEY` with `openssl rand -hex 32`). `LANGFLOW_API_KEY`
-cannot exist yet: leave it empty now and fill it in step 10.
+yourself (generate `LANGFLOW_SECRET_KEY` with `openssl rand -hex 32`).
+
+`LANGFLOW_API_KEY` cannot exist yet: leave it empty now and fill it in step 10.
+
+**Save `LANGFLOW_SECRET_KEY` in a password manager outside the VPS**, the same as
+`RESTIC_PASSWORD`. Langflow's stored credentials in Postgres are encrypted with it, so a
+restore without it cannot read them; the same goes for the backups without `RESTIC_PASSWORD`.
 
 `NGROK_USER`, `NGROK_PASSWORD` and the four flow IDs are the same names the Streamlit app
 and the ngrok policy use. The renderer refuses to run without the flow IDs, so start with the
@@ -126,7 +131,16 @@ address changes and nginx keeps the old one, so run
 docker compose restart nginx
 ```
 
-A plain `docker compose restart langflow` keeps the address and needs nothing.
+A plain `docker compose restart langflow` keeps the address, so nginx keeps working, but
+**ollama** shares Langflow's network namespace and stays attached to the old one: restart
+it too (Compose does this for `restart langflow` and `up -d`, and the cron job below does it
+within a minute whatever restarted Langflow, e.g. an out-of-memory kill):
+
+```bash
+docker compose restart langflow ollama
+```
+
+After Langflow is recreated, restart both ollama and nginx (`docker compose restart ollama nginx`).
 
 Then the real check, through Caddy, with the gateway's Basic Auth user:
 
@@ -203,8 +217,18 @@ The VPS can stay up while you do this; nothing on the laptop depends on it.
 cd /opt/ciel/deploy/vps
 docker compose ps
 docker compose logs --tail 100 langflow
-docker compose pull && docker compose up -d && docker compose restart nginx   # only after changing a pinned tag
+docker compose pull && docker compose up -d && docker compose restart ollama nginx   # only after changing a pinned tag
 ```
+
+Keep Ollama attached to Langflow. Root's crontab (`crontab -e`) gets this line, which
+restarts the ollama container within a minute whenever Langflow cannot reach it on
+`127.0.0.1:11434` (`/var/log/ciel` must exist: `mkdir -p /var/log/ciel`):
+
+```
+* * * * * cd /opt/ciel/deploy/vps && ./ollama_link_check.sh >> /var/log/ciel/ollama_link_check.log 2>&1
+```
+
+Make the script executable once: `chmod +x ollama_link_check.sh`.
 
 Image tags are pinned in `docker-compose.yml`; change one on purpose, in Git, and rerun
 `python -m unittest tests.test_vps_deploy`.
