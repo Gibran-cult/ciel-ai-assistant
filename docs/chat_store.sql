@@ -124,3 +124,60 @@ $$;
 
 -- Hanya service key (Edge Function) yang boleh memanggilnya.
 revoke execute on function public.ciel_settle_order(text, numeric, text) from public, anon, authenticated;
+
+-- Batas pesan dan kuota harian Pro yang bertahan saat app restart. Satu baris
+-- per pesan per key batas (lihat rate_limits_for_request di app.py), `at` =
+-- epoch detik. Baris lebih tua dari 24 jam dibuang oleh ciel_rate_limit_hit.
+create table if not exists public.rate_limit_hits (
+    key text not null,
+    at double precision not null
+);
+
+create index if not exists rate_limit_hits_key_at on public.rate_limit_hits (key, at);
+create index if not exists rate_limit_hits_at on public.rate_limit_hits (at);
+
+alter table public.rate_limit_hits enable row level security;
+
+-- Sama seperti rate_limit_full di app.py. p_limits adalah array JSON
+-- [[key, batas, jendela_detik], ...] (array, karena objek jsonb tidak
+-- menjaga urutan key dan key pertama yang penuh menentukan pesannya).
+-- Jika ada key yang sudah mencapai batas, kembalikan key pertama itu dan jangan
+-- catat apa pun. Jika tidak, catat satu baris per key dan kembalikan null.
+-- Satu advisory lock membuat hitung-lalu-catat tidak balapan antar proses.
+create or replace function public.ciel_rate_limit_hit(
+    p_limits jsonb,
+    p_now double precision
+) returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    item jsonb;
+    hits integer;
+begin
+    perform pg_advisory_xact_lock(727274);
+
+    delete from public.rate_limit_hits where at < p_now - 86400;
+
+    for item in
+        select e.value from jsonb_array_elements(p_limits) with ordinality as e(value, n) order by e.n
+    loop
+        select count(*) into hits
+        from public.rate_limit_hits
+        where key = item->>0 and at > p_now - (item->>2)::double precision;
+
+        if hits >= (item->>1)::integer then
+            return item->>0;
+        end if;
+    end loop;
+
+    insert into public.rate_limit_hits (key, at)
+    select e.value->>0, p_now from jsonb_array_elements(p_limits) as e(value);
+
+    return null;
+end;
+$$;
+
+-- Hanya service key (app) yang boleh memanggilnya.
+revoke execute on function public.ciel_rate_limit_hit(jsonb, double precision) from public, anon, authenticated;

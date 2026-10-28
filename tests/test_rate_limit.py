@@ -1,6 +1,8 @@
 import ast
+import threading
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 
 APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
@@ -33,6 +35,7 @@ def default_limit(name):
 
 rate_limit_full = load_app_function("rate_limit_full")
 rate_limit_message = load_app_function("rate_limit_message")
+shared_rate_limit_full = load_app_function("shared_rate_limit_full")
 # Pro feature quotas (FEATURE_QUOTAS in app.py) are covered in test_ciel_pro.
 rate_limit_message.__globals__["FEATURE_QUOTAS"] = {}
 
@@ -135,6 +138,48 @@ class RateLimitTest(unittest.TestCase):
         self.assertEqual(default_limit("RISET_SKRIPSI_PER_DAY"), 5)
         # Pro traffic still counts toward the emergency daily total.
         self.assertLess(default_limit("RATE_LIMIT_PER_DAY_PRO"), default_limit("RATE_LIMIT_TOTAL_PER_DAY"))
+
+
+class SharedRateLimitTest(unittest.TestCase):
+
+    def shared(self, store):
+        state = {"lock": threading.Lock(), "hits": {}}
+        shared_rate_limit_full.__globals__.update(
+            CHAT_STORE=store, rate_limit_full=rate_limit_full, rate_limit_state=lambda: state
+        )
+        return state
+
+    def test_shared_store_decides_when_reachable(self):
+        store = Mock()
+        store.rate_limit_hit.return_value = (True, "user:a:day")
+        state = self.shared(store)
+        limits = {"user:a:day": (1, DAY)}
+
+        self.assertEqual(shared_rate_limit_full(limits, 5.0), "user:a:day")
+        store.rate_limit_hit.assert_called_once_with(limits, 5.0)
+        self.assertEqual(state["hits"], {})  # in-process store untouched
+
+    def test_falls_back_to_process_limits_when_store_is_down(self):
+        store = Mock()
+        store.rate_limit_hit.return_value = (False, None)
+        state = self.shared(store)
+
+        self.assertIsNone(shared_rate_limit_full({"k:hour": (1, HOUR)}, 5.0))
+        self.assertEqual(shared_rate_limit_full({"k:hour": (1, HOUR)}, 6.0), "k:hour")
+        self.assertEqual(state["hits"], {"k:hour": [5.0]})
+
+    def test_without_store_uses_process_limits(self):
+        self.shared(None)
+
+        self.assertIsNone(shared_rate_limit_full({"k:hour": (1, HOUR)}, 5.0))
+        self.assertEqual(shared_rate_limit_full({"k:hour": (1, HOUR)}, 6.0), "k:hour")
+
+    def test_check_rate_limit_goes_through_the_shared_counter(self):
+        source = ast.get_source_segment(SOURCE, next(
+            n for n in ast.parse(SOURCE).body if isinstance(n, ast.FunctionDef) and n.name == "check_rate_limit"
+        ))
+        self.assertIn("shared_rate_limit_full(limits, time.time())", source)
+        self.assertNotIn("rate_limit_state()", source)
 
 
 if __name__ == "__main__":

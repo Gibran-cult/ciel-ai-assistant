@@ -34,6 +34,10 @@ MAX_STORED_IMAGE_BYTES = 256 * 1024
 
 TIMEOUT = 15
 
+# Dipanggil di jalur kirim pesan, jadi Supabase yang lambat tidak boleh
+# menahan jawaban lama: lewat batas ini app memakai hitungan di proses.
+RATE_LIMIT_TIMEOUT = 3
+
 
 def encode_message(message):
     """Pesan sesi -> JSON: tanpa payload, gambar sebagai base64."""
@@ -288,6 +292,34 @@ class ChatStore:
         except (ValueError, KeyError, TypeError) as error:
             logger.error("chat_store_error action=load_latest_order type=%s error=%s", type(error).__name__, error)
             return None
+
+    def rate_limit_hit(self, limits, now):
+        """
+        Hitung dan catat satu pesan di database (fungsi ciel_rate_limit_hit),
+        supaya batas bertahan saat app restart. `limits` = {key: (batas,
+        jendela_detik)}. Kembalikan (True, None) jika boleh, (True, key) jika
+        key itu penuh, atau (False, None) jika Supabase tidak terjangkau.
+        """
+
+        try:
+            response = requests.post(
+                f"{self.base}/rpc/ciel_rate_limit_hit",
+                headers=self.headers,
+                json={"p_limits": [[key, limit, window] for key, (limit, window) in limits.items()], "p_now": now},
+                timeout=RATE_LIMIT_TIMEOUT,
+            )
+            response.raise_for_status()
+            full = response.json()
+
+            # Hanya null (boleh) atau nama key (penuh) yang berarti.
+            if full is not None and not isinstance(full, str):
+                raise TypeError(f"unexpected response {type(full).__name__}")
+
+        except (requests.exceptions.RequestException, ValueError, TypeError) as error:
+            logger.error("chat_store_error action=rate_limit_hit type=%s error=%s", type(error).__name__, error)
+            return False, None
+
+        return True, full
 
 
 # timestamptz dari PostgREST: pecahan detik 0-6 digit dan zona "+00:00" atau
