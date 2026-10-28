@@ -190,8 +190,47 @@ fix `.env`, rerun step 6 and `docker compose restart nginx`.
 
 ## 11. Backups and scheduled jobs
 
-Placeholder: Task 5 fills in the cron lines for the nightly backup, the monthly restore
-check and the chat-history retention here.
+Everything the VPS cannot rebuild goes off-site every night: Langflow's Postgres, Langflow's
+home volume (the long-term memory) and Supabase (its free plan has no backups). restic
+encrypts it and sends it to a Cloudflare R2 bucket; about five weeks are kept.
+
+One-time setup:
+
+1. Cloudflare R2: create a bucket and an API token with read and write on that bucket only.
+   In `.env` set `RESTIC_REPOSITORY` to `s3:https://<account-id>.r2.cloudflarestorage.com/<bucket>`
+   (the account ID is on the R2 overview page), `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+   to the token's key pair, and `RESTIC_PASSWORD` to a new password. Keep `RESTIC_PASSWORD`
+   in the password manager (step 5): without it the backups cannot be opened.
+2. `SUPABASE_DB_URL` is the Supabase **Session pooler** connection string (Project settings,
+   Database, Connection string). Not the direct one: that host is IPv6-only on the free plan
+   and Docker has no IPv6 by default.
+3. Healthchecks.io: create two checks and put their ping URLs in `.env` as
+   `HEALTHCHECKS_BACKUP_URL` and `HEALTHCHECKS_RESTORE_URL`. The backup check runs daily
+   (period 1 day, grace 2 hours). The restore check runs monthly (period 1 month, grace 3 days).
+   Set both to email Ciel when a ping is missing. The scripts ping only after they succeed.
+4. Initialise the repository once, then make the scripts executable and the log directory:
+
+```bash
+set -a; . ./.env; set +a
+restic init
+chmod +x backup.sh restore_check.sh ollama_link_check.sh
+mkdir -p /var/log/ciel
+```
+
+5. Run both once by hand and check the pings arrive: `./backup.sh`, then `./restore_check.sh`
+   (the restore check needs a snapshot to exist). The backup refuses to start when `/` is
+   more than 80% full.
+
+Root's crontab (`crontab -e`), times in UTC (03:30 WIB for the backup). Each line sources
+`.env` first so the scripts get their settings, `LANGFLOW_API_KEY` included:
+
+```
+30 20 * * * set -a; . /opt/ciel/deploy/vps/.env; set +a; cd /opt/ciel/deploy/vps && ./backup.sh >> /var/log/ciel/backup.log 2>&1
+0 21 1 * * set -a; . /opt/ciel/deploy/vps/.env; set +a; cd /opt/ciel/deploy/vps && ./restore_check.sh >> /var/log/ciel/restore_check.log 2>&1
+0 20 * * * set -a; . /opt/ciel/deploy/vps/.env; set +a; python3 /opt/ciel/tools/prune_chat_history.py --days 30 --base-url http://127.0.0.1:7860 >> /var/log/ciel/prune_chat_history.log 2>&1
+```
+
+The third line is the chat-history retention (30 days) the privacy page promises.
 
 ## 12. Point the app at the VPS
 

@@ -15,6 +15,8 @@ CADDYFILE = read(VPS / "Caddyfile")
 ENV_EXAMPLE = read(VPS / ".env.example")
 LINK_CHECK = read(VPS / "ollama_link_check.sh")
 README = read(VPS / "README.md")
+BACKUP = read(VPS / "backup.sh")
+RESTORE = read(VPS / "restore_check.sh")
 GITIGNORE = read(ROOT / ".gitignore")
 
 SERVICES = ("caddy", "nginx", "langflow", "postgres", "ollama")
@@ -219,6 +221,68 @@ class SecretsBackupNoteTest(unittest.TestCase):
         )
 
 
+class BackupTest(unittest.TestCase):
+    def test_backup_pauses_langflow_safely(self):
+        trap = BACKUP.index("trap 'docker compose unpause langflow' EXIT")
+        self.assertLess(trap, BACKUP.index("docker compose pause langflow"))
+
+    def test_backup_keeps_about_five_weeks(self):
+        self.assertIn("restic forget --keep-daily 7 --keep-weekly 4 --prune", BACKUP)
+        self.assertNotIn("--keep-monthly", BACKUP)
+
+    def test_backup_includes_supabase_and_langflow_db(self):
+        self.assertIn('pg_dump -Fc "$SUPABASE_DB_URL"', BACKUP)
+        self.assertIn("pg_dump -U langflow -Fc langflow", BACKUP)
+        # Supabase's direct host is IPv6-only and Docker has no IPv6 by default
+        self.assertIn("docker run --rm --network host postgres:17.2 pg_dump", BACKUP)
+
+    def test_success_ping_is_last_and_disk_check_is_first(self):
+        lines = [l for l in BACKUP.splitlines() if l.strip() and not l.lstrip().startswith("#")]
+        self.assertIn("HEALTHCHECKS_BACKUP_URL", lines[-1])
+        self.assertLess(BACKUP.index("df --output=pcent /"), BACKUP.index("pg_dump"))
+
+    def test_backup_finds_the_langflow_volume_from_the_compose_labels(self):
+        self.assertIn("com.docker.compose.volume=langflow_home", BACKUP)
+        self.assertIn("com.docker.compose.project=", BACKUP)
+        self.assertIn("docker volume inspect", BACKUP)
+
+    def test_backup_snapshots_use_one_fixed_work_path(self):
+        # restic forget groups by host and paths: a random temp dir would make
+        # every night its own group and nothing would ever be pruned
+        self.assertNotIn("mktemp", BACKUP)
+
+    def test_restore_check_fails_on_empty_memory(self):
+        self.assertIn("chromadb.PersistentClient", RESTORE)
+        self.assertIn("HEALTHCHECKS_RESTORE_URL", RESTORE)
+        self.assertIn("langflowai/langflow:1.12.4", RESTORE)
+        self.assertIn("--entrypoint python", RESTORE)
+        self.assertIn("restic restore latest --target", RESTORE)
+        self.assertIn("pg_restore --list", RESTORE)
+        self.assertIn("for name in langflow supabase", RESTORE)  # both dumps
+
+    def test_scripts_are_strict(self):
+        for text in (BACKUP, RESTORE):
+            self.assertIn("set -euo pipefail", text)
+
+    def test_readme_schedules_the_three_jobs(self):
+        start = README.index("## 11. Backups and scheduled jobs")
+        section = README[start : README.index("\n## ", start + 1)]
+        source = "set -a; . /opt/ciel/deploy/vps/.env; set +a;"
+        for line in (
+            f"30 20 * * * {source} cd /opt/ciel/deploy/vps && ./backup.sh"
+            " >> /var/log/ciel/backup.log 2>&1",
+            f"0 21 1 * * {source} cd /opt/ciel/deploy/vps && ./restore_check.sh"
+            " >> /var/log/ciel/restore_check.log 2>&1",
+            f"0 20 * * * {source} python3 /opt/ciel/tools/prune_chat_history.py"
+            " --days 30 --base-url http://127.0.0.1:7860"
+            " >> /var/log/ciel/prune_chat_history.log 2>&1",
+        ):
+            self.assertIn(line, section)
+        self.assertIn("restic init", section)
+        self.assertIn("Session pooler", section)
+        self.assertIn("r2.cloudflarestorage.com", section)
+
+
 class LineEndingsTest(unittest.TestCase):
     def test_deploy_files_use_unix_line_endings(self):
         # they are read on Linux
@@ -227,6 +291,8 @@ class LineEndingsTest(unittest.TestCase):
             VPS / "Caddyfile",
             VPS / ".env.example",
             VPS / "ollama_link_check.sh",
+            VPS / "backup.sh",
+            VPS / "restore_check.sh",
         ):
             self.assertNotIn(b"\r", path.read_bytes(), path.name)
 

@@ -117,3 +117,6 @@ jobs:
       # logic is plain JavaScript so it can be tested here too.
       - name: Run Edge Function tests
         run: node --test supabase/functions/midtrans-notify/notification.test.mjs
+
+      - name: Check VPS shell scripts
+        run: bash -n deploy/vps/*.sh
