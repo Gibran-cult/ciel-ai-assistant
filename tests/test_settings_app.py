@@ -241,7 +241,9 @@ class SettingsAppTest(unittest.TestCase):
         at = self.start(secrets=payments, query={"page": "pricing"})
         at.button(key="pro_login").click().run()
         self.assertIsNone(at.session_state["settings_open"])
-        self.assertEqual(at.query_params["page"], ["login"])
+        # AppTest gives ["login"] on older Streamlit and "login" on 1.66 (CI).
+        page = at.query_params["page"]
+        self.assertEqual(page[0] if isinstance(page, list) else page, "login")
         self.assertIn("<h1>Masuk ke Ciel</h1>", self.text(at))
 
     def test_profile_form_saves_and_shows_the_account(self):
