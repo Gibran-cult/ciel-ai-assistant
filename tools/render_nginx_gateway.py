@@ -31,8 +31,8 @@ Differences that come from nginx rather than from the rules:
 
 Settings use the same names as the ngrok policy (NGROK_USER, NGROK_PASSWORD,
 FLOW_ID, MEMORY_ADMIN_FLOW_ID, RESEARCH_FLOW_ID, WRITER_FLOW_ID). With
---env-file the file is the source of truth: its values win over the
-environment, so a shell that still exports old flow IDs cannot leak them into
+--env-file the file is the source of truth: every name it lists wins over
+the environment, also a name left empty, so a shell that still exports old flow IDs cannot leak them into
 the config. Without --env-file, the environment wins over the repository's .env
 (as for the ngrok policy). Two optional limits:
 
@@ -181,14 +181,15 @@ def gateway_settings(env_file):
     """Settings for the renderer.
 
     env_file None: the environment wins over the repository's .env (load_settings).
-    An explicit env_file is the source of truth: its values win over the environment.
+    An explicit env_file is the source of truth: every name it lists wins over the
+    environment, also when it is left empty (an optional flow that is not used).
     """
     if env_file is None:
         return load_settings(ROOT / ".env")
-    values = {k: v for k, v in os.environ.items() if v}
+    values = dict(os.environ)
     if env_file.is_file():
-        values.update({k: v for k, v in dotenv_values(env_file).items() if v})
-    return values
+        values.update({k: v or "" for k, v in dotenv_values(env_file).items()})
+    return {k: v for k, v in values.items() if v}
 
 
 def main(argv=None):

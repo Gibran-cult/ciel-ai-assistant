@@ -193,6 +193,15 @@ class MainTest(unittest.TestCase):
         self.assertNotIn(stale, text)
         self.assertNotIn(stale, output)
 
+    def test_a_name_left_empty_in_the_env_file_is_not_taken_from_the_environment(self):
+        # .env no longer uses the writer flow, the shell still exports an old one
+        stale = "99999999-9999-9999-9999-999999999999"
+        env_file = "".join(f"{k}={v}\n" for k, v in self.env().items()) + "WRITER_FLOW_ID=\n"
+        code, conf, _, output = self.run_main(self.env(WRITER_FLOW_ID=stale), env_file_text=env_file)
+        self.assertEqual(code, 0)
+        self.assertNotIn(stale, conf.read_text(encoding="utf-8"))
+        self.assertIn("WRITER_FLOW_ID=-", output)
+
     def test_without_env_file_flag_the_environment_still_wins(self):
         # the default lookup keeps render_ngrok_policy.load_settings' precedence
         calls = []
