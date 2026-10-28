@@ -111,6 +111,7 @@ jobs:
             tests.test_landing \
             tests.test_pdf_attachments \
             tests.test_vps_deploy \
+            tests.test_migrate_flows \
             tests.test_ci_coverage
 
       # Node that comes with the runner (no extra setup): the Edge Function's
