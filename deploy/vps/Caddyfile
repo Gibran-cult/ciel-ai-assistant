@@ -1,0 +1,9 @@
+# TLS for the API host (Let's Encrypt, automatic). DNS for api.ciel-ai.web.id
+# must be DNS-only (grey cloud) and point at this VPS.
+#
+# reverse_proxy sets X-Forwarded-For to the real client address and drops a
+# client-supplied value, because trusted_proxies is not configured. nginx rate
+# limits on that header: do not add trusted_proxies here.
+api.ciel-ai.web.id {
+	reverse_proxy nginx:8080
+}

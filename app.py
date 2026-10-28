@@ -1900,6 +1900,25 @@ def rate_limit_state():
     return {"lock": threading.Lock(), "hits": {}}
 
 
+def shared_rate_limit_full(limits, now):
+    """
+    Hitung di Supabase (bertahan saat restart, sama untuk semua proses) bila
+    CHAT_STORE ada dan terjangkau; jika tidak, pakai hitungan di proses ini
+    supaya batas tetap berlaku dan Ciel tidak terbuka tanpa batas.
+    """
+
+    if CHAT_STORE is not None:
+        reachable, full = CHAT_STORE.rate_limit_hit(limits, now)
+
+        if reachable:
+            return full
+
+    state = rate_limit_state()
+
+    with state["lock"]:
+        return rate_limit_full(state["hits"], limits, now)
+
+
 @st.cache_resource
 def answer_cache():
     # Dibagi semua sesi di proses server ini; reset saat app restart.
@@ -2017,10 +2036,7 @@ def check_rate_limit(feature=None):
     """Kembalikan None jika boleh lanjut, atau CielError yang menyebut batas yang tercapai."""
 
     limits = rate_limits_for_request(feature)
-    state = rate_limit_state()
-
-    with state["lock"]:
-        full = rate_limit_full(state["hits"], limits, time.time())
+    full = shared_rate_limit_full(limits, time.time())
 
     if full is None:
         return None

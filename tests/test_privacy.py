@@ -278,6 +278,11 @@ class PrivacyPageTest(unittest.TestCase):
         self.assertIn("diumumkan di halaman ini sebelum berlaku", text)
         self.assertEqual(list(sections)[0], "Siapa yang mengelola Ciel")
 
+    def test_backups_are_disclosed_with_their_retention(self):
+        text = self.text(retention_days=30, memory_enabled=True, data_controls=True).lower()
+        self.assertIn("cadangan terenkripsi", text)
+        self.assertIn("5 minggu", text)
+
     def test_third_parties_are_disclosed_without_brand_names(self):
         text = self.text(retention_days=30, memory_enabled=True, data_controls=True)
         self.assertIn("penyedia model AI dan layanan pencarian web pihak ketiga", text)

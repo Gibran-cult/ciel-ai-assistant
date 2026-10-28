@@ -10,3 +10,10 @@ supabase/.temp/
 .superpowers/
 .impeccable/
 .claude/
+
+# Generated nginx gateway config and its Basic Auth hash (tools/render_nginx_gateway.py)
+deploy/vps/nginx/ciel.conf
+deploy/vps/nginx/ciel.htpasswd
+
+# VPS secrets (deploy/vps/.env.example lists the names)
+deploy/vps/.env

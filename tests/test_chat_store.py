@@ -184,6 +184,58 @@ class ChatStoreRequestTest(unittest.TestCase):
             self.assertFalse(self.store.save_project(ALICE, sample_project()))
 
 
+class RateLimitHitTest(unittest.TestCase):
+
+    LIMITS = {"user:a:hour": (60, 3600)}
+
+    def setUp(self):
+        self.store = chat_store.ChatStore("https://db.example.invalid/", "service-key")
+
+    def test_rate_limit_hit_sends_limits_in_order(self):
+        with patch("requests.post", return_value=Response(None)) as post:
+            ok, full = self.store.rate_limit_hit(
+                {"user:a:hour": (60, 3600), "all:total:day": (1500, 86400)}, 1000.0
+            )
+
+        self.assertEqual((ok, full), (True, None))
+        self.assertEqual(
+            post.call_args.kwargs["json"],
+            {"p_limits": [["user:a:hour", 60, 3600], ["all:total:day", 1500, 86400]], "p_now": 1000.0},
+        )
+        self.assertTrue(post.call_args.args[0].endswith("/rest/v1/rpc/ciel_rate_limit_hit"))
+        self.assertEqual(post.call_args.kwargs["timeout"], 3)
+        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer service-key")
+
+    def test_rate_limit_hit_returns_the_full_key(self):
+        with patch("requests.post", return_value=Response("user:a:hour")):
+            self.assertEqual(self.store.rate_limit_hit(self.LIMITS, 1.0), (True, "user:a:hour"))
+
+    def test_rate_limit_hit_reports_unreachable(self):
+        for reply in (
+            {"side_effect": requests.exceptions.Timeout("slow")},
+            {"return_value": Response(status=500)},
+            {"return_value": Response(42)},
+        ):
+            with self.subTest(reply=reply), self.assertLogs("ciel_ai.chat_store", level="ERROR") as logs,                     patch("requests.post", **reply):
+                self.assertEqual(self.store.rate_limit_hit(self.LIMITS, 1.0), (False, None))
+            self.assertIn("chat_store_error action=rate_limit_hit", logs.output[0])
+
+
+class RateLimitSqlTest(unittest.TestCase):
+
+    def test_sql_defines_the_shared_counter(self):
+        sql = (ROOT / "docs" / "chat_store.sql").read_text(encoding="utf-8")
+
+        for fragment in (
+            "create table if not exists public.rate_limit_hits",
+            "alter table public.rate_limit_hits enable row level security",
+            "function public.ciel_rate_limit_hit(",
+            "pg_advisory_xact_lock",
+            "security definer",
+        ):
+            self.assertIn(fragment, sql)
+
+
 class State(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__

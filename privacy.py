@@ -111,6 +111,9 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
         f"disimpan di server Ciel paling lama <strong>{days} hari</strong>, "
         "lalu dihapus otomatis. Pesan tanpa login disimpan dengan kode acak, "
         "bukan namamu.",
+        "<strong>Cadangan terenkripsi:</strong> dibuat dari server Ciel setiap "
+        "malam dan disimpan paling lama 5 minggu. Data yang kamu hapus ikut "
+        "hilang dari cadangan setelah itu.",
     ]
 
     if memory_enabled:
