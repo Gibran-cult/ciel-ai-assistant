@@ -15,6 +15,11 @@ Keys come from SOURCE_LANGFLOW_API_KEY and TARGET_LANGFLOW_API_KEY in the
 environment or a .env file. The ID map written by --map-out holds flow IDs
 only, no secrets. --snapshot-dir saves each Run Flow target as pretty JSON
 (`<name with spaces as _>.json`) so the sub-flows can be kept in Git.
+
+The tool is not idempotent: run it once per target. A re-run imports every
+flow again and Langflow keeps the copies as "(1)" duplicates. If an import
+fails halfway, the exit code is 1 and the flows already created are listed
+(and written to --map-out); delete them on the target before retrying.
 """
 
 import argparse
@@ -29,6 +34,14 @@ import requests
 
 TIMEOUT = 60
 IMPORT_DROP_KEYS = ("id", "user_id", "folder_id", "updated_at", "webhook", "endpoint_name")
+
+
+class MigrationError(Exception):
+    """An import failed; `partial` maps the source IDs already created on the target."""
+
+    def __init__(self, message, partial):
+        super().__init__(message)
+        self.partial = partial
 
 
 def _run_flow_values(flow):
@@ -125,8 +138,22 @@ def migrate(source_url, source_key, target_url, target_key, flow_ids, snapshot_d
     id_map = {}
     for flow_id, flow in flows.items():
         body = remap_run_flows(importable(flow), id_map)
-        id_map[flow_id] = import_flow(target_url, target_headers, body)
+        try:
+            id_map[flow_id] = import_flow(target_url, target_headers, body)
+        except Exception as error:
+            raise MigrationError(
+                f"Importing {flow.get('name', flow_id)} ({flow_id}) failed: {error}", dict(id_map)
+            ) from error
     return id_map
+
+
+def load_env_file():
+    """Load a local .env if python-dotenv is installed."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv()
 
 
 def main(argv=None):
@@ -138,24 +165,33 @@ def main(argv=None):
     parser.add_argument("--snapshot-dir", help="save each exported Run Flow target here as pretty JSON")
     args = parser.parse_args(argv)
 
-    try:
-        from dotenv import load_dotenv
-        load_dotenv()
-    except ImportError:
-        pass
+    load_env_file()
 
     source_key = os.getenv("SOURCE_LANGFLOW_API_KEY")
     target_key = os.getenv("TARGET_LANGFLOW_API_KEY")
     if not source_key or not target_key:
         parser.error("SOURCE_LANGFLOW_API_KEY and TARGET_LANGFLOW_API_KEY must be set (environment or .env)")
 
-    id_map = migrate(args.source_url, source_key, args.target_url, target_key, args.flow_id, args.snapshot_dir)
+    failure = None
+    try:
+        id_map = migrate(args.source_url, source_key, args.target_url, target_key, args.flow_id, args.snapshot_dir)
+    except MigrationError as error:
+        failure, id_map = error, error.partial
 
     for old_id, new_id in id_map.items():
         print(f"Imported {old_id} -> {new_id}")
     if args.map_out:
         Path(args.map_out).write_text(json.dumps(id_map, indent=2) + "\n", encoding="utf-8")
         print(f"ID map written to {args.map_out}")
+    if failure:
+        print(f"ERROR: {failure}", file=sys.stderr)
+        print(
+            f"The target is partially migrated: {len(id_map)} flows were created. "
+            "Delete these new flow IDs on the target before retrying: "
+            + (", ".join(id_map.values()) or "(none)"),
+            file=sys.stderr,
+        )
+        return 1
     print(f"Done: {len(id_map)} flows imported.")
     return 0
 

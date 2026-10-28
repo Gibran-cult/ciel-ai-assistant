@@ -4,7 +4,7 @@ import json
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 import migrate_flows  # noqa: E402
-from migrate_flows import importable, migrate, remap_run_flows, run_flow_targets  # noqa: E402
+from migrate_flows import MigrationError, importable, migrate, remap_run_flows, run_flow_targets  # noqa: E402
 
 
 def run_flow_node(target):
@@ -78,6 +78,18 @@ class FakeLangflow(unittest.TestCase):
         self.post = post_patch.start()
         self.addCleanup(get_patch.stop)
         self.addCleanup(post_patch.stop)
+
+    def fail_second_post(self):
+        original = self.post.side_effect
+
+        def flaky(url, **kwargs):
+            if self.post.call_count == 2:
+                bad = fake_response({})
+                bad.raise_for_status.side_effect = RuntimeError("500")
+                return bad
+            return original(url, **kwargs)
+
+        self.post.side_effect = flaky
 
 
 class MigrateTests(FakeLangflow):
@@ -145,29 +157,30 @@ class MigrateTests(FakeLangflow):
             migrate("http://src", "k1", "http://dst", "k2", ["a-old"])
         self.post.assert_not_called()
 
-    def test_http_errors_stop_the_migration(self):
-        bad = fake_response({})
-        bad.raise_for_status.side_effect = RuntimeError("500")
-        self.post.side_effect = None
-        self.post.return_value = bad
-        with self.assertRaises(RuntimeError):
+    def test_failed_import_reports_the_flows_already_created(self):
+        self.fail_second_post()
+        with self.assertRaises(MigrationError) as caught:
             migrate("http://src", "k1", "http://dst", "k2", ["main-old"])
-        self.assertEqual(self.post.call_count, 1)
+        self.assertEqual(caught.exception.partial, {"kb-old": "new-1"})
+        self.assertIsInstance(caught.exception.__cause__, RuntimeError)
+        self.assertEqual(self.post.call_count, 2)
 
 
 class CliTests(FakeLangflow):
     def run_main(self, *extra, env=None):
         args = ["--source-url", "http://src", "--target-url", "http://dst", "--flow-id", "main-old", *extra]
         env = {"SOURCE_LANGFLOW_API_KEY": "k1", "TARGET_LANGFLOW_API_KEY": "k2"} if env is None else env
-        out = io.StringIO()
-        with patch.dict(migrate_flows.os.environ, env, clear=True), redirect_stdout(out):
+        out, err = io.StringIO(), io.StringIO()
+        with patch.dict(migrate_flows.os.environ, env, clear=True), \
+                patch.object(migrate_flows, "load_env_file"), \
+                redirect_stdout(out), redirect_stderr(err):
             code = migrate_flows.main(args)
-        return code, out.getvalue()
+        return code, out.getvalue(), err.getvalue()
 
     def test_map_out_holds_the_id_map_and_no_secrets(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "map.json"
-            code, _ = self.run_main("--map-out", str(path))
+            code, _, _ = self.run_main("--map-out", str(path))
             text = path.read_text(encoding="utf-8")
         self.assertEqual(code, 0)
         self.assertEqual(set(json.loads(text)), {"main-old", "math-old", "kb-old"})
@@ -176,7 +189,7 @@ class CliTests(FakeLangflow):
 
     def test_snapshot_dir_gets_only_the_run_flow_targets(self):
         with tempfile.TemporaryDirectory() as tmp:
-            code, _ = self.run_main("--snapshot-dir", tmp)
+            code, _, _ = self.run_main("--snapshot-dir", tmp)
             files = sorted(p.name for p in Path(tmp).iterdir())
             raw = (Path(tmp) / "Math_Tutor_Agent.json").read_bytes()
         self.assertEqual(code, 0)
@@ -192,6 +205,21 @@ class CliTests(FakeLangflow):
         with self.assertRaises(SystemExit), patch("sys.stderr", new_callable=io.StringIO):
             self.run_main(env={"SOURCE_LANGFLOW_API_KEY": "k1"})
         self.post.assert_not_called()
+
+    def test_partial_migration_exits_1_and_keeps_the_partial_map(self):
+        self.fail_second_post()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "map.json"
+            code, out, err = self.run_main("--map-out", str(path))
+            written = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(code, 1)
+        self.assertEqual(written, {"kb-old": "new-1"})
+        self.assertIn("kb-old -> new-1", out)
+        self.assertIn("partially migrated", err)
+        self.assertIn("new-1", err)
+        for text in (out, err):
+            self.assertNotIn("k1", text)
+            self.assertNotIn("k2", text)
 
 
 if __name__ == "__main__":
