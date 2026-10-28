@@ -401,6 +401,14 @@ Before step 1 reaches Langflow, the app checks an in-memory cache for repeated g
 - A cache hit uses no message quota and is marked `cached` on the reply. Langflow never saw that turn, so the next message in that chat carries the question and answer in its payload once.
 - Logs record only the first 8 characters of the key hash, never the question.
 
+### Profile block (`account_settings.py`)
+
+Signed-in users fill a profile in Pengaturan > Profil: full name, the name Ciel should call them, field of study, and answer preferences. It is stored in the Supabase `profiles` table (key: the memory owner ID), or only in the session without `CHAT_STORE`.
+
+- Every normal chat message (text or photo) from a signed-in user starts with a `### Profil pengguna` block, then `### Pesan` and the message. Riset Skripsi, Kerangka, and Cek kutipan do not get it.
+- Every field is cleaned to one line with a length cap, so profile text cannot open a new `###` section in the payload.
+- The cache key is still the plain question. A logged-in user can get a cached answer, which does not use their name.
+
 ## Security Boundaries
 
 The architecture separates:

@@ -191,7 +191,7 @@ PRICING_CSS = """
     text-wrap: balance;
     color: var(--c-text);
 }
-.stApp .ciel-pricehead p { margin: 0 0 1.6rem; max-width: 34rem; color: var(--c-muted); line-height: 1.65; }
+:is(.stApp, [data-testid="stDialog"]) .ciel-pricehead p { margin: 0 0 1.6rem; max-width: 34rem; color: var(--c-muted); line-height: 1.65; }
 
 :is(.st-key-plan_free, .st-key-plan_pro) {
     padding: 1.3rem 1.3rem 1.2rem;
@@ -201,7 +201,7 @@ PRICING_CSS = """
     box-shadow: var(--shadow-sm);
 }
 .st-key-plan_pro { margin-top: 1rem; }
-.stApp .ciel-paynote { margin: 0.5rem 0 0; font-size: 0.82rem; line-height: 1.55; color: var(--c-muted); }
+:is(.stApp, [data-testid="stDialog"]) .ciel-paynote { margin: 0.5rem 0 0; font-size: 0.82rem; line-height: 1.55; color: var(--c-muted); }
 .ciel-plan-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .ciel-plan-name { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; color: var(--c-text); }
 .ciel-plan-tag {
@@ -221,8 +221,8 @@ PRICING_CSS = """
     color: var(--c-text);
 }
 .ciel-plan-price span { font-size: 0.82rem; color: var(--c-muted); }
-.stApp .ciel-plan-blurb { margin: 0.4rem 0 0.9rem; font-size: 0.9rem; line-height: 1.55; color: var(--c-muted); }
-.stApp .ciel-plan-feats {
+:is(.stApp, [data-testid="stDialog"]) .ciel-plan-blurb { margin: 0.4rem 0 0.9rem; font-size: 0.9rem; line-height: 1.55; color: var(--c-muted); }
+:is(.stApp, [data-testid="stDialog"]) .ciel-plan-feats {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.45rem 1.5rem;
@@ -232,7 +232,7 @@ PRICING_CSS = """
     padding: 0.9rem 0 0;
     border-top: 1px solid var(--c-line);
 }
-.stApp .ciel-plan-feats li {
+:is(.stApp, [data-testid="stDialog"]) .ciel-plan-feats li {
     position: relative;
     margin: 0;
     padding-left: 1.2rem;
@@ -252,23 +252,23 @@ PRICING_CSS = """
 }
 
 .ciel-planned-title { margin: 2.4rem 0 0.4rem; font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
-.stApp .ciel-planned-note { margin: 0 0 0.6rem; font-size: 0.86rem; color: var(--c-muted); }
+:is(.stApp, [data-testid="stDialog"]) .ciel-planned-note { margin: 0 0 0.6rem; font-size: 0.86rem; color: var(--c-muted); }
 .ciel-planned { border-top: 1px solid var(--c-line); }
 .ciel-planned-row { display: grid; grid-template-columns: 11rem 1fr; gap: 1rem; padding: 0.95rem 0; border-bottom: 1px solid var(--c-line); }
 .ciel-planned-row strong { display: block; font-size: 0.95rem; font-weight: 600; }
 .ciel-planned-row em { display: block; margin-top: 0.15rem; font-style: normal; font-size: 0.82rem; color: var(--c-faint); font-variant-numeric: tabular-nums; }
-.stApp .ciel-planned-row p { margin: 0; font-size: 0.88rem; line-height: 1.6; color: var(--c-muted); }
-.stApp .ciel-pricenote { margin: 0.9rem 0 0; font-size: 0.82rem; color: var(--c-faint); }
-.stApp .ciel-pricenote a { color: var(--c-accent); }
+:is(.stApp, [data-testid="stDialog"]) .ciel-planned-row p { margin: 0; font-size: 0.88rem; line-height: 1.6; color: var(--c-muted); }
+:is(.stApp, [data-testid="stDialog"]) .ciel-pricenote { margin: 0.9rem 0 0; font-size: 0.82rem; color: var(--c-faint); }
+:is(.stApp, [data-testid="stDialog"]) .ciel-pricenote a { color: var(--c-accent); }
 
 .ciel-faq-title { margin: 2.6rem 0 0.4rem; font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
 .ciel-faq { border-top: 1px solid var(--c-line); }
 .ciel-faq div { display: grid; grid-template-columns: 15rem 1fr; gap: 1rem; padding: 0.95rem 0; border-bottom: 1px solid var(--c-line); }
 .ciel-faq strong { font-size: 0.9rem; font-weight: 600; }
-.stApp .ciel-faq span { font-size: 0.88rem; line-height: 1.6; color: var(--c-muted); }
+:is(.stApp, [data-testid="stDialog"]) .ciel-faq span { font-size: 0.88rem; line-height: 1.6; color: var(--c-muted); }
 
 @media (max-width: 640px) {
-    .stApp .ciel-plan-feats { grid-template-columns: 1fr; }
+    :is(.stApp, [data-testid="stDialog"]) .ciel-plan-feats { grid-template-columns: 1fr; }
     .ciel-planned-row, .ciel-faq div { grid-template-columns: 1fr; gap: 0.25rem; }
 }
 </style>

@@ -184,6 +184,60 @@ class ChatStoreRequestTest(unittest.TestCase):
             self.assertFalse(self.store.save_project(ALICE, sample_project()))
 
 
+class ProfileStoreTest(unittest.TestCase):
+
+    EMPTY = {"full_name": "", "nickname": "", "field": "", "preferences": ""}
+
+    def setUp(self):
+        self.store = chat_store.ChatStore("https://db.example.invalid/", "service-key")
+
+    def test_profile_requests_are_scoped_to_the_owner(self):
+        with patch("requests.request", return_value=Response([])) as request:
+            self.store.load_profile(ALICE)
+            self.store.delete_profile(ALICE)
+
+        for call in request.call_args_list:
+            self.assertEqual(call.args[1], "https://db.example.invalid/rest/v1/profiles")
+            self.assertEqual(call.kwargs["params"]["owner"], f"eq.{ALICE}")
+
+        self.assertEqual([call.args[0] for call in request.call_args_list], ["GET", "DELETE"])
+        self.assertEqual(request.call_args_list[0].kwargs["params"]["limit"], "1")
+
+    def test_missing_row_is_an_empty_profile_and_failure_is_none(self):
+        with patch("requests.request", return_value=Response([])):
+            self.assertEqual(self.store.load_profile(ALICE), self.EMPTY)
+
+        with patch("requests.request", return_value=Response([{"nickname": " Raka\n", "full_name": None}])):
+            self.assertEqual(self.store.load_profile(ALICE), {**self.EMPTY, "nickname": "Raka"})
+
+        with self.assertLogs("ciel_ai.chat_store", level="ERROR"), \
+                patch("requests.request", return_value=Response(status=404)):
+            self.assertIsNone(self.store.load_profile(ALICE))
+
+    def test_save_profile_upserts_clean_fields_with_the_owner(self):
+        with patch("requests.post", return_value=Response()) as post:
+            self.assertTrue(self.store.save_profile(ALICE, {"nickname": " Raka\n", "evil": 1}))
+
+        self.assertEqual(post.call_args.args[0], "https://db.example.invalid/rest/v1/profiles")
+        self.assertEqual(post.call_args.kwargs["json"], {"owner": ALICE, **self.EMPTY, "nickname": "Raka"})
+        self.assertIn("resolution=merge-duplicates", post.call_args.kwargs["headers"]["Prefer"])
+
+    def test_profile_calls_reject_bad_owners(self):
+        with self.assertLogs("ciel_ai.chat_store", level="ERROR"), \
+                patch("requests.request") as request, patch("requests.post") as post:
+            self.assertIsNone(self.store.load_profile("../x"))
+            self.assertFalse(self.store.save_profile("", {}))
+            self.assertFalse(self.store.delete_profile("bad owner"))
+
+        request.assert_not_called()
+        post.assert_not_called()
+
+    def test_sql_creates_profiles_with_rls(self):
+        sql = (ROOT / "docs" / "chat_store.sql").read_text(encoding="utf-8")
+        self.assertIn("create table if not exists public.profiles", sql)
+        self.assertIn("alter table public.profiles enable row level security;", sql)
+
+
 class RateLimitHitTest(unittest.TestCase):
 
     LIMITS = {"user:a:hour": (60, 3600)}
@@ -396,7 +450,7 @@ class SidebarHistoryTest(unittest.TestCase):
         self.assertFalse(at.exception)
         tables = [c.args[1].rsplit("/", 1)[1] for c in request.call_args_list]
         self.assertEqual(tables[:2], ["projects", "chats"])
-        self.assertLessEqual(set(tables[2:]), {"pro_members"})
+        self.assertLessEqual(set(tables[2:]), {"pro_members", "profiles"})
         self.assertEqual(at.session_state["projects"]["p1"]["files"][0]["name"], "data.csv")
         self.assertEqual(at.session_state["chats"]["c1"]["project_id"], "p1")
         self.assertTrue(at.button(key="proj_p1"))

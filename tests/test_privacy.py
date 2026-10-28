@@ -245,6 +245,22 @@ class PrivacyPageTest(unittest.TestCase):
         self.assertNotIn("mengingat konteks belajarmu", minimal)
         self.assertIn("disampaikan ke pengelola", minimal)
 
+    def test_profile_is_disclosed_when_accounts_exist(self):
+        signed_in = self.text(retention_days=30, memory_enabled=True, data_controls=True, history_saved=True)
+        self.assertIn("nama panggilan", signed_in)
+        self.assertIn("dikirim ke model AI bersama pesanmu", signed_in)
+        self.assertIn("Kosongkan profil", signed_in)
+        # The block rides inside each message, so clearing the profile does not
+        # reach copies already in the server message history.
+        self.assertIn("ikut tersimpan di riwayat pesan di server", signed_in)
+        self.assertNotIn("nama panggilan", self.text(retention_days=30, memory_enabled=False, data_controls=False))
+
+    def test_data_controls_point_to_settings_and_the_chat_download(self):
+        full = self.text(retention_days=30, memory_enabled=True, data_controls=True)
+        self.assertIn("<strong>Pengaturan</strong>", full)
+        self.assertIn("mengunduh riwayat chat", full)
+        self.assertNotIn("kanan atas", full)
+
     def test_sidebar_history_text_follows_the_chat_store(self):
         saved = self.text(retention_days=30, memory_enabled=True, data_controls=True, history_saved=True)
         self.assertIn("disimpan di database Ciel", saved)
@@ -313,7 +329,8 @@ class PrivacyPageTest(unittest.TestCase):
         self.assertIn("<h1>Privasi</h1>", page)
         self.assertIn("30 hari", page)
         self.assertIn("Terakhir diperbarui:", page)
-        self.assertEqual(len(at.chat_input), 0)
+        # Privasi opens in the Pengaturan dialog, over the chat.
+        self.assertIn("settabactive_privasi", [b.key for b in at.button])
 
 
 # ------------------------------------------------------------

@@ -35,6 +35,20 @@ create table if not exists public.projects (
 
 alter table public.projects enable row level security;
 
+-- Profil dari halaman Pengaturan (ChatStore.load_profile/save_profile): nama
+-- yang dipakai Ciel untuk menyapa dan konteks singkat untuk jawabannya. App
+-- membersihkan isinya (satu baris, panjang dibatasi; lihat account_settings.py).
+create table if not exists public.profiles (
+    owner text primary key,
+    full_name text not null default '',
+    nickname text not null default '',
+    field text not null default '',
+    preferences text not null default '',
+    updated_at timestamptz not null default now()
+);
+
+alter table public.profiles enable row level security;
+
 -- Status Ciel Pro per akun. App hanya membaca (ChatStore.load_pro_until);
 -- yang menulis adalah admin lewat SQL di bawah, atau nanti webhook pembayaran.
 -- owner = "ID memory" yang tampil di menu akun Ciel (memory_owner_id).
