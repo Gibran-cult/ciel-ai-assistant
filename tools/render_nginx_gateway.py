@@ -32,9 +32,10 @@ Differences that come from nginx rather than from the rules:
 Settings use the same names as the ngrok policy (NGROK_USER, NGROK_PASSWORD,
 FLOW_ID, MEMORY_ADMIN_FLOW_ID, RESEARCH_FLOW_ID, WRITER_FLOW_ID). With
 --env-file the file is the source of truth: every name it lists wins over
-the environment, also a name left empty, so a shell that still exports old flow IDs cannot leak them into
-the config. Without --env-file, the environment wins over the repository's .env
-(as for the ngrok policy). Two optional limits:
+the environment, also a name left empty, so a shell that still exports old
+flow IDs cannot leak them into the config. Without --env-file, the
+environment wins over the repository's .env (as for the ngrok policy). Two
+optional limits:
 
   GATEWAY_RUN_PER_MINUTE   per IP, flow runs and uploads (default 60)
   GATEWAY_ALL_PER_MINUTE   per IP, every path (default 300)
