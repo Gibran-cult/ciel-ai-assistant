@@ -1,0 +1,55 @@
+name: Backend health
+
+# Twice an hour: probe the live gateway (tools/check_gateway.py) and check the
+# DeepSeek balance. A failed run is GitHub's email to the owner. Quiet until
+# Settings -> Secrets and variables -> Actions -> Variables has
+# BACKEND_HEALTH_ENABLED=true; the secrets BACKEND_URL, BACKEND_USER,
+# BACKEND_PASSWORD, FLOW_ID, MEMORY_ADMIN_FLOW_ID and DEEPSEEK_API_KEY go in
+# the same place.
+
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-health
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check backend and DeepSeek balance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ vars.BACKEND_HEALTH_ENABLED == 'true' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: python -m pip install requests python-dotenv
+
+      - name: Probe the gateway
+        env:
+          NGROK_URL: ${{ secrets.BACKEND_URL }}
+          NGROK_USER: ${{ secrets.BACKEND_USER }}
+          NGROK_PASSWORD: ${{ secrets.BACKEND_PASSWORD }}
+          FLOW_ID: ${{ secrets.FLOW_ID }}
+          MEMORY_ADMIN_FLOW_ID: ${{ secrets.MEMORY_ADMIN_FLOW_ID }}
+        run: python tools/check_gateway.py
+
+      - name: Check the DeepSeek balance
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: python tools/check_deepseek_balance.py
