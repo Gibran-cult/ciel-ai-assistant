@@ -41,7 +41,34 @@ ENV_NAMES = (
     "RESEARCH_FLOW_ID",
     "WRITER_FLOW_ID",
     "GATEWAY_RUN_PER_MINUTE",
+    "OLLAMA_EMBED_MODEL_ID",
 )
+
+# Every Streamlit secret that changes between the laptop and the VPS backend
+SWITCHED_SECRETS = (
+    "NGROK_URL",
+    "NGROK_PASSWORD",
+    "NGROK_USER",
+    "LANGFLOW_API_KEY",
+    "FLOW_ID",
+    "RESEARCH_FLOW_ID",
+    "WRITER_FLOW_ID",
+    "MEMORY_ADMIN_FLOW_ID",
+)
+
+
+def readme_section(heading):
+    """README text from `heading` (a line start such as "## 10.") to the next heading
+    of the same or a higher level."""
+    depth = len(heading.split(" ", 1)[0])
+    lines = README[README.index("\n" + heading) + 1 :].split("\n")
+    in_fence = False
+    for number, line in enumerate(lines[1:], start=1):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence  # "# comment" lines in code blocks are not headings
+        elif not in_fence and re.match(rf"#{{1,{depth}}} ", line):
+            return "\n".join(lines[:number])
+    return "\n".join(lines)
 
 
 def service_block(name):
@@ -188,6 +215,105 @@ class ReadmeTest(unittest.TestCase):
             "Rollback",
         ):
             self.assertIn(text, README)
+
+
+class RunbookTest(unittest.TestCase):
+    def test_api_record_is_ipv4_only_and_the_clock_is_utc(self):
+        # Docker's userland proxy would merge IPv6 clients into one rate-limit key
+        requirements = readme_section("## 1.")
+        self.assertIn("A record only", requirements)
+        self.assertIn("no AAAA", requirements)
+        self.assertIn("timedatectl set-timezone UTC", readme_section("## 2."))  # cron times are UTC
+
+    def test_secrets_are_generated_without_special_characters(self):
+        step = readme_section("## 5.")
+        self.assertIn("openssl rand -hex 32", step)
+        for name in ("POSTGRES_PASSWORD", "LANGFLOW_SECRET_KEY", "NGROK_PASSWORD", "RESTIC_PASSWORD"):
+            self.assertIn(name, step)
+        self.assertIn("$ @ # : / %", step)
+        self.assertIn("SUPABASE_DB_URL='", step)  # values that need them are single-quoted
+        self.assertNotIn("kept those IDs", README)  # the migration creates new IDs
+
+    def test_env_file_is_the_renderers_source_of_truth(self):
+        self.assertIn("source of truth", readme_section("## 6."))
+
+    def test_nginx_follows_langflows_address_and_the_vps_check_proves_it(self):
+        self.assertNotIn("keeps the address", README)
+        self.assertNotIn("resolves `langflow` once", README)
+        check = readme_section("### When Langflow restarts")
+        self.assertIn("`resolve`", check)
+        inspect = "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}'"
+        self.assertEqual(check.count(inspect), 2)  # before and after
+        restart = check.index("docker compose restart langflow\n")
+        self.assertLess(check.index(inspect), restart)
+        self.assertLess(restart, check.rindex(inspect))
+        health = check.index("https://api.ciel-ai.web.id/health_check   # 200")
+        self.assertLess(check.rindex(inspect), health)
+
+    def test_embedding_model_id_is_recorded_and_compared(self):
+        step = readme_section("## 8.")
+        self.assertIn("OLLAMA_EMBED_MODEL_ID", step)
+        self.assertIn('$1 == "nomic-embed-text-v2-moe:latest"', step)
+        self.assertIn("after any restore", step)
+
+    def test_flows_are_migrated_with_the_tool_and_the_gateway_re_rendered(self):
+        step = readme_section("## 10.")
+        tunnel = step.index("ssh -L 17860:127.0.0.1:7860")
+        migrate = step.index("python tools/migrate_flows.py")
+        self.assertLess(tunnel, migrate)
+        self.assertIn("--source-url http://127.0.0.1:7860 --target-url http://127.0.0.1:17860", step)
+        for name in ("FLOW_ID", "RESEARCH_FLOW_ID", "WRITER_FLOW_ID", "MEMORY_ADMIN_FLOW_ID"):
+            self.assertIn(f"--flow-id <{name}>", step)
+        for text in ("--map-out", "--snapshot-dir flow/subflows", "SOURCE_LANGFLOW_API_KEY", "TARGET_LANGFLOW_API_KEY"):
+            self.assertIn(text, step)
+        render = step.index("python3 tools/render_nginx_gateway.py --env-file deploy/vps/.env")
+        self.assertLess(migrate, render)
+        self.assertLess(render, step.index("docker compose restart nginx"))
+        self.assertNotIn("import the flows", step)
+
+    def test_cutover_and_rollback_switch_every_secret(self):
+        cutover = readme_section("## 12.")
+        cutover = cutover[: cutover.index("### Alerts")]
+        rollback = readme_section("## Rollback")
+        for name in SWITCHED_SECRETS:
+            self.assertIn(f"`{name}`", cutover, name)
+            self.assertIn(f"`{name}`", rollback, name)
+
+    def test_alerts_are_configured_secrets_first_then_enabled_then_run(self):
+        alerts = readme_section("### Alerts")
+        for name in ("BACKEND_URL", "BACKEND_USER", "BACKEND_PASSWORD", "FLOW_ID", "MEMORY_ADMIN_FLOW_ID", "DEEPSEEK_API_KEY"):
+            self.assertIn(f"`{name}`", alerts, name)
+        enabled = alerts.index("`BACKEND_HEALTH_ENABLED` = `true`")
+        self.assertLess(alerts.index("`DEEPSEEK_API_KEY`"), enabled)
+        self.assertLess(enabled, alerts.index("Run workflow"))
+        self.assertIn("60 days", alerts)
+
+    def test_rollback_is_self_contained_and_copies_memories_back(self):
+        rollback = readme_section("## Rollback")
+        self.assertNotIn("keep-alive notes", rollback)
+        self.assertIn("Enable-ScheduledTask -TaskName 'Ciel backend watchdog'", rollback)
+        for text in ("com.docker.compose.volume=langflow_home", "long_term_memory", "user_datasets"):
+            self.assertIn(text, rollback)
+        # memories are copied while the laptop's Langflow is still stopped
+        self.assertLess(rollback.index("long_term_memory"), rollback.index("Enable-ScheduledTask"))
+
+    def test_backups_wait_for_the_privacy_notice(self):
+        section = readme_section("## 11.")
+        precondition = section.index(
+            "The production privacy page must already show the backup notice\n"
+            "(privacy.py change merged and deployed)."
+        )
+        self.assertLess(precondition, section.index("./backup.sh"))
+        self.assertLess(precondition, section.index("30 20 * * *"))
+
+    def test_manual_run_sources_env_and_tries_supabase_first(self):
+        section = readme_section("## 11.")
+        manual = section.index("set -a; . ./.env; set +a\ndocker run")
+        supabase = section.index('docker run --rm --network host postgres:17.2 pg_dump -Fc "$SUPABASE_DB_URL" > /dev/null')
+        self.assertLess(manual, supabase)
+        self.assertLess(supabase, section.index("./backup.sh\n"))
+        self.assertLess(supabase, section.index("30 20 * * *"))
+        self.assertIn("--schema=public", section)
 
 
 class OllamaLinkCheckTest(unittest.TestCase):
