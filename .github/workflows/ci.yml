@@ -49,27 +49,7 @@ jobs:
 
       - name: Validate flow JSON
         run: |
-          python -m json.tool flow/v1.0.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.1.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.2.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.3.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.4.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.4.1/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.5.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.5.1/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.6.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.7.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.8.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.9.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.10.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.10.1/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.10.2/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/v1.11.0/Ciel_AI_Long-Term_Memory_Master.json > /dev/null
-          python -m json.tool flow/subflows/Web_Research_Assistant.json > /dev/null
-          python -m json.tool flow/riset_skripsi/v1.0.0/Ciel_Riset_Skripsi.json > /dev/null
-          python -m json.tool flow/riset_skripsi/v1.1.0/Ciel_Riset_Skripsi.json > /dev/null
-          python -m json.tool flow/penulis/v1.0.0/Ciel_Penulis.json > /dev/null
-          python -m json.tool flow/memory_admin/Ciel_Memory_Admin.json > /dev/null
+          git ls-files 'flow/*.json' 'flow/**/*.json' | while read -r f; do python -m json.tool "$f" > /dev/null || exit 1; done
 
       - name: Run offline test suite
         run: |
@@ -128,7 +108,8 @@ jobs:
             tests.test_beranda_app \
             tests.test_chat_view \
             tests.test_landing \
-            tests.test_pdf_attachments
+            tests.test_pdf_attachments \
+            tests.test_ci_coverage
 
       # Node that comes with the runner (no extra setup): the Edge Function's
       # logic is plain JavaScript so it can be tested here too.
