@@ -6,6 +6,18 @@
 # section 11). Pings Healthchecks.io only when every check passed.
 set -euo pipefail
 
+# Fail closed: a count that is not a whole number (an error message, an empty
+# string) must fail the check, never pass it. "$1" names the check, "$2" is the count.
+require_positive_count() {
+  case $2 in
+    ''|*[!0-9]*)
+      echo "$1: expected a number, got '$2'" >&2
+      exit 1
+      ;;
+  esac
+  [ "$2" -ge 1 ] || { echo "$1 is empty" >&2; exit 1; }
+}
+
 TMP=$(mktemp -d /var/tmp/ciel-restore.XXXXXX)
 trap 'rm -rf "$TMP"' EXIT
 
@@ -30,10 +42,7 @@ client = chromadb.PersistentClient(path=os.environ['MEMORY_DIR'])
 print(client.get_collection('ciel_long_term_memory').count())
 ")
 echo "restored long-term memories: $count"
-if [ "$count" -lt 1 ]; then
-  echo "the restored long-term memory is empty" >&2
-  exit 1
-fi
+require_positive_count "restored long-term memory" "$count"
 
 for name in langflow supabase; do
   dump=$(find "$TMP" -type f -name "$name.dump")
@@ -44,10 +53,7 @@ for name in langflow supabase; do
   entries=$(docker run --rm -v "$dump:/dump/$name.dump:ro" postgres:17.2 \
     pg_restore --list "/dump/$name.dump" | grep -vc '^;' || true)
   echo "$name.dump: $entries entries"
-  if [ "$entries" -lt 1 ]; then
-    echo "$name.dump lists no entries" >&2
-    exit 1
-  fi
+  require_positive_count "$name.dump entries" "$entries"
 done
 
 curl -fsS -m 10 --retry 3 "$HEALTHCHECKS_RESTORE_URL"

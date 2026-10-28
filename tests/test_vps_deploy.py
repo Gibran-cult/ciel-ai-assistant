@@ -223,8 +223,43 @@ class SecretsBackupNoteTest(unittest.TestCase):
 
 class BackupTest(unittest.TestCase):
     def test_backup_pauses_langflow_safely(self):
-        trap = BACKUP.index("trap 'docker compose unpause langflow' EXIT")
+        trap = BACKUP.index("trap cleanup EXIT")
         self.assertLess(trap, BACKUP.index("docker compose pause langflow"))
+        cleanup = BACKUP[BACKUP.index("cleanup() {") : trap]
+        self.assertIn("docker compose unpause langflow", cleanup)
+        self.assertLess(BACKUP.index("paused=1"), BACKUP.index("docker compose pause langflow"))
+        # the explicit unpause marks it, so the EXIT trap does not unpause twice
+        self.assertIn("\ndocker compose unpause langflow\npaused=0\n", BACKUP)
+
+    def test_backup_never_leaves_dumps_behind(self):
+        # one EXIT trap (every exit path) removes the work dir; signals exit through it
+        cleanup = BACKUP[BACKUP.index("cleanup() {") : BACKUP.index("trap cleanup EXIT")]
+        self.assertIn('rm -rf "$WORK"', cleanup)
+        self.assertRegex(BACKUP, r"trap 'exit 1' INT TERM HUP")
+        self.assertNotIn(" ERR", BACKUP)  # an ERR trap is bypassed by exit, set -u and signals
+        # trap is installed before the dumps and before the work dir exists
+        self.assertLess(BACKUP.index("trap cleanup EXIT"), BACKUP.index('mkdir -m 700 "$WORK"'))
+        self.assertLess(BACKUP.index('mkdir -m 700 "$WORK"'), BACKUP.index("pg_dump"))
+
+    def test_backup_validates_settings_before_dumping(self):
+        first_dump = BACKUP.index("pg_dump")
+        for name in (
+            "SUPABASE_DB_URL",
+            "RESTIC_REPOSITORY",
+            "RESTIC_PASSWORD",
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "HEALTHCHECKS_BACKUP_URL",
+        ):
+            check = "${" + name + ":?}"
+            self.assertIn(check, BACKUP)
+            self.assertLess(BACKUP.index(check), first_dump, name)
+        # and the volume lookup, which can exit 1, comes before the dumps too
+        self.assertLess(BACKUP.index("docker volume inspect"), first_dump)
+
+    def test_backup_removes_a_leftover_work_dir_before_the_disk_check(self):
+        leftover = BACKUP.index('rm -rf "$WORK"')
+        self.assertLess(leftover, BACKUP.index("df --output=pcent /"))
 
     def test_backup_keeps_about_five_weeks(self):
         self.assertIn("restic forget --keep-daily 7 --keep-weekly 4 --prune", BACKUP)
@@ -258,6 +293,9 @@ class BackupTest(unittest.TestCase):
         self.assertIn("--entrypoint python", RESTORE)
         self.assertIn("restic restore latest --target", RESTORE)
         self.assertIn("pg_restore --list", RESTORE)
+        self.assertIn("*[!0-9]*", RESTORE)  # a non-numeric count fails the check
+        self.assertEqual(RESTORE.count("require_positive_count "), 2)  # the memory count and each dump
+        self.assertNotIn("-lt 1", RESTORE)  # `[ x -lt 1 ]` passes when x is not a number
         self.assertIn("for name in langflow supabase", RESTORE)  # both dumps
 
     def test_scripts_are_strict(self):
