@@ -8,6 +8,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import requests
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
@@ -79,17 +81,26 @@ class FakeLangflow(unittest.TestCase):
         self.addCleanup(get_patch.stop)
         self.addCleanup(post_patch.stop)
 
-    def fail_second_post(self):
+    def fail_post(self, number, error=None, body=""):
+        """Make POST number `number` fail: raise_for_status raises `error`, or the
+        call itself raises it when it is a KeyboardInterrupt (Ctrl+C mid-request)."""
         original = self.post.side_effect
+        error = RuntimeError("500") if error is None else error
 
         def flaky(url, **kwargs):
-            if self.post.call_count == 2:
+            if self.post.call_count == number:
+                if isinstance(error, KeyboardInterrupt):
+                    raise error
                 bad = fake_response({})
-                bad.raise_for_status.side_effect = RuntimeError("500")
+                bad.raise_for_status.side_effect = error
+                bad.text = body
                 return bad
             return original(url, **kwargs)
 
         self.post.side_effect = flaky
+
+    def fail_second_post(self, error=None, body=""):
+        self.fail_post(2, error, body)
 
 
 class MigrateTests(FakeLangflow):
@@ -165,6 +176,35 @@ class MigrateTests(FakeLangflow):
         self.assertIsInstance(caught.exception.__cause__, RuntimeError)
         self.assertEqual(self.post.call_count, 2)
 
+    def test_interrupted_import_reports_the_flows_already_created(self):
+        self.fail_second_post(KeyboardInterrupt())
+        with self.assertRaises(MigrationError) as caught:
+            migrate("http://src", "k1", "http://dst", "k2", ["main-old"])
+        self.assertEqual(caught.exception.partial, {"kb-old": "new-1"})
+        self.assertIsInstance(caught.exception.__cause__, KeyboardInterrupt)
+        self.assertIn("interrupted", str(caught.exception))
+
+    def test_http_error_names_the_status_and_a_truncated_body(self):
+        self.fail_second_post(requests.HTTPError("422 Client Error: Unprocessable Entity"), body="e" * 1000)
+        with self.assertRaises(MigrationError) as caught:
+            migrate("http://src", "k1", "http://dst", "k2", ["main-old"])
+        message = str(caught.exception)
+        self.assertIn("422", message)
+        self.assertIn("e" * 500, message)
+        self.assertNotIn("e" * 501, message)
+
+    def test_export_http_error_includes_the_body(self):
+        def bad_get(url, **kwargs):
+            response = fake_response({})
+            response.raise_for_status.side_effect = requests.HTTPError("404 Client Error: Not Found")
+            response.text = '{"detail":"Flow not found"}'
+            return response
+
+        self.get.side_effect = bad_get
+        with self.assertRaisesRegex(requests.HTTPError, "Flow not found"):
+            migrate("http://src", "k1", "http://dst", "k2", ["main-old"])
+        self.post.assert_not_called()
+
 
 class CliTests(FakeLangflow):
     def run_main(self, *extra, env=None):
@@ -220,6 +260,25 @@ class CliTests(FakeLangflow):
         for text in (out, err):
             self.assertNotIn("k1", text)
             self.assertNotIn("k2", text)
+
+    def test_ctrl_c_during_imports_exits_non_zero_with_the_partial_map(self):
+        self.fail_second_post(KeyboardInterrupt())
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "map.json"
+            code, out, err = self.run_main("--map-out", str(path))
+            written = json.loads(path.read_text(encoding="utf-8"))
+        self.assertNotEqual(code, 0)
+        self.assertEqual(written, {"kb-old": "new-1"})
+        self.assertIn("kb-old -> new-1", out)
+        self.assertIn("partially migrated", err)
+
+    def test_first_import_failure_says_nothing_was_created(self):
+        self.fail_post(1)
+        code, out, err = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn("Nothing was created", err)
+        self.assertNotIn("partially migrated", err)
+        self.assertNotIn("->", out)
 
 
 if __name__ == "__main__":

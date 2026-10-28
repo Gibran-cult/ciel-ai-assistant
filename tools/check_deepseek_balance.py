@@ -7,6 +7,7 @@ or the balance cannot be read. The key is never printed.
 """
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -33,6 +34,8 @@ def balance_ok(payload, min_usd):
     try:
         total = float(raw)
     except (TypeError, ValueError):
+        total = math.nan
+    if not math.isfinite(total):  # nan < min_usd is False: nan would pass
         return False, f"saldo USD tidak terbaca: {raw!r}"
     if total < min_usd:
         return False, f"saldo USD {raw} di bawah batas {min_usd:.2f}"

@@ -18,8 +18,10 @@ only, no secrets. --snapshot-dir saves each Run Flow target as pretty JSON
 
 The tool is not idempotent: run it once per target. A re-run imports every
 flow again and Langflow keeps the copies as "(1)" duplicates. If an import
-fails halfway, the exit code is 1 and the flows already created are listed
-(and written to --map-out); delete them on the target before retrying.
+fails or is interrupted (Ctrl+C) halfway, the exit code is 1 and the flows
+already created are listed (and written to --map-out); delete them on the
+target before retrying. HTTP errors include the first 500 characters of
+Langflow's answer, which says why it refused.
 """
 
 import argparse
@@ -33,6 +35,7 @@ from pathlib import Path
 import requests
 
 TIMEOUT = 60
+BODY_LIMIT = 500  # characters of an error response kept in the message
 IMPORT_DROP_KEYS = ("id", "user_id", "folder_id", "updated_at", "webhook", "endpoint_name")
 
 
@@ -87,15 +90,25 @@ def write_snapshot(directory, flow):
     return path
 
 
+def raise_for_status(response):
+    """response.raise_for_status(), with the start of the body in the message:
+    Langflow says why it refused a flow there (e.g. a 422 validation detail)."""
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as error:
+        body = (response.text or "")[:BODY_LIMIT]
+        raise requests.HTTPError(f"{error} | response body: {body}", response=response) from error
+
+
 def export_flow(base_url, headers, flow_id):
     response = requests.get(f"{base_url}/api/v1/flows/{flow_id}", headers=headers, timeout=TIMEOUT)
-    response.raise_for_status()
+    raise_for_status(response)
     return response.json()
 
 
 def import_flow(base_url, headers, flow):
     response = requests.post(f"{base_url}/api/v1/flows/", headers=headers, json=flow, timeout=TIMEOUT)
-    response.raise_for_status()
+    raise_for_status(response)
     return response.json()["id"]
 
 
@@ -140,9 +153,10 @@ def migrate(source_url, source_key, target_url, target_key, flow_ids, snapshot_d
         body = remap_run_flows(importable(flow), id_map)
         try:
             id_map[flow_id] = import_flow(target_url, target_headers, body)
-        except Exception as error:
+        except (Exception, KeyboardInterrupt) as error:
+            reason = "interrupted (Ctrl+C)" if isinstance(error, KeyboardInterrupt) else error
             raise MigrationError(
-                f"Importing {flow.get('name', flow_id)} ({flow_id}) failed: {error}", dict(id_map)
+                f"Importing {flow.get('name', flow_id)} ({flow_id}) failed: {reason}", dict(id_map)
             ) from error
     return id_map
 
@@ -185,10 +199,17 @@ def main(argv=None):
         print(f"ID map written to {args.map_out}")
     if failure:
         print(f"ERROR: {failure}", file=sys.stderr)
+        if id_map:
+            print(
+                f"The target is partially migrated: {len(id_map)} flows were created. "
+                "Delete these new flow IDs on the target before retrying: " + ", ".join(id_map.values()),
+                file=sys.stderr,
+            )
+        else:
+            print("Nothing was created on the target.", file=sys.stderr)
         print(
-            f"The target is partially migrated: {len(id_map)} flows were created. "
-            "Delete these new flow IDs on the target before retrying: "
-            + (", ".join(id_map.values()) or "(none)"),
+            "If the failed request reached the target anyway (a timeout, or Ctrl+C mid-request), "
+            "that flow is there too: check the target's flow list before retrying.",
             file=sys.stderr,
         )
         return 1

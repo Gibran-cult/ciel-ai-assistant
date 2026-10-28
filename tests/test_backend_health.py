@@ -71,6 +71,13 @@ class BalanceOkTests(unittest.TestCase):
     def test_unreadable_balance_fails(self):
         self.assertFalse(balance_ok(payload(usd("abc")), 3.0)[0])
 
+    def test_non_finite_balance_is_unreadable(self):
+        # float() accepts these; nan < min is False, so nan would otherwise pass
+        for raw in ("nan", "NaN", "inf", "-inf", "Infinity"):
+            ok, message = balance_ok(payload(usd(raw)), 3.0)
+            self.assertFalse(ok, raw)
+            self.assertIn("tidak terbaca", message, raw)
+
 
 class CliTests(unittest.TestCase):
     def test_healthy_balance_exits_0(self):
@@ -117,6 +124,16 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotRegex(WORKFLOW, r"uses: [^@]+@v\d")  # SHAs, not tags
         self.assertIn("python tools/check_gateway.py", WORKFLOW)
         self.assertIn("python tools/check_deepseek_balance.py", WORKFLOW)
+
+    def test_balance_is_checked_even_when_the_gateway_probe_failed(self):
+        # a down backend must not hide a low balance; the job still fails if either fails
+        gateway = WORKFLOW.index("- name: Probe the gateway")
+        balance = WORKFLOW.index("- name: Check the DeepSeek balance")
+        self.assertLess(gateway, balance)
+        step = WORKFLOW[balance:]
+        self.assertIn("if: ${{ !cancelled() }}", step)
+        self.assertNotIn("continue-on-error", WORKFLOW)
+        self.assertNotIn("if:", WORKFLOW[gateway:balance])
 
     def test_workflow_runs_every_half_hour_and_by_hand(self):
         self.assertIn("cron: '7,37 * * * *'", WORKFLOW)

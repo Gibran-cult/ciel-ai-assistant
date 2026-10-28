@@ -49,7 +49,10 @@ jobs:
           MEMORY_ADMIN_FLOW_ID: ${{ secrets.MEMORY_ADMIN_FLOW_ID }}
         run: python tools/check_gateway.py
 
+      # Also when the probe failed: a down backend must not hide a low balance.
+      # The job still fails when either step fails.
       - name: Check the DeepSeek balance
+        if: ${{ !cancelled() }}
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: python tools/check_deepseek_balance.py
