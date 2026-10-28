@@ -44,9 +44,18 @@ class BuildNginxConfigTest(unittest.TestCase):
         conf = build(FLOW, ADMIN)
         self.assertNotIn("$request_uri", conf)
         self.assertEqual(
-            conf.count("proxy_pass http://langflow:7860$uri$is_args$args;"),
+            conf.count("proxy_pass http://langflow_backend$uri$is_args$args;"),
             len({path for _, path in allowed_requests(FLOW, ADMIN)}),
         )
+
+    def test_upstream_group_replaces_the_need_for_a_resolver(self):
+        # proxy_pass with variables resolves a plain host at request time (needs a resolver);
+        # a named upstream group is resolved at start-up.
+        conf = build(FLOW, ADMIN)
+        self.assertIn("upstream langflow_backend { server langflow:7860; }", conf)
+        self.assertLess(conf.index("upstream langflow_backend"), conf.index("server {"))
+        self.assertNotIn("proxy_pass http://langflow:", conf)
+        self.assertNotIn("resolver", conf)
 
     def test_long_research_requests_are_not_cut(self):
         self.assertIn("proxy_read_timeout 600s;", build(FLOW, ADMIN))  # > RESEARCH_TIMEOUT 420
