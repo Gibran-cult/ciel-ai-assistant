@@ -9,6 +9,14 @@
 # Prints one line (UTC) only when it had to restart, so the log stays short.
 set -euo pipefail
 
+# Only a running Langflow can be probed. While it is paused (the nightly backup),
+# stopped, restarting or not created yet, the probe would fail and restart Ollama
+# every minute for nothing: do nothing until it runs again.
+langflow=$(docker compose ps -a -q langflow)
+if [ -z "$langflow" ] || [ "$(docker inspect -f '{{.State.Status}}' "$langflow")" != running ]; then
+  exit 0
+fi
+
 if ! docker compose exec -T langflow python -c \
   "import urllib.request; urllib.request.urlopen('http://127.0.0.1:11434/api/version', timeout=5)" \
   >/dev/null 2>&1; then

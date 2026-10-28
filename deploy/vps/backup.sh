@@ -8,6 +8,14 @@
 # Fails without pinging Healthchecks.io, so a missed ping is the alarm.
 set -euo pipefail
 
+# One run at a time: a second run would delete the first one's work dir and
+# pause Langflow twice. Fails (no ping) when a backup is still running.
+exec 9>/var/lock/ciel-backup.lock
+if ! flock -n 9; then
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) another backup is still running: not started" >&2
+  exit 1
+fi
+
 # One fixed work path: restic forget groups snapshots by host and paths, so a
 # random temp dir would put every night in its own group and nothing would be pruned.
 WORK=/var/tmp/ciel-backup-work
@@ -62,10 +70,11 @@ docker compose exec -T postgres pg_dump -U langflow -Fc langflow > "$WORK/langfl
 # plan and Docker containers have no IPv6, so run on the host network.
 docker run --rm --network host postgres:17.2 pg_dump -Fc "$SUPABASE_DB_URL" > "$WORK/supabase.dump"
 
-# 4. Pause Langflow for the duration of the snapshot.
+# 4. Pause Langflow for the duration of the snapshot, at most 45 minutes: a hung
+# upload must not keep Ciel down (timeout fails the run; the EXIT trap unpauses).
 paused=1
 docker compose pause langflow
-restic backup "$mountpoint" "$WORK"
+timeout 45m restic backup "$mountpoint" "$WORK"
 docker compose unpause langflow
 paused=0
 

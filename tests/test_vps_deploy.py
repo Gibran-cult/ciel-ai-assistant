@@ -119,7 +119,7 @@ class ComposeTest(unittest.TestCase):
         block = service_block("nginx")
         self.assertIn("./nginx/ciel.conf:/etc/nginx/conf.d/default.conf:ro", block)
         self.assertIn("./nginx/ciel.htpasswd:/etc/nginx/ciel.htpasswd:ro", block)
-        # the config resolves `langflow` once at start-up
+        # nginx starts after langflow (it re-resolves the address later, see the renderer)
         self.assertRegex(block, r"depends_on:\s*\n\s*-\s*langflow")
 
     def test_named_volumes(self):
@@ -198,6 +198,15 @@ class OllamaLinkCheckTest(unittest.TestCase):
         self.assertIn("docker compose restart ollama", LINK_CHECK)
         self.assertIn("date -u", LINK_CHECK)
 
+    def test_does_nothing_unless_langflow_is_running(self):
+        # paused for the backup, stopped or restarting: the probe would fail and
+        # restart Ollama every minute for nothing
+        state = LINK_CHECK.index("docker compose ps -a -q langflow")
+        self.assertIn("docker inspect -f '{{.State.Status}}'", LINK_CHECK)
+        self.assertIn("!= running ]; then\n  exit 0\nfi", LINK_CHECK)
+        self.assertLess(state, LINK_CHECK.index("docker compose exec -T langflow"))
+        self.assertLess(LINK_CHECK.index("exit 0"), LINK_CHECK.index("docker compose restart ollama"))
+
     def test_readme_schedules_it_every_minute_outside_the_backup_section(self):
         cron = (
             "* * * * * cd /opt/ciel/deploy/vps && ./ollama_link_check.sh"
@@ -261,6 +270,22 @@ class BackupTest(unittest.TestCase):
         leftover = BACKUP.index('rm -rf "$WORK"')
         self.assertLess(leftover, BACKUP.index("df --output=pcent /"))
 
+    def test_backup_runs_one_at_a_time(self):
+        lock = BACKUP.index("exec 9>/var/lock/ciel-backup.lock")
+        self.assertIn("if ! flock -n 9; then", BACKUP)
+        # before anything that touches the work dir of a run still in progress
+        self.assertLess(lock, BACKUP.index('rm -rf "$WORK"'))
+        branch = BACKUP[BACKUP.index("if ! flock -n 9; then") : BACKUP.index("fi", lock)]
+        self.assertIn("exit 1", branch)
+        self.assertNotIn("HEALTHCHECKS", branch)
+
+    def test_paused_snapshot_has_a_time_limit(self):
+        pause = BACKUP.index("docker compose pause langflow")
+        limited = BACKUP.index('timeout 45m restic backup "$mountpoint" "$WORK"')
+        self.assertLess(pause, limited)
+        self.assertLess(limited, BACKUP.index("\ndocker compose unpause langflow\npaused=0\n"))
+        self.assertLess(BACKUP.index("trap cleanup EXIT"), pause)  # a timeout still unpauses
+
     def test_backup_keeps_about_five_weeks(self):
         self.assertIn("restic forget --keep-daily 7 --keep-weekly 4 --prune", BACKUP)
         self.assertNotIn("--keep-monthly", BACKUP)
@@ -294,9 +319,26 @@ class BackupTest(unittest.TestCase):
         self.assertIn("restic restore latest --target", RESTORE)
         self.assertIn("pg_restore --list", RESTORE)
         self.assertIn("*[!0-9]*", RESTORE)  # a non-numeric count fails the check
-        self.assertEqual(RESTORE.count("require_positive_count "), 2)  # the memory count and each dump
+        # the snapshot size, the free space, the memory count and each dump
+        self.assertEqual(RESTORE.count("require_positive_count "), 4)
         self.assertNotIn("-lt 1", RESTORE)  # `[ x -lt 1 ]` passes when x is not a number
         self.assertIn("for name in langflow supabase", RESTORE)  # both dumps
+
+    def test_restore_check_runs_one_at_a_time(self):
+        lock = RESTORE.index("exec 9>/var/lock/ciel-restore.lock")
+        self.assertIn("if ! flock -n 9; then", RESTORE)
+        self.assertLess(lock, RESTORE.index("mktemp -d"))
+        self.assertLess(lock, RESTORE.index("restic restore latest"))
+
+    def test_restore_check_needs_twice_the_snapshot_size_free(self):
+        stats = RESTORE.index("restic stats latest --mode restore-size --json")
+        free = RESTORE.index("df --output=avail -B1 /var/tmp")
+        check = RESTORE.index('if [ "$free" -lt $((2 * need)) ]; then')
+        restore = RESTORE.index("restic restore latest")
+        self.assertLess(stats, check)
+        self.assertLess(free, check)
+        self.assertLess(check, restore)
+        self.assertLess(check, RESTORE.index("mktemp -d"))
 
     def test_scripts_are_strict(self):
         for text in (BACKUP, RESTORE):

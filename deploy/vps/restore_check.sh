@@ -6,6 +6,13 @@
 # section 11). Pings Healthchecks.io only when every check passed.
 set -euo pipefail
 
+# One run at a time (a run started by hand while cron runs one would fill the disk twice).
+exec 9>/var/lock/ciel-restore.lock
+if ! flock -n 9; then
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) another restore check is still running: not started" >&2
+  exit 1
+fi
+
 # Fail closed: a count that is not a whole number (an error message, an empty
 # string) must fail the check, never pass it. "$1" names the check, "$2" is the count.
 require_positive_count() {
@@ -17,6 +24,18 @@ require_positive_count() {
   esac
   [ "$2" -ge 1 ] || { echo "$1 is empty" >&2; exit 1; }
 }
+
+# The restore lands in /var/tmp, on the same disk as Langflow and Postgres:
+# refuse to start unless at least twice the latest snapshot's size is free.
+need=$(restic stats latest --mode restore-size --json \
+  | python3 -c 'import json, sys; print(json.load(sys.stdin)["total_size"])')
+require_positive_count "latest snapshot restore size" "$need"
+free=$(df --output=avail -B1 /var/tmp | tail -n 1 | tr -dc '0-9')
+require_positive_count "free bytes in /var/tmp" "$free"
+if [ "$free" -lt $((2 * need)) ]; then
+  echo "only $free bytes free in /var/tmp, need $((2 * need)) (2x the latest snapshot): restore not started" >&2
+  exit 1
+fi
 
 TMP=$(mktemp -d /var/tmp/ciel-restore.XXXXXX)
 trap 'rm -rf "$TMP"' EXIT
