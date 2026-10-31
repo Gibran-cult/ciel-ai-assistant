@@ -1,6 +1,6 @@
 # Ciel Pro
 
-Paket Pro berisi **Riset Skripsi** (peta sumber), **Kerangka Bab 1–3** dan **Cek kutipan & kemiripan** dari peta sumber itu, plus batas pesan lebih tinggi. Pengguna membelinya sendiri lewat Midtrans (sekali bayar Rp79.000 = Pro 30 hari, tanpa tagihan otomatis), atau pengelola memberikannya lewat SQL.
+Paket Pro berisi **Riset Skripsi** (peta sumber), **Kerangka Bab 1–3** dan **Cek kutipan & kemiripan** dari peta sumber itu, plus batas pesan lebih tinggi. Pengguna membelinya sendiri lewat Midtrans atau Mayar (sekali bayar Rp79.000 = Pro 30 hari, tanpa tagihan otomatis; penyedianya dipilih `PAYMENT_PROVIDER`), atau pengelola memberikannya lewat SQL.
 
 ## Cara kerja
 
@@ -23,8 +23,12 @@ Paket Pro berisi **Riset Skripsi** (peta sumber), **Kerangka Bab 1–3** dan **C
 | `WRITER_FLOW_ID` | ya, untuk kerangka | – | ID flow "Ciel Penulis" di Langflow. Tanpa ini tombol "Susun kerangka Bab 1–3" tidak tampil. |
 | `KERANGKA_PER_DAY` | tidak | 10 | Kerangka Bab 1–3 per hari per akun. |
 | `CEK_KUTIPAN_PER_DAY` | tidak | 20 | Cek kutipan & kemiripan per hari per akun. Tidak butuh flow: berjalan di app (`draft_check.py`). |
-| `MIDTRANS_SERVER_KEY` | ya, untuk pembelian | – | Server key Midtrans. Akun baru memakai awalan `Mid-server-` di sandbox maupun produksi (akun lama: `SB-Mid-server-` untuk sandbox); lingkungannya ditentukan `MIDTRANS_PRODUCTION`. Tanpa ini Pro tampil sebagai "sedang disiapkan". |
+| `PAYMENT_PROVIDER` | tidak | `midtrans` | Penyedia pembayaran: `midtrans` atau `mayar`. Hanya key penyedia ini yang dipakai. |
+| `MIDTRANS_SERVER_KEY` | ya, untuk Midtrans | – | Server key Midtrans. Akun baru memakai awalan `Mid-server-` di sandbox maupun produksi (akun lama: `SB-Mid-server-` untuk sandbox); lingkungannya ditentukan `MIDTRANS_PRODUCTION`. Tanpa ini Pro tampil sebagai "sedang disiapkan". |
 | `MIDTRANS_PRODUCTION` | tidak | `false` | `true` memakai akun produksi Midtrans. |
+| `MAYAR_API_KEY` | ya, untuk Mayar | – | API key Mayar dengan akses **Read & Write** (key Read Only ditolak 401 di semua endpoint). Sandbox dari web.mayar.io/api-keys, produksi dari web.mayar.id/api-keys; lingkungannya ditentukan `MAYAR_PRODUCTION`. |
+| `MAYAR_PRODUCTION` | tidak | `false` | `true` memakai API produksi Mayar (`api.mayar.id`), selain itu sandbox (`api.mayar.io`). |
+| `MAYAR_WEBHOOK_TOKEN` | ya, untuk Mayar | – | Token acak, sama persis dengan secret function `mayar-notify`. Dipakai tombol "Cek lagi"; tanpa ini Pro tidak dijual lewat Mayar. |
 | `APP_URL` | disarankan | alamat yang sedang dibuka | Alamat publik app, tujuan kembali setelah bayar (`<APP_URL>/?page=pricing`). |
 
 Fitur ini juga butuh login Google (`[auth]`) dan Supabase (`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`), karena status Pro tersimpan di sana. Flow riset juga harus diizinkan di policy ngrok (`tools/render_ngrok_policy.py`).
@@ -76,9 +80,50 @@ python -c "import getpass,requests,subprocess,hashlib; k=getpass.getpass('Server
 
 Lalu redeploy function, dan pastikan digest `MIDTRANS_SERVER_KEY` di `npx supabase secrets list` sama dengan digest key di secrets Streamlit Cloud.
 
+## Pembelian lewat Mayar
+
+Dipakai sejak Midtrans menolak GoPay QRIS Aggregator (2026-10-30). Akun Mayar **Individual** cukup KTP dan swafoto.
+
+```
+Pricing: "Beli Pro 30 hari"
+  -> app: baris pro_orders (pending, provider 'mayar')
+  -> Single Payment Request Mayar (POST /hl/v2/payments/create, Bearer API key, Rp79.000)
+  -> id request dan transaksinya disimpan di order (provider_ref, provider_tx); gagal simpan = link tidak ditampilkan
+  -> pengguna membayar di halaman Mayar (QRIS, VA, e-wallet), lalu kembali ke Pricing
+Mayar -> Supabase Edge Function mayar-notify?token=<MAYAR_WEBHOOK_TOKEN>
+  -> token salah: 403
+  -> order dicari lewat data.id, data.transactionId, atau data.productId (hanya UUID)
+  -> ambil ulang payment request order itu dari API Mayar (GET /hl/v2/payments/<provider_ref>)
+  -> status "paid": ciel_settle_order dengan nominal dari API Mayar -> pro_members +30 hari (source 'mayar')
+```
+
+- Webhook Mayar **tidak ditandatangani**. Isinya hanya petunjuk order mana yang dicek; yang memutuskan lunas adalah API Mayar dengan key kita.
+- Di webhook `payment.received` asli, `data.id` dan `data.transactionId` adalah transaksi baru yang dibuat saat membayar. Hanya `data.productId` yang sama dengan `provider_ref`.
+- Mayar mencatat webhook yang dijawab 2xx sebagai SUCCESS dan tidak mengirim ulang, juga lewat `/webhooks/retry`. Tombol **Cek lagi** (dan sekali per sesi sebelum order Mayar dinyatakan kedaluwarsa) meminta `mayar-notify` mengecek ulang `provider_ref` ke API Mayar, jadi webhook yang hilang tetap bisa dipulihkan.
+- Mayar mengabaikan `expiredAt` yang kita kirim: QRIS berlaku 24 jam, sedangkan Pricing menyebut order kedaluwarsa setelah 60 menit. Pembayaran yang terlambat tetap melunasi order lewat webhook.
+- Jika id dari Mayar gagal disimpan, app mencatat `mayar_unattached order=… ref=… tx=…` di log. Cocokkan manual jika request itu tetap dibayar.
+- Logika webhook ada di `supabase/functions/mayar-notify/notification.js` dan dites dengan `node --test supabase/functions/mayar-notify/notification.test.mjs`.
+
+### Menyiapkan Mayar (sandbox dulu)
+
+1. Buat API key **Read & Write** di web.mayar.io/api-keys (sandbox). Key hanya tampil penuh sekali saat dibuat; daftar key menampilkannya tersamar. Simpan di `.streamlit/secrets.toml` di atas `[auth]` sebagai `MAYAR_API_KEY`, bersama `MAYAR_WEBHOOK_TOKEN` (`python -c "import secrets;print(secrets.token_urlsafe(32))"`) dan `MAYAR_PRODUCTION = "false"`. Cek key ke sandbox: `GET https://api.mayar.io/hl/v2/balances` harus 200.
+2. Pastikan kolom `provider`, `provider_ref`, `provider_tx` dan `ciel_settle_order` versi terbaru dari `docs/chat_store.sql` sudah ada di Supabase (migrasi `pro_orders_provider`, diterapkan 2026-10-31).
+3. Pasang secrets function dari `secrets.toml` dan deploy:
+   ```bash
+   python -c "import tomllib,subprocess; d=tomllib.load(open('.streamlit/secrets.toml','rb')); subprocess.run(['npx','supabase','secrets','set','--project-ref','<ref>','MAYAR_API_KEY='+d['MAYAR_API_KEY'],'MAYAR_WEBHOOK_TOKEN='+d['MAYAR_WEBHOOK_TOKEN'],'MAYAR_PRODUCTION='+d['MAYAR_PRODUCTION']],check=True,shell=True)"
+   npx supabase functions deploy mayar-notify --project-ref <ref> --no-verify-jwt
+   ```
+   Bandingkan digest ketiga secret di `npx supabase secrets list --project-ref <ref>` dengan sha256 nilai di `secrets.toml`.
+4. Daftarkan webhook lewat API Mayar (`POST /hl/v2/webhooks/update` dengan `{"urlHook": "https://<ref>.supabase.co/functions/v1/mayar-notify?token=<MAYAR_WEBHOOK_TOKEN>"}`), lalu `POST /hl/v2/webhooks/test` dengan URL yang sama. Riwayat pengiriman (`GET /hl/v2/webhooks/new-history`) harus SUCCESS; event `testing` dijawab `ignored`.
+5. Tes sandbox: jalankan app dengan `PAYMENT_PROVIDER = "mayar"`, beli Pro, isi nomor HP di halaman Mayar, pilih QRIS, tekan **BAYAR**, lalu **SIMULATE PAYMENT**. `pro_orders` harus `paid` dengan provider `mayar`, dan Pricing menampilkan "Pembayaran diterima. Ciel Pro aktif sampai …".
+
+Pindah ke produksi: buat key **Read & Write** di web.mayar.id/api-keys setelah verifikasi akun Mayar disetujui. Ulangi langkah 3–4 dengan key produksi, `MAYAR_PRODUCTION=true`, dan host `api.mayar.id` (pengaturan webhook sandbox dan produksi terpisah). Terakhir, isi secrets Streamlit Cloud: `PAYMENT_PROVIDER = "mayar"`, `MAYAR_API_KEY`, `MAYAR_PRODUCTION = "true"`, `MAYAR_WEBHOOK_TOKEN`, lalu beli sekali dengan akun sendiri.
+
+Token webhook ada di URL, jadi bisa tercatat di log request Supabase (hanya admin project yang bisa melihatnya). Ganti token jika bocor: buat token baru, pasang di secrets function dan app, daftarkan ulang URL webhook-nya.
+
 ```sql
 -- Order 7 hari terakhir.
-select id, owner, amount, status, midtrans_status, created_at, paid_at
+select id, owner, amount, status, provider, midtrans_status, created_at, paid_at
 from public.pro_orders where created_at > now() - interval '7 days' order by created_at desc;
 ```
 
@@ -106,6 +151,6 @@ Perubahan terlihat di menu akun paling lambat 5 menit kemudian, dan langsung ber
 
 ## Rollback
 
-Pembelian: hapus secret `MIDTRANS_SERVER_KEY` dari app. Pro kembali tampil sebagai "sedang disiapkan", dan Pro yang sudah dibeli tetap berlaku sampai masanya habis. Notifikasi Midtrans yang tertunda tetap diproses oleh Edge Function.
+Pembelian: hapus key penyedia yang aktif dari secrets app (`MIDTRANS_SERVER_KEY`, atau `MAYAR_API_KEY` untuk Mayar). Pro kembali tampil sebagai "sedang disiapkan", dan Pro yang sudah dibeli tetap berlaku sampai masanya habis. Notifikasi yang tertunda tetap diproses oleh Edge Function masing-masing. Untuk kembali dari Mayar ke Midtrans cukup hapus `PAYMENT_PROVIDER` (default `midtrans`).
 
 Riset Skripsi: hapus secret `RESEARCH_FLOW_ID`. Tombol dan dialog hilang, dan chat biasa tidak terpengaruh. Tabel `pro_members` boleh tetap ada. Batas Pro tetap berlaku untuk akun yang ada di tabel itu; kosongkan tabelnya kalau batas Pro juga mau dimatikan.
