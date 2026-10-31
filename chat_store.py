@@ -287,19 +287,33 @@ class ChatStore:
             logger.error("chat_store_error action=load_pro_until type=%s error=%s", type(error).__name__, error)
             return None
 
-    def create_order(self, owner, order_id, amount):
+    def create_order(self, owner, order_id, amount, provider="midtrans"):
         """Order Pro baru (status 'pending'). Hanya Edge Function yang menandainya lunas."""
         return self._upsert(
             "create_order",
             "pro_orders",
-            {"owner": owner, "id": order_id, "amount": int(amount), "status": "pending"},
+            {"owner": owner, "id": order_id, "amount": int(amount), "status": "pending", "provider": provider},
         )
+
+    def attach_order_ref(self, owner, order_id, ref, tx):
+        """Simpan id payment request dan transaksi Mayar, supaya webhooknya bisa dicocokkan ke order."""
+
+        response = self._request(
+            "PATCH",
+            "attach_order_ref",
+            owner,
+            "pro_orders",
+            row_id=order_id,
+            json={"provider_ref": ref, "provider_tx": tx},
+            headers={"Prefer": "return=minimal"},
+        )
+        return response is not None
 
     def load_latest_order(self, owner):
         """
-        Order Pro terakhir akun ini ({id, status, created_at}), {} jika belum
-        pernah membeli, None jika gagal dibaca. Dipakai saat pengguna kembali
-        dari halaman bayar Midtrans, tanpa mempercayai parameter URL.
+        Order Pro terakhir akun ini ({id, status, created_at, provider, ref}),
+        {} jika belum pernah membeli, None jika gagal dibaca. Dipakai saat
+        pengguna kembali dari halaman bayar, tanpa mempercayai parameter URL.
         """
 
         response = self._request(
@@ -307,7 +321,7 @@ class ChatStore:
             "load_latest_order",
             owner,
             "pro_orders",
-            params={"select": "id,status,created_at", "order": "created_at.desc", "limit": "1"},
+            params={"select": "id,status,created_at,provider,provider_ref", "order": "created_at.desc", "limit": "1"},
         )
 
         if response is None:
@@ -318,7 +332,13 @@ class ChatStore:
             if not rows:
                 return {}
             row = rows[0]
-            return {"id": row["id"], "status": row["status"], "created_at": parse_timestamp(row["created_at"])}
+            return {
+                "id": row["id"],
+                "status": row["status"],
+                "created_at": parse_timestamp(row["created_at"]),
+                "provider": row.get("provider") or "midtrans",
+                "ref": row.get("provider_ref"),
+            }
         except (ValueError, KeyError, TypeError) as error:
             logger.error("chat_store_error action=load_latest_order type=%s error=%s", type(error).__name__, error)
             return None

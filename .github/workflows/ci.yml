@@ -120,7 +120,9 @@ jobs:
       # Node that comes with the runner (no extra setup): the Edge Function's
       # logic is plain JavaScript so it can be tested here too.
       - name: Run Edge Function tests
-        run: node --test supabase/functions/midtrans-notify/notification.test.mjs
+        run: |
+          node --test supabase/functions/midtrans-notify/notification.test.mjs
+          node --test supabase/functions/mayar-notify/notification.test.mjs
 
       - name: Check VPS shell scripts
         run: bash -n deploy/vps/*.sh

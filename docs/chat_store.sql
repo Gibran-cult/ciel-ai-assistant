@@ -73,10 +73,10 @@ alter table public.pro_members enable row level security;
 --
 -- Cabut Pro: update public.pro_members set expires_at = now() where owner = '<ID memory>';
 
--- Pembelian Pro lewat Midtrans (docs/PRO.md). App membuat satu baris per
--- transaksi Snap (status 'pending'). Hanya Edge Function midtrans-notify
--- yang menandainya lunas, setelah signature dan Status API Midtrans dicek,
--- lewat ciel_settle_order di bawah.
+-- Pembelian Pro lewat Midtrans atau Mayar (docs/PRO.md). App membuat satu
+-- baris per transaksi (status 'pending'). Hanya Edge Function midtrans-notify
+-- atau mayar-notify yang menandainya lunas, setelah status dicek ulang ke API
+-- penyedia, lewat ciel_settle_order di bawah.
 create table if not exists public.pro_orders (
     id text primary key,
     owner text not null,
@@ -92,9 +92,23 @@ create index if not exists pro_orders_owner on public.pro_orders (owner, created
 
 alter table public.pro_orders enable row level security;
 
+-- Penyedia pembayaran order ini ('midtrans' atau 'mayar'). Untuk Mayar,
+-- provider_ref = id payment request dan provider_tx = transactionId dari
+-- respons pembuatan; Edge Function mayar-notify mencari order lewat keduanya.
+-- Kolom midtrans_status tetap bernama begitu (tabel sudah live) tapi berisi
+-- status dari penyedia mana pun.
+alter table public.pro_orders add column if not exists provider text not null default 'midtrans';
+alter table public.pro_orders add column if not exists provider_ref text;
+alter table public.pro_orders add column if not exists provider_tx text;
+
+create unique index if not exists pro_orders_provider_ref
+    on public.pro_orders (provider_ref) where provider_ref is not null;
+create unique index if not exists pro_orders_provider_tx
+    on public.pro_orders (provider_tx) where provider_tx is not null;
+
 -- Lunasi satu order dan tambah Pro 30 hari, dalam satu transaksi database.
--- Idempoten: notifikasi Midtrans yang dikirim ulang untuk order yang sudah
--- lunas tidak menambah masa Pro lagi. Nominal harus sama dengan order.
+-- Idempoten: notifikasi yang dikirim ulang untuk order yang sudah lunas
+-- tidak menambah masa Pro lagi. Nominal harus sama dengan order.
 create or replace function public.ciel_settle_order(
     p_order_id text,
     p_gross_amount numeric,
@@ -126,10 +140,10 @@ begin
     where id = p_order_id;
 
     insert into public.pro_members (owner, expires_at, source)
-    values (paid_order.owner, now() + interval '30 days', 'midtrans')
+    values (paid_order.owner, now() + interval '30 days', paid_order.provider)
     on conflict (owner) do update set
         expires_at = greatest(pro_members.expires_at, now()) + interval '30 days',
-        source = 'midtrans',
+        source = paid_order.provider,
         updated_at = now();
 
     return 'paid';
