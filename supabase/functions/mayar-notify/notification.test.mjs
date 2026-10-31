@@ -69,6 +69,23 @@ test("a non-uuid id never reaches findOrder", async () => {
   assert.deepEqual(candidateIds({}), []);
 });
 
+test("a real payment.received names the payment request as productId", async () => {
+  // Sandbox delivery 2026-10-31: data.id and data.transactionId are a new
+  // transaction made at payment time; only productId is the request's id.
+  const PAID_TX = "576cf713-d4f5-4349-a055-47c8ab1798da";
+  const body = received({ id: PAID_TX, transactionId: PAID_TX, productId: REF, status: "SUCCESS", amount: 79000 });
+  assert.deepEqual(candidateIds(body), [PAID_TX, REF]);
+
+  const { calls, deps: d } = deps({}, {
+    findOrder: async (ids) => {
+      calls.find.push(ids);
+      return ids.includes(REF) ? { id: ORDER, amount: 79000, provider_ref: REF } : null;
+    },
+  });
+  assert.deepEqual(await handleWebhook(body, TOKEN, d), { status: 200, body: "paid" });
+  assert.deepEqual(calls.settle, [[ORDER, 79000, "paid"]]);
+});
+
 test("unknown payment id answers unknown", async () => {
   const { calls, deps: d } = deps({}, { findOrder: async () => null });
   assert.deepEqual(await handleWebhook(received(), TOKEN, d), { status: 200, body: "unknown" });

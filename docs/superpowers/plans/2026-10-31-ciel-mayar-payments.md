@@ -261,4 +261,10 @@ Decision order in `handleWebhook`:
 
 ## Spike result
 
-(filled in by Task 1)
+2026-10-31, sandbox (`api.mayar.io`), using a Read & Write key; a Read Only key gets 401 on every endpoint.
+- **Create:** `POST /hl/v2/payments/create` with exactly `mayar_payload(...)` returns 200. `data` holds:
+  - `id`, `transactionId` and `paymentLinkId` (= `id`), all lowercase UUIDs
+  - `link` (store domain, e.g. `https://<store>.myr.lat/invoices/<slug>`), `amount`, `status: "unpaid"`, `expiredAt`, `customer`
+- **Detail:** `GET /hl/v2/payments/{id}` returns the same `id`, `status: "unpaid"`, an integer `amount`, `type: "payment_request"` and one entry in `transactions`.
+- **Customer name:** Mayar copies `name` into `customer.name`, so the buyer's invoice shows "Ciel Pro 30 hari" as the customer name. This is cosmetic. Follow-up: send the user's name as `name` and keep the product in `description`.
+- **Still open:** the webhook `event` name, and whether `data.id` is the payment request id or the transaction id. Both need a paid sandbox payment with `mayar-notify` deployed (Task 6 steps 1-3). `candidateIds` accepts either id.

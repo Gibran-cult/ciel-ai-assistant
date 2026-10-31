@@ -25,10 +25,13 @@ export function paymentUrl(id, production) {
   return `${host}/hl/v2/payments/${id}`;
 }
 
-// UUID unik dari data.id dan data.transactionId (huruf kecil).
+// UUID unik dari data.id, data.transactionId, dan data.productId (huruf kecil).
+// Webhook payment.received asli (sandbox 2026-10-31): id = transactionId =
+// transaksi baru yang dibuat saat membayar, productId = id payment request
+// (provider_ref). "Cek lagi" dari app mengirim provider_ref sebagai data.id.
 export function candidateIds(body) {
   const data = (body && typeof body.data === "object" && body.data) || {};
-  const ids = [data.id, data.transactionId]
+  const ids = [data.id, data.transactionId, data.productId]
     .filter((value) => typeof value === "string" && PAYMENT_ID.test(value))
     .map((value) => value.toLowerCase());
   return [...new Set(ids)];
