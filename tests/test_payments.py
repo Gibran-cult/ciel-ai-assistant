@@ -132,6 +132,17 @@ class OrderStoreTest(unittest.TestCase):
         self.assertIn("greatest(pro_members.expires_at, now()) + interval '30 days'", sql)
         self.assertIn("revoke execute on function public.ciel_settle_order(text, numeric, text) from public, anon, authenticated;", sql)
 
+    def test_sql_records_the_provider_and_credits_it_as_the_pro_source(self):
+        sql = (ROOT / "docs" / "chat_store.sql").read_text(encoding="utf-8")
+        self.assertIn("add column if not exists provider text not null default 'midtrans'", sql)
+        self.assertIn("add column if not exists provider_ref text", sql)
+        self.assertIn("add column if not exists provider_tx text", sql)
+        self.assertIn("on public.pro_orders (provider_ref) where provider_ref is not null", sql)
+        self.assertIn("on public.pro_orders (provider_tx) where provider_tx is not null", sql)
+        self.assertIn("values (paid_order.owner, now() + interval '30 days', paid_order.provider)", sql)
+        self.assertIn("source = paid_order.provider,", sql)
+        self.assertNotIn("'midtrans')\n    on conflict", sql)
+
 
 def render_page(pro_action=False):
     import pricing as page
