@@ -32,7 +32,17 @@ from beranda import greeting, has_riset_map, latest_riset, relative_time, templa
 from chat_sources import answer_parts, count_line, source_buttons_html, source_label, summarize
 from chat_store import ChatStore
 from login import render_login
-from payments import create_snap_transaction, finish_url, new_order_id, order_message, snap_payload
+from payments import (
+    create_mayar_payment,
+    create_snap_transaction,
+    finish_url,
+    mayar_payload,
+    new_order_id,
+    ORDER_MESSAGES,
+    order_message,
+    poke_mayar_notify,
+    snap_payload,
+)
 from pricing import PLANS, render_pricing, safe_contact_url
 from riset_export import report_docx, report_filename
 from writing import APPROACHES, KERANGKA_FOOTNOTE, MAX_OBJECT_CHARS, finish_kerangka, kerangka_payload
@@ -632,7 +642,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
    about 3:1 on dark paper. */
 .stApp [data-testid="stMarkdownContainer"] a { color: var(--c-accent); }
 .stApp [data-testid="stMarkdownContainer"] a:hover { color: var(--c-accent-hover); }
-/* Link buttons ("Bayar di Midtrans" on Pricing) are <a>, not <button>, so
+/* Link buttons ("Lanjut ke pembayaran" on Pricing) are <a>, not <button>, so
    the rules above do not reach them. */
 .stApp [data-testid="stBaseLinkButton-primary"] {
     border-radius: var(--r-pill);
@@ -1594,14 +1604,25 @@ WRITER_TIMEOUT = 240
 # yang dibutuhkan hanya Supabase untuk status Pro.
 CHECK_ENABLED = bool(CHAT_STORE)
 
-# Opsional: pembelian Pro lewat Midtrans Snap (payments.py, docs/PRO.md).
-# Server key hanya dipakai di server; MIDTRANS_PRODUCTION=true memakai akun
-# produksi, selain itu sandbox. APP_URL adalah alamat publik app untuk tujuan
+# Opsional: pembelian Pro (payments.py, docs/PRO.md). PAYMENT_PROVIDER memilih
+# "midtrans" (Snap, default) atau "mayar" (Single Payment Request). Key hanya
+# dipakai di server; *_PRODUCTION=true memakai akun produksi, selain itu
+# sandbox. MAYAR_WEBHOOK_TOKEN sama dengan secret Edge Function mayar-notify,
+# dipakai tombol "Cek lagi". APP_URL adalah alamat publik app untuk tujuan
 # kembali setelah bayar (default: alamat yang sedang dibuka).
+PAYMENT_PROVIDER = (get_config("PAYMENT_PROVIDER") or "midtrans").lower()
 MIDTRANS_SERVER_KEY = get_config("MIDTRANS_SERVER_KEY")
 MIDTRANS_PRODUCTION = (get_config("MIDTRANS_PRODUCTION") or "").lower() == "true"
+MAYAR_API_KEY = get_config("MAYAR_API_KEY")
+MAYAR_PRODUCTION = (get_config("MAYAR_PRODUCTION") or "").lower() == "true"
+MAYAR_WEBHOOK_TOKEN = get_config("MAYAR_WEBHOOK_TOKEN")
 APP_URL = get_config("APP_URL")
-PAYMENTS_ENABLED = bool(MIDTRANS_SERVER_KEY and CHAT_STORE)
+PAYMENT_PROVIDER_NAME = "Mayar" if PAYMENT_PROVIDER == "mayar" else "Midtrans"
+# Mayar butuh token webhook juga: tanpanya "Cek lagi" tidak bisa memulihkan
+# pembayaran yang webhooknya hilang.
+PAYMENTS_ENABLED = bool(
+    (MAYAR_API_KEY and MAYAR_WEBHOOK_TOKEN if PAYMENT_PROVIDER == "mayar" else MIDTRANS_SERVER_KEY) and CHAT_STORE
+)
 
 # Bersihkan URL
 if NGROK_URL:
@@ -1921,17 +1942,17 @@ def format_date_id(epoch):
 
 
 # ------------------------------------------------------------
-# PEMBELIAN PRO (MIDTRANS)
+# PEMBELIAN PRO (MIDTRANS / MAYAR)
 # ------------------------------------------------------------
 
 PRO_PRICE = next(plan["monthly"] for plan in PLANS if plan["id"] == "pro")
 # Status order terakhir ditampilkan di Pricing selama ini setelah dibuat,
-# yaitu saat pengguna kembali dari halaman bayar Midtrans.
+# yaitu saat pengguna kembali dari halaman bayar.
 RECENT_ORDER_SECONDS = 2 * 3600
 
 
 def start_pro_checkout():
-    """Tombol "Beli Pro": buat order lalu transaksi Snap untuk akun yang login."""
+    """Tombol "Beli Pro": buat order lalu transaksi pembayaran untuk akun yang login."""
 
     owner = chat_owner()
 
@@ -1940,11 +1961,49 @@ def start_pro_checkout():
 
     order_id = new_order_id()
 
-    if not CHAT_STORE.create_order(owner, order_id, PRO_PRICE):
+    if not CHAT_STORE.create_order(owner, order_id, PRO_PRICE, provider=PAYMENT_PROVIDER):
         st.session_state.checkout = {"error": "Order belum bisa dibuat. Silakan coba lagi."}
         return
 
-    url = create_snap_transaction(
+    url = (start_mayar_payment if PAYMENT_PROVIDER == "mayar" else start_snap_payment)(owner, order_id)
+
+    if not url:
+        st.session_state.checkout = {"error": "Halaman pembayaran belum bisa dibuka. Silakan coba lagi."}
+        return
+
+    logger.info("checkout_created order=%s provider=%s", order_id, PAYMENT_PROVIDER)
+    st.session_state.checkout = {"order_id": order_id, "url": url}
+
+
+def start_mayar_payment(owner, order_id):
+    """
+    Payment request Mayar untuk order ini. Link hanya dikembalikan jika id-nya
+    tersimpan di order: tanpa itu webhook Mayar tidak bisa dicocokkan dan
+    pembayarannya tidak akan pernah melunasi order.
+    """
+
+    payment = create_mayar_payment(
+        MAYAR_API_KEY,
+        MAYAR_PRODUCTION,
+        mayar_payload(order_id, PRO_PRICE, finish_url(APP_URL or st.context.url), email=st.user.get("email")),
+    )
+
+    if not payment:
+        return None
+
+    if not CHAT_STORE.attach_order_ref(owner, order_id, payment["ref"], payment["tx"]):
+        # Payment request sudah ada di Mayar tapi tidak terhubung ke order:
+        # catat id-nya supaya bisa dicocokkan manual jika tetap dibayar.
+        logger.error("mayar_unattached order=%s ref=%s tx=%s", order_id, payment["ref"], payment["tx"])
+        return None
+
+    return payment["url"]
+
+
+def start_snap_payment(owner, order_id):
+    """Transaksi Snap Midtrans untuk order ini; redirect_url atau None."""
+
+    return create_snap_transaction(
         MIDTRANS_SERVER_KEY,
         MIDTRANS_PRODUCTION,
         snap_payload(
@@ -1956,12 +2015,39 @@ def start_pro_checkout():
         ),
     )
 
-    if not url:
-        st.session_state.checkout = {"error": "Halaman pembayaran belum bisa dibuka. Silakan coba lagi."}
-        return
 
-    logger.info("checkout_created order=%s", order_id)
-    st.session_state.checkout = {"order_id": order_id, "url": url}
+def recheck_order(order):
+    """
+    Tombol "Cek lagi". Untuk order Mayar, minta mayar-notify mengecek ulang
+    ke API Mayar (menutup webhook yang hilang); order Midtrans cukup dibaca
+    ulang dari database saat halaman dirender lagi.
+    """
+
+    if order.get("provider") == "mayar" and order.get("ref") and MAYAR_WEBHOOK_TOKEN:
+        poke_mayar_notify(SUPABASE_URL, MAYAR_WEBHOOK_TOKEN, order["ref"])
+
+
+def recheck_expired_mayar_order(order):
+    """
+    Order Mayar yang masih pending setelah halaman bayarnya kedaluwarsa akan
+    tampil "Waktu pembayaran habis" tanpa tombol Cek lagi. Sebelum itu, cek
+    sekali ke API Mayar (lewat mayar-notify) per sesi, supaya pembeli yang
+    sudah membayar tapi webhooknya hilang tidak disuruh membeli lagi.
+    Kembalikan order yang dibaca ulang jika dicek, selain itu order apa adanya.
+    """
+
+    if not order or order.get("provider") != "mayar" or order.get("status") != "pending":
+        return order
+    if order_message(order) != ORDER_MESSAGES["expire"]:
+        return order
+
+    checked = st.session_state.setdefault("mayar_rechecked", set())
+    if order["id"] in checked:
+        return order
+
+    checked.add(order["id"])
+    recheck_order(order)
+    return CHAT_STORE.load_latest_order(chat_owner())
 
 
 def render_pro_action():
@@ -1974,10 +2060,10 @@ def render_pro_action():
     checkout = st.session_state.get("checkout") or {}
 
     if checkout.get("url"):
-        st.link_button("Bayar di Midtrans", checkout["url"], type="primary", icon=":material/payments:")
+        st.link_button("Lanjut ke pembayaran", checkout["url"], type="primary", icon=":material/payments:")
         st.markdown(
             '<p class="ciel-paynote">Halaman bayar berlaku 60 menit. Setelah membayar, '
-            "kembali ke halaman ini; Pro aktif begitu Midtrans mengonfirmasi.</p>",
+            "kembali ke halaman ini; Pro aktif begitu pembayaran terkonfirmasi.</p>",
             unsafe_allow_html=True,
         )
         return
@@ -1985,9 +2071,11 @@ def render_pro_action():
     if checkout.get("error"):
         st.error(checkout["error"])
 
-    # Status dari database, bukan dari parameter URL Midtrans.
+    # Status dari database, bukan dari parameter URL penyedia pembayaran.
     order = CHAT_STORE.load_latest_order(chat_owner())
     recent = bool(order) and time.time() - order["created_at"] < RECENT_ORDER_SECONDS
+    if recent:
+        order = recheck_expired_mayar_order(order)
     message = order_message(order) if recent else None
     until = pro_until(refresh=bool(message and message[0] == "ok"))
 
@@ -1998,7 +2086,7 @@ def render_pro_action():
         {"ok": st.success, "wait": st.info, "fail": st.error}[kind](text)
 
         if kind == "wait":
-            st.button("Cek lagi", key="pro_recheck", icon=":material/refresh:")
+            st.button("Cek lagi", key="pro_recheck", icon=":material/refresh:", on_click=recheck_order, args=(order,))
 
     active = bool(until) and until > time.time()
 
@@ -5117,7 +5205,7 @@ def render_settings_tab(tab):
             contact_url=safe_contact_url(CONTACT_URL),
             operator=OPERATOR_NAME,
             history_saved=CHAT_STORE is not None,
-            payments=PAYMENTS_ENABLED,
+            payments=PAYMENT_PROVIDER_NAME if PAYMENTS_ENABLED else False,
         )
 
 

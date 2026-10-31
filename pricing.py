@@ -109,8 +109,8 @@ def faq_items(memory_enabled, pro_for_sale=False, history_saved=False):
     payment = (
         (
             "Bagaimana cara membayar Pro?",
-            "Sekali bayar Rp79.000 lewat Midtrans (QRIS, e-wallet, atau virtual "
-            "account) untuk Pro 30 hari. Tidak ada tagihan otomatis; Pro berhenti "
+            "Sekali bayar Rp79.000 (QRIS, e-wallet, atau virtual account) "
+            "untuk Pro 30 hari. Tidak ada tagihan otomatis; Pro berhenti "
             "sendiri setelah 30 hari kecuali kamu membeli lagi, dan pembelian "
             "berikutnya menambah 30 hari dari sisa masa aktif.",
         ),

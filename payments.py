@@ -133,7 +133,8 @@ def create_mayar_payment(api_key, production, payload):
         )
         response.raise_for_status()
         data = response.json()["data"]
-        return {"ref": str(data["id"]), "tx": str(data["transactionId"]), "url": str(data["link"])}
+        # Huruf kecil, sama dengan yang dicari mayar-notify (candidateIds).
+        return {"ref": str(data["id"]).lower(), "tx": str(data["transactionId"]).lower(), "url": str(data["link"])}
 
     except (requests.exceptions.RequestException, ValueError, KeyError, TypeError) as error:
         status = getattr(getattr(error, "response", None), "status_code", None)
@@ -170,7 +171,7 @@ def finish_url(app_url):
 
 ORDER_MESSAGES = {
     "paid": ("ok", "Pembayaran diterima. Ciel Pro aktif."),
-    "pending": ("wait", "Menunggu konfirmasi pembayaran dari Midtrans. Biasanya kurang dari satu menit."),
+    "pending": ("wait", "Menunggu konfirmasi pembayaran. Biasanya kurang dari satu menit."),
     "expire": ("fail", "Waktu pembayaran habis. Silakan beli lagi."),
     "cancel": ("fail", "Pembayaran dibatalkan."),
     "deny": ("fail", "Pembayaran ditolak oleh penyedia pembayaran."),

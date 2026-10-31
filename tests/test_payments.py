@@ -103,15 +103,21 @@ class MayarTest(unittest.TestCase):
         self.assertNotIn("email", payments.mayar_payload(ORDER, 79_000, "u", now=0))
 
     def test_mayar_create_uses_bearer_key_and_environment(self):
-        body = {"statusCode": 200, "data": {"id": "R", "transactionId": "T", "link": "https://pay.example/x"}}
+        body = {"statusCode": 200, "data": {"id": "r", "transactionId": "t", "link": "https://pay.example/x"}}
         with patch("requests.post", return_value=Response(body)) as post:
             self.assertEqual(payments.create_mayar_payment("k", False, {}),
-                             {"ref": "R", "tx": "T", "url": "https://pay.example/x"})
+                             {"ref": "r", "tx": "t", "url": "https://pay.example/x"})
             payments.create_mayar_payment("k", True, {})
         sandbox, production = post.call_args_list
         self.assertEqual(sandbox.args[0], "https://api.mayar.io/hl/v2/payments/create")
         self.assertEqual(production.args[0], "https://api.mayar.id/hl/v2/payments/create")
         self.assertEqual(sandbox.kwargs["headers"]["Authorization"], "Bearer k")
+
+    def test_mayar_ids_are_stored_lowercase_to_match_the_webhook_lookup(self):
+        body = {"data": {"id": "6F8C19FF-5B97-4792-AA89-D2A12797B356", "transactionId": "AB-T", "link": "u"}}
+        with patch("requests.post", return_value=Response(body)):
+            payment = payments.create_mayar_payment("k", True, {})
+        self.assertEqual((payment["ref"], payment["tx"]), ("6f8c19ff-5b97-4792-aa89-d2a12797b356", "ab-t"))
 
     def test_mayar_create_failure_returns_none_without_the_key(self):
         with self.assertLogs("ciel_ai.payments", level="ERROR") as logs:
@@ -238,12 +244,23 @@ class PricingCheckoutTest(unittest.TestCase):
         self.assertIn("Rencana Rp79.000/bulan", html)
         self.assertNotIn("Bagaimana cara membayar Pro?", html)
 
-    def test_privacy_names_midtrans_only_when_payments_are_on(self):
+    def test_payment_faq_names_no_provider(self):
+        at = AppTest.from_function(render_page, kwargs={"pro_action": True}).run()
+        html = self.text(at)
+        self.assertIn("Sekali bayar Rp79.000 (QRIS, e-wallet, atau virtual account)", html)
+        self.assertNotIn("Midtrans", html)
+
+    def test_privacy_names_the_active_provider_only_when_payments_are_on(self):
         def text(payments_on):
             return " ".join(" ".join(items) for _, items in privacy.privacy_sections(30, True, True, payments=payments_on))
-        self.assertIn("Midtrans", text(True))
-        self.assertIn("tidak pernah menerima atau menyimpan data kartu", text(True))
+        self.assertIn("<strong>Midtrans</strong>", text("Midtrans"))
+        self.assertIn("email dan namamu ke Midtrans", text("Midtrans"))
+        self.assertIn("<strong>Mayar</strong>", text("Mayar"))
+        self.assertIn("emailmu ke Mayar", text("Mayar"))
+        self.assertNotIn("Midtrans", text("Mayar"))
+        self.assertIn("tidak pernah menerima atau menyimpan data kartu", text("Mayar"))
         self.assertNotIn("Midtrans", text(False))
+        self.assertNotIn("Mayar", text(False))
 
 
 class CheckoutAppTest(unittest.TestCase):
@@ -348,6 +365,119 @@ class CheckoutAppTest(unittest.TestCase):
         old = {"id": ORDER, "status": "expire", "created_at": iso(time.time() - 3 * 86400)}
         at = self.run_pricing(SIGNED_IN, self.database(order=old))
         self.assertEqual(len(at.error), 0)
+
+    MAYAR_SECRETS = {
+        **{k: v for k, v in SECRETS.items() if k != "MIDTRANS_SERVER_KEY"},
+        "PAYMENT_PROVIDER": "mayar",
+        "MAYAR_API_KEY": "mayar-test-key",
+        "MAYAR_WEBHOOK_TOKEN": "tok",
+    }
+    REF = "6f8c19ff-5b97-4792-aa89-d2a12797b356"
+
+    def mayar_post(self, url, **kw):
+        if "mayar" in url:
+            return Response({"statusCode": 200, "data": {
+                "id": self.REF, "transactionId": "t", "link": "https://web.mayar.id/pay/x"}})
+        return Response()
+
+    def test_mayar_checkout_creates_order_attaches_refs_and_shows_the_link(self):
+        at = self.run_pricing(SIGNED_IN, self.database(), secrets=self.MAYAR_SECRETS)
+        at.button(key="pro_buy").click()
+        post = Mock(side_effect=self.mayar_post)
+        database = self.database()
+        at = self.run_pricing(SIGNED_IN, database, at=at, post=post)
+        self.assertFalse(at.exception)
+
+        order_call, mayar_call = post.call_args_list
+        order = order_call.kwargs["json"]
+        self.assertEqual((order["owner"], order["amount"], order["provider"]), (SIGNED_IN_OWNER, 79_000, "mayar"))
+        self.assertEqual(mayar_call.args[0], "https://api.mayar.io/hl/v2/payments/create")
+        self.assertEqual(mayar_call.kwargs["headers"]["Authorization"], "Bearer mayar-test-key")
+        self.assertEqual(mayar_call.kwargs["json"]["redirectUrl"], "https://ciel.example/?page=pricing")
+        self.assertIn(order["id"], mayar_call.kwargs["json"]["description"])
+
+        patches = [c for c in database.call_args_list if c.args[0] == "PATCH"]
+        self.assertEqual(len(patches), 1)
+        self.assertEqual(patches[0].kwargs["params"]["id"], f"eq.{order['id']}")
+        self.assertEqual(patches[0].kwargs["json"], {"provider_ref": self.REF, "provider_tx": "t"})
+
+        link_buttons = at.get("link_button")
+        self.assertEqual(len(link_buttons), 1)
+        self.assertEqual(link_buttons[0].proto.label, "Lanjut ke pembayaran")
+        self.assertEqual(link_buttons[0].proto.url, "https://web.mayar.id/pay/x")
+
+    def test_mayar_checkout_hides_the_link_when_refs_cannot_be_saved(self):
+        at = self.run_pricing(SIGNED_IN, self.database(), secrets=self.MAYAR_SECRETS)
+        at.button(key="pro_buy").click()
+        reads = self.database()
+        database = Mock(side_effect=lambda method, url, **kw:
+                        Response(status=500) if method == "PATCH" else reads(method, url, **kw))
+        with self.assertLogs("ciel_ai.chat_store", level="ERROR"):
+            at = self.run_pricing(SIGNED_IN, database, at=at, post=Mock(side_effect=self.mayar_post))
+        self.assertEqual(len(at.get("link_button")), 0)
+        self.assertEqual(at.error[0].value, "Halaman pembayaran belum bisa dibuka. Silakan coba lagi.")
+
+    def test_recheck_pokes_mayar_notify_for_a_pending_mayar_order(self):
+        pending = {"id": ORDER, "status": "pending", "created_at": iso(time.time() - 60),
+                   "provider": "mayar", "provider_ref": self.REF}
+        at = self.run_pricing(SIGNED_IN, self.database(order=pending), secrets=self.MAYAR_SECRETS)
+        self.assertIn("Menunggu konfirmasi pembayaran", at.info[0].value)
+        self.assertNotIn("Midtrans", at.info[0].value)
+
+        at.button(key="pro_recheck").click()
+        post = Mock(return_value=Response())
+        at = self.run_pricing(SIGNED_IN, self.database(order=pending), at=at, post=post)
+        self.assertFalse(at.exception)
+        self.assertEqual(post.call_args.args[0], "https://db.example.invalid/functions/v1/mayar-notify")
+        self.assertEqual(post.call_args.kwargs["params"], {"token": "tok"})
+        self.assertEqual(post.call_args.kwargs["json"]["data"], {"id": self.REF})
+
+    def test_mayar_checkout_logs_the_refs_when_they_cannot_be_saved(self):
+        # A live Mayar request with no order link must leave a trail for manual reconciliation.
+        at = self.run_pricing(SIGNED_IN, self.database(), secrets=self.MAYAR_SECRETS)
+        at.button(key="pro_buy").click()
+        reads = self.database()
+        database = Mock(side_effect=lambda method, url, **kw:
+                        Response(status=500) if method == "PATCH" else reads(method, url, **kw))
+        with self.assertLogs("ciel_ai", level="ERROR") as logs:
+            self.run_pricing(SIGNED_IN, database, at=at, post=Mock(side_effect=self.mayar_post))
+        unattached = [line for line in logs.output if "mayar_unattached" in line]
+        self.assertEqual(len(unattached), 1)
+        self.assertIn(f"ref={self.REF}", unattached[0])
+
+    def test_pending_mayar_order_past_expiry_is_rechecked_before_saying_buy_again(self):
+        # A paid buyer whose webhook was lost must not be told to buy again without a recheck.
+        stale = {"id": ORDER, "status": "pending", "created_at": iso(time.time() - 61 * 60),
+                 "provider": "mayar", "provider_ref": self.REF}
+        post = Mock(return_value=Response())
+        at = self.run_pricing(SIGNED_IN, self.database(order=stale), secrets=self.MAYAR_SECRETS, post=post)
+        self.assertFalse(at.exception)
+        self.assertEqual(post.call_args.args[0], "https://db.example.invalid/functions/v1/mayar-notify")
+        self.assertEqual(post.call_args.kwargs["json"]["data"], {"id": self.REF})
+
+        # Once per session: rerendering does not poke again.
+        post = Mock(return_value=Response())
+        self.run_pricing(SIGNED_IN, self.database(order=stale), at=at, post=post)
+        post.assert_not_called()
+
+    def test_mayar_without_the_webhook_token_is_not_for_sale(self):
+        secrets = {k: v for k, v in self.MAYAR_SECRETS.items() if k != "MAYAR_WEBHOOK_TOKEN"}
+        at = self.run_pricing(SIGNED_IN, self.database(), secrets=secrets)
+        self.assertNotIn("pro_buy", [b.key for b in at.button])
+
+    def test_recheck_of_a_midtrans_order_pokes_nothing(self):
+        pending = {"id": ORDER, "status": "pending", "created_at": iso(time.time() - 60)}
+        at = self.run_pricing(SIGNED_IN, self.database(order=pending))
+        at.button(key="pro_recheck").click()
+        post = Mock(return_value=Response())
+        at = self.run_pricing(SIGNED_IN, self.database(order=pending), at=at, post=post)
+        post.assert_not_called()
+
+    def test_mayar_without_its_key_is_not_for_sale(self):
+        secrets = {k: v for k, v in self.MAYAR_SECRETS.items() if k != "MAYAR_API_KEY"}
+        secrets["MIDTRANS_SERVER_KEY"] = "SB-Mid-server-test"  # the other provider's key does not count
+        at = self.run_pricing(SIGNED_IN, self.database(), secrets=secrets)
+        self.assertNotIn("pro_buy", [b.key for b in at.button])
 
     def test_without_a_server_key_pro_is_not_for_sale(self):
         secrets = {k: v for k, v in self.SECRETS.items() if k != "MIDTRANS_SERVER_KEY"}
