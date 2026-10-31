@@ -90,6 +90,52 @@ class SnapTest(unittest.TestCase):
         self.assertEqual(payments.order_message({"status": "paid", "created_at": now - 86400}, now=now)[0], "ok")
 
 
+class MayarTest(unittest.TestCase):
+
+    def test_mayar_payload_is_pro_30_days_with_a_60_minute_expiry(self):
+        p = payments.mayar_payload(ORDER, 79_000, "https://ciel.example/?page=pricing", email="a@example.com", now=0)
+        self.assertEqual(p["name"], "Ciel Pro 30 hari")
+        self.assertEqual(p["amount"], 79_000)
+        self.assertEqual(p["redirectUrl"], "https://ciel.example/?page=pricing")
+        self.assertEqual(p["expiredAt"], "1970-01-01T01:00:00Z")
+        self.assertIn(ORDER, p["description"])
+        self.assertEqual(p["email"], "a@example.com")
+        self.assertNotIn("email", payments.mayar_payload(ORDER, 79_000, "u", now=0))
+
+    def test_mayar_create_uses_bearer_key_and_environment(self):
+        body = {"statusCode": 200, "data": {"id": "R", "transactionId": "T", "link": "https://pay.example/x"}}
+        with patch("requests.post", return_value=Response(body)) as post:
+            self.assertEqual(payments.create_mayar_payment("k", False, {}),
+                             {"ref": "R", "tx": "T", "url": "https://pay.example/x"})
+            payments.create_mayar_payment("k", True, {})
+        sandbox, production = post.call_args_list
+        self.assertEqual(sandbox.args[0], "https://api.mayar.io/hl/v2/payments/create")
+        self.assertEqual(production.args[0], "https://api.mayar.id/hl/v2/payments/create")
+        self.assertEqual(sandbox.kwargs["headers"]["Authorization"], "Bearer k")
+
+    def test_mayar_create_failure_returns_none_without_the_key(self):
+        with self.assertLogs("ciel_ai.payments", level="ERROR") as logs:
+            with patch("requests.post", side_effect=requests.exceptions.Timeout()):
+                self.assertIsNone(payments.create_mayar_payment("secret-key", True, {}))
+            with patch("requests.post", return_value=Response({"data": {}})):
+                self.assertIsNone(payments.create_mayar_payment("secret-key", True, {}))
+            with patch("requests.post", return_value=Response(status=401)):
+                self.assertIsNone(payments.create_mayar_payment("secret-key", True, {}))
+        self.assertNotIn("secret-key", "".join(logs.output))
+
+    def test_poke_posts_the_ref_to_the_function_with_the_token(self):
+        with patch("requests.post", return_value=Response({})) as post:
+            self.assertTrue(payments.poke_mayar_notify("https://db.example", "tok", "R"))
+        self.assertEqual(post.call_args.args[0], "https://db.example/functions/v1/mayar-notify")
+        self.assertEqual(post.call_args.kwargs["params"], {"token": "tok"})
+        self.assertEqual(post.call_args.kwargs["json"], {"event": "payment.received", "data": {"id": "R"}})
+
+        with patch("requests.post", side_effect=requests.exceptions.ConnectionError()):
+            self.assertFalse(payments.poke_mayar_notify("https://db.example", "tok", "R"))
+        with patch("requests.post", return_value=Response(status=502)):
+            self.assertFalse(payments.poke_mayar_notify("https://db.example", "tok", "R"))
+
+
 class OrderStoreTest(unittest.TestCase):
 
     def setUp(self):
@@ -98,17 +144,35 @@ class OrderStoreTest(unittest.TestCase):
     def test_create_order_inserts_a_pending_row_for_the_owner(self):
         with patch("requests.post", return_value=Response()) as post:
             self.assertTrue(self.store.create_order(ALICE, ORDER, 79_000))
-        self.assertEqual(post.call_args.args[0], "https://db.example.invalid/rest/v1/pro_orders")
-        self.assertEqual(post.call_args.kwargs["json"],
-                         {"owner": ALICE, "id": ORDER, "amount": 79_000, "status": "pending"})
+            self.assertTrue(self.store.create_order(ALICE, ORDER, 79_000, provider="mayar"))
+        midtrans, mayar = post.call_args_list
+        self.assertEqual(midtrans.args[0], "https://db.example.invalid/rest/v1/pro_orders")
+        self.assertEqual(midtrans.kwargs["json"],
+                         {"owner": ALICE, "id": ORDER, "amount": 79_000, "status": "pending", "provider": "midtrans"})
+        self.assertEqual(mayar.kwargs["json"]["provider"], "mayar")
+
+    def test_attach_order_ref_patches_this_owners_order(self):
+        with patch("requests.request", return_value=Response()) as request:
+            self.assertTrue(self.store.attach_order_ref(ALICE, ORDER, "R", "T"))
+        self.assertEqual(request.call_args.args[:2], ("PATCH", "https://db.example.invalid/rest/v1/pro_orders"))
+        params = request.call_args.kwargs["params"]
+        self.assertEqual((params["owner"], params["id"]), (f"eq.{ALICE}", f"eq.{ORDER}"))
+        self.assertEqual(request.call_args.kwargs["json"], {"provider_ref": "R", "provider_tx": "T"})
+
+        with self.assertLogs("ciel_ai.chat_store", level="ERROR"), \
+                patch("requests.request", return_value=Response(status=500)):
+            self.assertFalse(self.store.attach_order_ref(ALICE, ORDER, "R", "T"))
 
     def test_latest_order_is_read_for_this_owner_only(self):
-        rows = [{"id": ORDER, "status": "paid", "created_at": "2026-11-17T00:00:00+00:00"}]
+        rows = [{"id": ORDER, "status": "paid", "created_at": "2026-11-17T00:00:00+00:00",
+                 "provider": "mayar", "provider_ref": "R"}]
         with patch("requests.request", return_value=Response(rows)) as request:
             order = self.store.load_latest_order(ALICE)
-        self.assertEqual(order, {"id": ORDER, "status": "paid", "created_at": 1_794_873_600.0})
+        self.assertEqual(order, {"id": ORDER, "status": "paid", "created_at": 1_794_873_600.0,
+                                 "provider": "mayar", "ref": "R"})
         params = request.call_args.kwargs["params"]
         self.assertEqual((params["owner"], params["order"], params["limit"]), (f"eq.{ALICE}", "created_at.desc", "1"))
+        self.assertEqual(params["select"], "id,status,created_at,provider,provider_ref")
 
         with patch("requests.request", return_value=Response([])):
             self.assertEqual(self.store.load_latest_order(ALICE), {})

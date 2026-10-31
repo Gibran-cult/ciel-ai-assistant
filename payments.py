@@ -13,6 +13,11 @@ Alurnya:
    parameter URL saat pengguna kembali; app hanya membaca status order dan
    status Pro dari database.
 
+Mayar (PAYMENT_PROVIDER=mayar) memakai alur yang sama dengan Single Payment
+Request: id-nya disimpan di order, dan Edge Function mayar-notify mengambil
+ulang status pembayaran dari API Mayar sebelum melunasi order, karena webhook
+Mayar tidak ditandatangani.
+
 Sekali bayar = Pro 30 hari. Tidak ada tagihan otomatis.
 """
 
@@ -87,6 +92,75 @@ def create_snap_transaction(server_key, production, payload):
         status = getattr(getattr(error, "response", None), "status_code", None)
         logger.error("snap_error type=%s status=%s", type(error).__name__, status)
         return None
+
+
+MAYAR_URLS = {
+    False: "https://api.mayar.io/hl/v2",
+    True: "https://api.mayar.id/hl/v2",
+}
+
+
+def mayar_payload(order_id, amount, redirect_url, email=None, now=None):
+    """Badan Single Payment Request Mayar untuk Pro 30 hari, kedaluwarsa 60 menit."""
+
+    expires = time.gmtime((time.time() if now is None else now) + EXPIRY_MINUTES * 60)
+    payload = {
+        "name": f"Ciel Pro {PRO_DAYS} hari",
+        "amount": int(amount),
+        "description": f"Ciel Pro {PRO_DAYS} hari, order {order_id}",
+        "redirectUrl": redirect_url,
+        "expiredAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", expires),
+    }
+
+    if email:
+        payload["email"] = str(email)[:255]
+
+    return payload
+
+
+def create_mayar_payment(api_key, production, payload):
+    """
+    Buat payment request Mayar. Kembalikan {ref, tx, url}, atau None jika gagal
+    (detail hanya di log server, tanpa key).
+    """
+
+    try:
+        response = requests.post(
+            f"{MAYAR_URLS[bool(production)]}/payments/create",
+            json=payload,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            timeout=TIMEOUT,
+        )
+        response.raise_for_status()
+        data = response.json()["data"]
+        return {"ref": str(data["id"]), "tx": str(data["transactionId"]), "url": str(data["link"])}
+
+    except (requests.exceptions.RequestException, ValueError, KeyError, TypeError) as error:
+        status = getattr(getattr(error, "response", None), "status_code", None)
+        logger.error("mayar_error type=%s status=%s", type(error).__name__, status)
+        return None
+
+
+def poke_mayar_notify(supabase_url, token, ref):
+    """
+    Minta Edge Function mayar-notify mengecek ulang satu payment request
+    (tombol "Cek lagi"), untuk webhook Mayar yang hilang. Function tetap
+    mengambil status dari API Mayar, jadi permintaan ini tidak bisa memberi Pro.
+    """
+
+    try:
+        response = requests.post(
+            f"{supabase_url.rstrip('/')}/functions/v1/mayar-notify",
+            params={"token": token},
+            json={"event": "payment.received", "data": {"id": ref}},
+            timeout=TIMEOUT,
+        )
+        response.raise_for_status()
+        return True
+
+    except requests.exceptions.RequestException as error:
+        logger.error("mayar_poke_error type=%s", type(error).__name__)
+        return False
 
 
 def finish_url(app_url):
