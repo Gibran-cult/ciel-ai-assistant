@@ -92,15 +92,31 @@ class SnapTest(unittest.TestCase):
 
 class MayarTest(unittest.TestCase):
 
-    def test_mayar_payload_is_pro_30_days_with_a_60_minute_expiry(self):
-        p = payments.mayar_payload(ORDER, 79_000, "https://ciel.example/?page=pricing", email="a@example.com", now=0)
-        self.assertEqual(p["name"], "Ciel Pro 30 hari")
+    def test_mayar_payload_is_pro_30_days_for_the_buyer_with_a_24_hour_expiry(self):
+        p = payments.mayar_payload(ORDER, 79_000, "https://ciel.example/?page=pricing",
+                                   email="a@example.com", name="Ciel Tester", now=0)
+        # Mayar shows "name" as the customer's name on the invoice.
+        self.assertEqual(p["name"], "Ciel Tester")
         self.assertEqual(p["amount"], 79_000)
         self.assertEqual(p["redirectUrl"], "https://ciel.example/?page=pricing")
-        self.assertEqual(p["expiredAt"], "1970-01-01T01:00:00Z")
+        # Mayar keeps QRIS payable for 24 hours whatever expiredAt says (2026-10-31).
+        self.assertEqual(p["expiredAt"], "1970-01-02T00:00:00Z")
+        self.assertIn("Ciel Pro 30 hari", p["description"])
         self.assertIn(ORDER, p["description"])
         self.assertEqual(p["email"], "a@example.com")
-        self.assertNotIn("email", payments.mayar_payload(ORDER, 79_000, "u", now=0))
+        bare = payments.mayar_payload(ORDER, 79_000, "u", now=0)
+        self.assertNotIn("email", bare)
+        self.assertEqual(bare["name"], "Pembeli Ciel")
+        self.assertEqual(len(payments.mayar_payload(ORDER, 79_000, "u", name="x" * 300)["name"]), 100)
+
+    def test_pending_mayar_orders_wait_for_the_24_hour_qris(self):
+        now = 1_000_000.0
+        hour_old = {"status": "pending", "provider": "mayar", "created_at": now - 90 * 60}
+        day_old = {"status": "pending", "provider": "mayar", "created_at": now - 25 * 3600}
+        self.assertEqual(payments.order_message(hour_old, now=now)[0], "wait")
+        self.assertEqual(payments.order_message(day_old, now=now), payments.ORDER_MESSAGES["expire"])
+        self.assertEqual(payments.payment_window("mayar"), "24 jam")
+        self.assertEqual(payments.payment_window("midtrans"), "60 menit")
 
     def test_mayar_create_uses_bearer_key_and_environment(self):
         body = {"statusCode": 200, "data": {"id": "r", "transactionId": "t", "link": "https://pay.example/x"}}
@@ -256,7 +272,7 @@ class PricingCheckoutTest(unittest.TestCase):
         self.assertIn("<strong>Midtrans</strong>", text("Midtrans"))
         self.assertIn("email dan namamu ke Midtrans", text("Midtrans"))
         self.assertIn("<strong>Mayar</strong>", text("Mayar"))
-        self.assertIn("emailmu ke Mayar", text("Mayar"))
+        self.assertIn("email dan namamu ke Mayar", text("Mayar"))
         self.assertNotIn("Midtrans", text("Mayar"))
         self.assertIn("tidak pernah menerima atau menyimpan data kartu", text("Mayar"))
         self.assertNotIn("Midtrans", text(False))
@@ -395,6 +411,7 @@ class CheckoutAppTest(unittest.TestCase):
         self.assertEqual(mayar_call.kwargs["headers"]["Authorization"], "Bearer mayar-test-key")
         self.assertEqual(mayar_call.kwargs["json"]["redirectUrl"], "https://ciel.example/?page=pricing")
         self.assertIn(order["id"], mayar_call.kwargs["json"]["description"])
+        self.assertEqual(mayar_call.kwargs["json"]["name"], "Ciel Tester")
 
         patches = [c for c in database.call_args_list if c.args[0] == "PATCH"]
         self.assertEqual(len(patches), 1)
@@ -405,6 +422,7 @@ class CheckoutAppTest(unittest.TestCase):
         self.assertEqual(len(link_buttons), 1)
         self.assertEqual(link_buttons[0].proto.label, "Lanjut ke pembayaran")
         self.assertEqual(link_buttons[0].proto.url, "https://web.mayar.id/pay/x")
+        self.assertIn("Halaman bayar berlaku 24 jam", " ".join(m.value for m in at.markdown))
 
     def test_mayar_checkout_hides_the_link_when_refs_cannot_be_saved(self):
         at = self.run_pricing(SIGNED_IN, self.database(), secrets=self.MAYAR_SECRETS)
@@ -445,20 +463,25 @@ class CheckoutAppTest(unittest.TestCase):
         self.assertEqual(len(unattached), 1)
         self.assertIn(f"ref={self.REF}", unattached[0])
 
-    def test_pending_mayar_order_past_expiry_is_rechecked_before_saying_buy_again(self):
-        # A paid buyer whose webhook was lost must not be told to buy again without a recheck.
-        stale = {"id": ORDER, "status": "pending", "created_at": iso(time.time() - 61 * 60),
-                 "provider": "mayar", "provider_ref": self.REF}
+    def test_pending_mayar_order_after_an_hour_still_waits_with_a_recheck(self):
+        # Its QRIS is still payable, so "buy again" would invite a second payment.
+        pending = {"id": ORDER, "status": "pending", "created_at": iso(time.time() - 90 * 60),
+                   "provider": "mayar", "provider_ref": self.REF}
         post = Mock(return_value=Response())
-        at = self.run_pricing(SIGNED_IN, self.database(order=stale), secrets=self.MAYAR_SECRETS, post=post)
+        at = self.run_pricing(SIGNED_IN, self.database(order=pending), secrets=self.MAYAR_SECRETS, post=post)
         self.assertFalse(at.exception)
-        self.assertEqual(post.call_args.args[0], "https://db.example.invalid/functions/v1/mayar-notify")
-        self.assertEqual(post.call_args.kwargs["json"]["data"], {"id": self.REF})
-
-        # Once per session: rerendering does not poke again.
-        post = Mock(return_value=Response())
-        self.run_pricing(SIGNED_IN, self.database(order=stale), at=at, post=post)
+        self.assertEqual(len(at.error), 0)
+        self.assertIn("Menunggu konfirmasi", at.info[0].value)
+        self.assertTrue(at.button(key="pro_recheck"))
         post.assert_not_called()
+
+    def test_unknown_payment_provider_is_not_for_sale(self):
+        secrets = {**self.MAYAR_SECRETS, "PAYMENT_PROVIDER": "mayr", "MIDTRANS_SERVER_KEY": "SB-Mid-server-test"}
+        with self.assertLogs("ciel_ai", level="ERROR") as logs:
+            at = self.run_pricing(SIGNED_IN, self.database(), secrets=secrets)
+        self.assertFalse(at.exception)
+        self.assertNotIn("pro_buy", [b.key for b in at.button])
+        self.assertTrue(any("payment_provider_unknown" in line for line in logs.output))
 
     def test_mayar_without_the_webhook_token_is_not_for_sale(self):
         secrets = {k: v for k, v in self.MAYAR_SECRETS.items() if k != "MAYAR_WEBHOOK_TOKEN"}

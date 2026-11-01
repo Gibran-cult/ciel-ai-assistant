@@ -38,8 +38,8 @@ from payments import (
     finish_url,
     mayar_payload,
     new_order_id,
-    ORDER_MESSAGES,
     order_message,
+    payment_window,
     poke_mayar_notify,
     snap_payload,
 )
@@ -1610,19 +1610,22 @@ CHECK_ENABLED = bool(CHAT_STORE)
 # sandbox. MAYAR_WEBHOOK_TOKEN sama dengan secret Edge Function mayar-notify,
 # dipakai tombol "Cek lagi". APP_URL adalah alamat publik app untuk tujuan
 # kembali setelah bayar (default: alamat yang sedang dibuka).
-PAYMENT_PROVIDER = (get_config("PAYMENT_PROVIDER") or "midtrans").lower()
+PAYMENT_PROVIDERS = {"midtrans": "Midtrans", "mayar": "Mayar"}
+PAYMENT_PROVIDER = (get_config("PAYMENT_PROVIDER") or "midtrans").strip().lower()
 MIDTRANS_SERVER_KEY = get_config("MIDTRANS_SERVER_KEY")
 MIDTRANS_PRODUCTION = (get_config("MIDTRANS_PRODUCTION") or "").lower() == "true"
 MAYAR_API_KEY = get_config("MAYAR_API_KEY")
 MAYAR_PRODUCTION = (get_config("MAYAR_PRODUCTION") or "").lower() == "true"
 MAYAR_WEBHOOK_TOKEN = get_config("MAYAR_WEBHOOK_TOKEN")
 APP_URL = get_config("APP_URL")
-PAYMENT_PROVIDER_NAME = "Mayar" if PAYMENT_PROVIDER == "mayar" else "Midtrans"
+PAYMENT_PROVIDER_NAME = PAYMENT_PROVIDERS.get(PAYMENT_PROVIDER)
+if not PAYMENT_PROVIDER_NAME:
+    # Salah ketik tidak boleh diam-diam jatuh ke penyedia lain: Pro tidak dijual.
+    logger.error("payment_provider_unknown value=%r", PAYMENT_PROVIDER[:20])
 # Mayar butuh token webhook juga: tanpanya "Cek lagi" tidak bisa memulihkan
 # pembayaran yang webhooknya hilang.
-PAYMENTS_ENABLED = bool(
-    (MAYAR_API_KEY and MAYAR_WEBHOOK_TOKEN if PAYMENT_PROVIDER == "mayar" else MIDTRANS_SERVER_KEY) and CHAT_STORE
-)
+PAYMENT_READY = {"midtrans": bool(MIDTRANS_SERVER_KEY), "mayar": bool(MAYAR_API_KEY and MAYAR_WEBHOOK_TOKEN)}
+PAYMENTS_ENABLED = bool(PAYMENT_READY.get(PAYMENT_PROVIDER) and CHAT_STORE)
 
 # Bersihkan URL
 if NGROK_URL:
@@ -1985,7 +1988,13 @@ def start_mayar_payment(owner, order_id):
     payment = create_mayar_payment(
         MAYAR_API_KEY,
         MAYAR_PRODUCTION,
-        mayar_payload(order_id, PRO_PRICE, finish_url(APP_URL or st.context.url), email=st.user.get("email")),
+        mayar_payload(
+            order_id,
+            PRO_PRICE,
+            finish_url(APP_URL or st.context.url),
+            email=st.user.get("email"),
+            name=st.user.get("name"),
+        ),
     )
 
     if not payment:
@@ -2027,29 +2036,6 @@ def recheck_order(order):
         poke_mayar_notify(SUPABASE_URL, MAYAR_WEBHOOK_TOKEN, order["ref"])
 
 
-def recheck_expired_mayar_order(order):
-    """
-    Order Mayar yang masih pending setelah halaman bayarnya kedaluwarsa akan
-    tampil "Waktu pembayaran habis" tanpa tombol Cek lagi. Sebelum itu, cek
-    sekali ke API Mayar (lewat mayar-notify) per sesi, supaya pembeli yang
-    sudah membayar tapi webhooknya hilang tidak disuruh membeli lagi.
-    Kembalikan order yang dibaca ulang jika dicek, selain itu order apa adanya.
-    """
-
-    if not order or order.get("provider") != "mayar" or order.get("status") != "pending":
-        return order
-    if order_message(order) != ORDER_MESSAGES["expire"]:
-        return order
-
-    checked = st.session_state.setdefault("mayar_rechecked", set())
-    if order["id"] in checked:
-        return order
-
-    checked.add(order["id"])
-    recheck_order(order)
-    return CHAT_STORE.load_latest_order(chat_owner())
-
-
 def render_pro_action():
     """Isi kartu Pro di Pricing: status bayar terakhir dan tombol beli."""
 
@@ -2062,7 +2048,7 @@ def render_pro_action():
     if checkout.get("url"):
         st.link_button("Lanjut ke pembayaran", checkout["url"], type="primary", icon=":material/payments:")
         st.markdown(
-            '<p class="ciel-paynote">Halaman bayar berlaku 60 menit. Setelah membayar, '
+            f'<p class="ciel-paynote">Halaman bayar berlaku {payment_window(PAYMENT_PROVIDER)}. Setelah membayar, '
             "kembali ke halaman ini; Pro aktif begitu pembayaran terkonfirmasi.</p>",
             unsafe_allow_html=True,
         )
@@ -2074,8 +2060,6 @@ def render_pro_action():
     # Status dari database, bukan dari parameter URL penyedia pembayaran.
     order = CHAT_STORE.load_latest_order(chat_owner())
     recent = bool(order) and time.time() - order["created_at"] < RECENT_ORDER_SECONDS
-    if recent:
-        order = recheck_expired_mayar_order(order)
     message = order_message(order) if recent else None
     until = pro_until(refresh=bool(message and message[0] == "ok"))
 

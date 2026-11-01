@@ -20,6 +20,11 @@ const webhookToken = Deno.env.get("MAYAR_WEBHOOK_TOKEN") ?? "";
 const supabaseUrl = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/$/, "");
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
+// Batas tiap panggilan keluar. Timeout dilempar sebagai error biasa, jadi
+// notification.js menjawab 5xx dan Mayar (atau "Cek lagi") mencoba lagi;
+// settle yang ternyata sudah tersimpan dijawab already_paid saat diulang.
+const TIMEOUT_MS = 10_000;
+
 const database = {
   apikey: serviceKey,
   Authorization: `Bearer ${serviceKey}`,
@@ -31,7 +36,10 @@ async function findOrder(ids: string[]) {
   const list = ids.join(",");
   const query = `select=id,amount,provider_ref&provider=eq.mayar` +
     `&or=(provider_ref.in.(${list}),provider_tx.in.(${list}))&limit=1`;
-  const response = await fetch(`${supabaseUrl}/rest/v1/pro_orders?${query}`, { headers: database });
+  const response = await fetch(`${supabaseUrl}/rest/v1/pro_orders?${query}`, {
+    headers: database,
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
   if (!response.ok) {
     throw new Error(`find ${response.status}`);
   }
@@ -42,6 +50,7 @@ async function findOrder(ids: string[]) {
 async function fetchPayment(ref: string) {
   const response = await fetch(paymentUrl(ref, production), {
     headers: { Accept: "application/json", Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`mayar api ${response.status}`);
@@ -54,6 +63,7 @@ async function settle(orderId: string, amount: number, status: string) {
     method: "POST",
     headers: database,
     body: JSON.stringify({ p_order_id: orderId, p_gross_amount: amount, p_midtrans_status: status }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`settle ${response.status}`);
