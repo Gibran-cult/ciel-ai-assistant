@@ -49,7 +49,8 @@ class DockerfileTest(unittest.TestCase):
         # config.toml carries the theme and gatherUsageStats = false; the app
         # reads the logo PNGs from assets/brand. Only exact paths are excluded.
         for line in code_lines(DOCKERIGNORE):
-            self.assertFalse(line.startswith((".streamlit", "assets")), line)
+            if line != ".streamlit/secrets.toml":
+                self.assertFalse(line.startswith((".streamlit", "assets")), line)
             if "*" in line:
                 self.assertIn(line, ("**/__pycache__", "**/*.pyc"))
             self.assertNotIn(".toml", line.replace("secrets.toml", ""), line)
