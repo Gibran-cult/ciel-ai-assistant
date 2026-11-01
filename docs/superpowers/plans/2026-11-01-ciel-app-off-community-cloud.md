@@ -22,6 +22,8 @@
 - The repository is public: the VPS clones it over HTTPS with no deploy key.
 - The lockfile pins `streamlit==1.66.1`; Community Cloud has been running 1.65 (PR #79). The VPS runs exactly the lockfile, so the UI must be checked in the browser on the VPS before cutover.
 
+**Approved by Ciel on 2026-11-01:** Option A (Biznet Gio NEO Lite MS 4.2), no `LEGAL_VERSION` bump, executed natively in one session with a whole-branch review at the end.
+
 ### Host choice and cost (decision for Ciel)
 
 Prices from biznetgio.com/product/neo-lite, read 2026-11-01; promo length is not stated, so budget the normal price. Data center in Indonesia, unmetered bandwidth.
@@ -210,7 +212,7 @@ Merge it on cutover day, right before Task 5 Step 3.
 ### Task 5: Cutover (Ciel + agent, about 20 minutes, low-traffic hour)
 
 - [ ] **Step 1 (agent):** Ciel reads out (screenshot) the current `app` DNS record and the Redirect Rule in Cloudflare; the agent writes them into the notes as the rollback values.
-- [ ] **Step 2 (Go-ahead, Ciel on the VPS):** In `secrets.toml` set `APP_URL = "https://app.ciel-ai.web.id"` and `redirect_uri = "https://app.ciel-ai.web.id/oauth2callback"`; in `.env` set `CIEL_APP_HOSTS=app.ciel-ai.web.id, next.ciel-ai.web.id`. Agent: `docker compose up -d` (recreates `caddy` with the new hosts and `app` with the new secrets).
+- [ ] **Step 2 (Go-ahead, Ciel on the VPS):** In `secrets.toml` set `APP_URL = "https://app.ciel-ai.web.id"` and `redirect_uri = "https://app.ciel-ai.web.id/oauth2callback"`; in `.env` set `CIEL_APP_HOSTS=app.ciel-ai.web.id, next.ciel-ai.web.id`. Agent: `docker compose up -d && docker compose restart app` (recreates `caddy` with the new hosts; the restart makes the app read the edited secrets file, which Compose does not notice on its own).
 - [ ] **Step 3 (Go-ahead, Ciel in Cloudflare):** Merge Task 4. Disable (do not delete) the `app` Redirect Rule; change the `app` record to A → VPS IPv4, **DNS only**, TTL 1 min.
 - [ ] **Step 4 (agent):** `docker compose restart caddy` so the certificate is requested at once; wait for `certificate obtained successfully` for `app.ciel-ai.web.id` in `docker compose logs caddy`. Then `curl -sI https://app.ciel-ai.web.id/` is 200 from the VPS (no `location:` to `streamlit.app`), and `dig +short app.ciel-ai.web.id @1.1.1.1` prints the VPS IP.
 - [ ] **Step 5 (Ciel, own browser):** Sign in with Google on `app.ciel-ai.web.id`, ask one question, open Pricing (Pro status shows correctly for Ciel's own account), Privasi shows Biznet Gio.
