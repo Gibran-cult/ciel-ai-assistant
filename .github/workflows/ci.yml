@@ -117,6 +117,7 @@ jobs:
             tests.test_landing \
             tests.test_pdf_attachments \
             tests.test_vps_deploy \
+            tests.test_app_deploy \
             tests.test_migrate_flows \
             tests.test_backend_health \
             tests.test_ci_coverage
@@ -129,4 +130,4 @@ jobs:
           node --test supabase/functions/mayar-notify/notification.test.mjs
 
       - name: Check VPS shell scripts
-        run: bash -n deploy/vps/*.sh
+        run: bash -n deploy/vps/*.sh deploy/app/*.sh
