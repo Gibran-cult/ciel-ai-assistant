@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Legal readiness (UU PDP, UU Perlindungan Konsumen)
+- New Pengaturan > Ketentuan tab (`terms.py`, `?page=terms`): who runs Ciel, an AI accuracy notice, academic integrity, acceptable use, Ciel Pro terms, refund rules, age, service limits, changes, and Indonesian law. No standard clause that UU 8/1999 Pasal 18 forbids; `tests/test_terms.py` rejects them.
+- Signed-in accounts accept the terms once per `terms.LEGAL_VERSION` on a "Sebelum mulai" screen. The acceptance is stored in the new Supabase table `consents` (`docs/chat_store.sql`). If the table cannot be read or written, the user is let in and the error is logged.
+- The Privasi page names every third party that receives user data, with its country (DeepSeek, Exa, Google, Supabase, Streamlit Community Cloud, ngrok, Google Fonts, and the payment provider). It also covers cookies and keeps purchase records for 10 years for tax.
+- Streamlit's built-in usage statistics are off (`.streamlit/config.toml`).
+- Data saya gained "Hapus akun": it deletes server history, memory, datasets, chats, projects, and the profile, then signs out. Purchase records and consent rows are kept.
+- The login page states that signing in accepts the terms and links to them. Beranda notes that Ciel is an AI and can be wrong. The landing footer links Ketentuan.
+- New `docs/LEGAL.md` lists the steps code cannot do (PSE and NIB registration, vendor DPAs, secrets, tax records, refund handling, licences, lawyer review).
+
 ### Settings page with a personal profile
 - New Pengaturan dialog over the app, like Settings in the Claude app: a menu on the left, the tab on the right (it scrolls on its own), closed with X, Esc, or a click outside. It opens from the ⚙ icon (no label, no box) to the right of the account name at the bottom of the sidebar. Signed-out visitors get the same icon, with the Tampilan, Paket, and Privasi tabs only. On phones the menu wraps into a row above the tab.
 - Tabs: Profil, Tampilan, Data saya, Paket (the old Pricing page), and Privasi. `?page=pricing`, `?page=privacy`, and `?page=settings&tab=<tab>` open the dialog on that tab once and are then removed from the address bar, so landing links and the Midtrans return URL are unchanged. Pricing and Privacy styles now also apply inside dialogs.

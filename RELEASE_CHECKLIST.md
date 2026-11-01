@@ -11,6 +11,7 @@
 - [ ] Prompt or flow changes are tried on a separate test flow in Langflow first (import a copy without its `id`), never on the production flow.
 - [ ] A live quality run (`python tests/collect_quality.py`) shows no regression in response quality, and failed cases are explained.
 - [ ] `CHANGELOG.md` describes the change and its measurements.
+- [ ] Changes to Privasi or Ketentuan bump `terms.LEGAL_VERSION` and the page dates; open items in `docs/LEGAL.md` are reviewed.
 
 ## Deploying a Flow Change to Langflow
 
