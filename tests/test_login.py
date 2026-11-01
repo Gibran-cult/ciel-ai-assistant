@@ -60,6 +60,27 @@ class LoginNotesTest(unittest.TestCase):
         self.assertIn("sedang disiapkan", self.notes(auth_enabled=True, rate_limits=(20, 60)))
 
 
+class ConsentGateTest(unittest.TestCase):
+
+    def test_accept_and_logout_fill_the_card_width(self):
+        # Streamlit 1.65 on Cloud sizes a button's element container to its
+        # text, so CSS on the button alone left them narrow there. width=
+        # "stretch" is Streamlit's own setting and works on every version.
+        from unittest.mock import MagicMock
+        sys.path.insert(0, str(ROOT))
+        import login
+
+        fake = MagicMock()
+        with patch.object(login, "st", fake):
+            login.render_consent(None, None, None, None)
+
+        widths = {c.kwargs["key"]: c.kwargs.get("width") for c in fake.button.call_args_list}
+        self.assertEqual(widths["consent_accept"], "stretch")
+        self.assertEqual(widths["consent_logout"], "stretch")
+        self.assertIsNone(widths["consent_terms"])
+        self.assertNotIn('button[kind="primary"]', login.LOGIN_CSS)
+
+
 class LoginPageTest(unittest.TestCase):
 
     def test_app_renders_the_login_page_without_the_composer(self):

@@ -79,8 +79,6 @@ LOGIN_CSS = """
     box-shadow: 0 0 0 5px var(--c-bg), 0 0 0 6px var(--c-line);
 }
 .st-key-loginbox .stButton, .st-key-loginbox .stButton button { width: 100%; }
-.st-key-consentbox .stButton:has(button[kind="primary"]), .st-key-consentbox .stButton:has(button[kind="secondary"]),
-.st-key-consentbox button[kind="primary"], .st-key-consentbox button[kind="secondary"] { width: 100%; }
 .st-key-consentbox .ciel-loginhead { margin-bottom: 1rem; }
 @media (max-width: 900px) {
     .st-key-loginpage [data-testid="stHorizontalBlock"] { flex-direction: column; }
@@ -263,8 +261,9 @@ def render_consent(on_accept, on_logout, on_terms, on_privacy):
             type="primary",
             disabled=not st.session_state.get("consent_check"),
             on_click=on_accept,
+            width="stretch",
         )
-        st.button("Keluar", key="consent_logout", type="secondary", on_click=on_logout)
+        st.button("Keluar", key="consent_logout", type="secondary", on_click=on_logout, width="stretch")
 
         with st.container(key="consentlegal", horizontal=True, gap="medium"):
             st.button("Syarat dan Ketentuan", key="consent_terms", type="tertiary", on_click=on_terms)
