@@ -26,16 +26,18 @@ Kotak kosong = belum dikerjakan. Pemiliknya Ciel, kecuali disebut lain.
 
 ## 3. Ketentuan vendor dan DPA
 
-Baca atau setujui ketentuan pemrosesan data (DPA) tiap pihak ketiga di `privacy.SUBPROCESSORS`, lalu catat tautan dan tanggalnya.
+Hasil pemeriksaan 2026-11-01 dari dokumen resmi tiap vendor di `privacy.SUBPROCESSORS`. Periksa ulang jika ada vendor yang mengubah kebijakannya.
 
-- [ ] Supabase: DPA dari dashboard (Organization > Legal). Region project: `ap-northeast-1` (Tokyo).
-- [ ] Google Cloud: ketentuan Gemini API paket berbayar (data tidak dipakai untuk melatih model) dan Cloud Data Processing Addendum.
-- [ ] DeepSeek: ketentuan API, terutama soal lama penyimpanan data dan pemakaian untuk pelatihan. Server di Tiongkok.
-- [ ] Exa: ketentuan dan kebijakan privasi API.
-- [ ] Streamlit Community Cloud (Snowflake): ketentuan layanan.
-- [ ] ngrok: ketentuan layanan dan DPA.
-- [ ] Mayar: perjanjian merchant.
-- [ ] Google Fonts: kebijakan privasi Google (huruf di halaman depan dan aplikasi).
+| Vendor | Temuan | Status / tindakan |
+|---|---|---|
+| **Streamlit Community Cloud** | [Terms of Use](https://streamlit.io/sharing/terms-of-use) (Nov 2025), Community Cloud Content Addendum butir 4: hanya untuk "personal and non-commercial purposes", dan tidak untuk data dengan perlindungan khusus. Pasal 10: akses bisa dihentikan tanpa pemberitahuan. | **Risiko terbesar.** Ciel menjual Pro di sini. Pindah ke VPS (`docs/superpowers/plans/2026-10-27-ciel-foundation-vps.md`) atau Streamlit berbayar. Sampai pindah, simpan cadangan secrets dan siap deploy ulang. |
+| **DeepSeek** | [Kebijakan privasi](https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html) (10 Feb 2026): data disimpan di Tiongkok selama akun ada; input dipakai untuk melatih model, dengan hak opt-out lewat email. [Ketentuan Open Platform](https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html) (berlaku 29 Apr 2026) tidak menyebut pelatihan, tidak ada retensi tetap atau zero data retention; Pasal 5.5 menjadikan Ciel pengendali data pengguna. | [ ] Kirim permintaan opt-out pelatihan ke **privacy@deepseek.com** dari email akun API, lalu simpan balasannya di sini. Halaman Privasi sudah menyebut DeepSeek bisa melatih model. |
+| **Exa** | [Kebijakan privasi](https://exa.ai/privacy-policy) (29 Jun 2026): "Query Data is used to improve our products". Zero data retention dan DPA hanya untuk paket **Enterprise** ([security](https://docs.exa.ai/reference/security)). | Diterima untuk sekarang; halaman Privasi menyebutnya. Kueri pencarian dibuat agent, tetapi bisa memuat topik pengguna. Pertimbangkan Enterprise jika pengguna bertambah. |
+| **Google (Gemini API)** | [Gemini API Additional Terms](https://ai.google.dev/gemini-api/terms), bagian **Paid Services**: prompt dan respons tidak dipakai untuk meningkatkan produk, dicatat sementara hanya untuk mendeteksi penyalahgunaan, dan diproses di bawah *Data Processing Addendum for Products Where Google is a Data Processor*. | [x] Berlaku otomatis selama project Cloud punya billing aktif. Pastikan billing tetap aktif, karena paket gratis memakai data untuk pelatihan. |
+| **Supabase** | [DPA](https://supabase.com/legal/dpa) baru mengikat setelah ditandatangani lewat **PandaDoc** yang diminta dari dashboard (Organization > Legal documents). Region project: `ap-northeast-1` (Tokyo). | [ ] Minta dan tandatangani DPA dari dashboard Supabase. |
+| **ngrok** | [DPA](https://ngrok.com/dpa) berlaku antara ngrok dan pelanggan yang menyetujui Terms of Service (versi 31 Mar 2023), dengan SCC terlampir. | [x] Berlaku lewat ToS. Lalu lintas Ciel melewati edge ngrok. |
+| **Mayar** | Perjanjian merchant saat verifikasi akun (2026-11-01). | [ ] Simpan salinan perjanjian merchant di sini. |
+| **Google Fonts, GitHub Pages, Google login** | Kebijakan privasi Google dan GitHub; menerima alamat IP pengunjung. | [x] Disebut di halaman Privasi; tidak perlu DPA terpisah untuk skala ini. |
 
 ## 4. Secrets sebelum publik
 
