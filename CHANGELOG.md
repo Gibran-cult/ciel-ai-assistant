@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Vendor data terms reviewed
+- `docs/LEGAL.md` section 3 records what each vendor's own documents say (2026-11-01) and the action left for each. The biggest finding is that Streamlit Community Cloud allows personal, non-commercial use only. DeepSeek's privacy policy uses inputs for training with an email opt-out. Exa uses query data to improve its products. Gemini's paid tier does not train. The Supabase DPA must be signed from the dashboard.
+- The Privasi page now says DeepSeek and Exa may use the data they receive to train or improve their models. `terms.LEGAL_VERSION` is `2026-11-01.2`, so every account is asked to accept again once.
+
 ### Legal readiness (UU PDP, UU Perlindungan Konsumen)
 - New Pengaturan > Ketentuan tab (`terms.py`, `?page=terms`): who runs Ciel, an AI accuracy notice, academic integrity, acceptable use, Ciel Pro terms, refund rules, age, service limits, changes, and Indonesian law. No standard clause that UU 8/1999 Pasal 18 forbids; `tests/test_terms.py` rejects them.
 - Signed-in accounts accept the terms once per `terms.LEGAL_VERSION` on a "Sebelum mulai" screen. The acceptance is stored in the new Supabase table `consents` (`docs/chat_store.sql`). If the table cannot be read or written, the user is let in and the error is logged.

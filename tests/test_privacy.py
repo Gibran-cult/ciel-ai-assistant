@@ -364,6 +364,15 @@ class PrivacyPageTest(unittest.TestCase):
             self.assertIn(country, text)
         self.assertNotIn("Langflow", text)
 
+    def test_training_by_recipients_is_disclosed(self):
+        # DeepSeek's privacy policy (Feb 2026) and Exa's (Jun 2026) both say
+        # inputs or queries may be used to improve their models.
+        sections = dict(__import__("privacy").privacy_sections(
+            retention_days=30, memory_enabled=True, data_controls=True))
+        text = " ".join(sections["Pihak ketiga yang menerima datamu"])
+        self.assertIn("DeepSeek dan Exa", text)
+        self.assertIn("melatih atau meningkatkan", text)
+
     def test_payment_recipient_only_when_payments_are_on(self):
         sections = dict(__import__("privacy").privacy_sections(
             retention_days=30, memory_enabled=True, data_controls=True))

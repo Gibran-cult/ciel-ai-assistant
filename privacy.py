@@ -117,6 +117,13 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
         for name, role, country in recipients
     ]
     third_parties.append("Ciel hanya mengirim data yang dibutuhkan untuk tugas masing-masing.")
+    # Sumber: kebijakan privasi DeepSeek (10 Feb 2026) dan Exa (29 Jun 2026);
+    # rinciannya di docs/LEGAL.md bagian 3.
+    third_parties.append(
+        "Menurut kebijakan masing-masing, DeepSeek dan Exa dapat memakai data "
+        "yang mereka terima untuk melatih atau meningkatkan model dan layanannya. "
+        "Karena itu, jangan kirim informasi pribadi atau rahasia ke Ciel."
+    )
 
     stored = [
         (
