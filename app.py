@@ -16,6 +16,12 @@ from dotenv import load_dotenv
 from PIL import Image, ImageOps
 from pypdf import PdfReader
 
+from fresh_modules import drop_stale_modules
+
+# Sebelum modul lokal diimpor: setelah deploy, Streamlit Cloud bisa masih
+# memegang versi lama (ImportError sampai reboot, PR #55 dan #76).
+drop_stale_modules(os.path.dirname(os.path.abspath(__file__)))
+
 from account_settings import (
     LOGIN_TABS,
     PROFILE_LIMITS,

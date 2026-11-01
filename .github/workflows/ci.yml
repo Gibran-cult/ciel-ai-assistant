@@ -84,6 +84,7 @@ jobs:
             tests.test_gateway_policy \
             tests.test_nginx_gateway \
             tests.test_app_security \
+            tests.test_fresh_modules \
             tests.test_secrets \
             tests.test_supply_chain \
             tests.test_source_guard \
