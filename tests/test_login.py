@@ -72,7 +72,7 @@ class LoginPageTest(unittest.TestCase):
         # The first version showed a disabled Google button and a disabled
         # email/password form. Only working controls are shown now.
         at = run_app("login")
-        self.assertEqual([b.key for b in at.main.button if b.key.startswith("login_")], ["login_skip", "login_privacy"])
+        self.assertEqual([b.key for b in at.main.button if b.key.startswith("login_")], ["login_skip", "login_terms", "login_privacy"])
         self.assertEqual(len(at.main.text_input), 0)
         self.assertFalse(any(b.disabled for b in at.main.button))
         self.assertEqual(at.button(key="login_skip").proto.type, "primary")
@@ -88,6 +88,16 @@ class LoginPageTest(unittest.TestCase):
         at = AppTest.from_function(page).run()
         self.assertFalse(at.button(key="login_google").disabled)
         self.assertEqual(at.button(key="login_skip").proto.type, "secondary")
+
+    def test_google_button_comes_with_the_consent_line(self):
+        at = self.render(auth_enabled=True)
+        self.assertIn(
+            "Dengan masuk, kamu menyetujui Syarat dan Ketentuan dan Kebijakan Privasi Ciel.",
+            page_text(at),
+        )
+        keys = [b.key for b in at.button]
+        self.assertIn("login_terms", keys)
+        self.assertIn("login_privacy", keys)
 
     def render(self, **kwargs):
         sys.path.insert(0, str(ROOT))

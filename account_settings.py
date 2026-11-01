@@ -21,12 +21,13 @@ SETTINGS_TABS = (
     ("data", "Data saya", ":material/database:"),
     ("paket", "Paket", ":material/sell:"),
     ("privasi", "Privasi", ":material/shield:"),
+    ("ketentuan", "Ketentuan", ":material/gavel:"),
 )
 LOGIN_TABS = frozenset({"profil", "data"})
 
 # Alamat lama (?page=pricing, ?page=privacy) tetap dipakai landing dan
-# Midtrans, jadi dibuka sebagai tab Pengaturan.
-PAGE_TABS = {"pricing": "paket", "privacy": "privasi"}
+# Midtrans, jadi dibuka sebagai tab Pengaturan, begitu juga ?page=terms.
+PAGE_TABS = {"pricing": "paket", "privacy": "privasi", "terms": "ketentuan"}
 
 
 def _clean_text(value, limit):

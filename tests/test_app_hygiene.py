@@ -29,6 +29,11 @@ class AppHygieneTest(unittest.TestCase):
         unused = {name: line for name, line in defined.items() if name not in used}
         self.assertEqual(unused, {}, f"unused top-level names in app.py (name: line): {unused}")
 
+    def test_streamlit_usage_stats_are_off(self):
+        # The privacy page promises Streamlit's built-in usage statistics are off.
+        config = (APP_PATH.parent / ".streamlit" / "config.toml").read_text(encoding="utf-8")
+        self.assertRegex(config, r"(?m)^\[browser\]\s*\n(?:.*\n)*?gatherUsageStats\s*=\s*false")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,7 +37,7 @@ from answer_cache import AnswerCache, cacheable_question, question_key
 from beranda import greeting, has_riset_map, latest_riset, relative_time, templates_for
 from chat_sources import answer_parts, count_line, source_buttons_html, source_label, summarize
 from chat_store import ChatStore
-from login import render_login
+from login import render_consent, render_login
 from payments import (
     create_mayar_payment,
     create_snap_transaction,
@@ -54,6 +54,7 @@ from riset_export import report_docx, report_filename
 from writing import APPROACHES, KERANGKA_FOOTNOTE, MAX_OBJECT_CHARS, finish_kerangka, kerangka_payload
 from draft_check import MAX_DRAFT_CHARS, MIN_DRAFT_WORDS, check_report, clean_draft, draft_from_file, split_excerpts, word_count
 from privacy import render_privacy
+from terms import LEGAL_VERSION, render_terms
 
 # ============================================================
 # LOGGING
@@ -377,6 +378,16 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     color: var(--c-text);
 }
 [data-testid="stDialog"] .ciel-settings-head p { margin: 0 0 1.2rem; font-size: 0.9rem; line-height: 1.6; color: var(--c-muted); }
+/* Section inside a tab (Hapus akun in Data saya), sized like the Privasi h2. */
+[data-testid="stDialog"] [role="dialog"] .st-key-settingspanel .ciel-settings-head h2 {
+    margin: 2rem 0 0.4rem;
+    padding: 0;
+    font-family: var(--font-sans);
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--c-text);
+}
 /* Akun card (account_card_html): labelled rows, like a settings list. */
 [data-testid="stDialog"] .ciel-account-card { border: 1px solid var(--c-line); border-radius: 12px; background: var(--c-surface); overflow: hidden; margin-bottom: 1.4rem; }
 [data-testid="stDialog"] .ciel-account-row {
@@ -693,6 +704,7 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
     color: var(--c-text);
 }
 .stApp .ciel-home-head p { margin: 0.4rem 0 0; font-size: 0.875rem; color: var(--c-muted); }
+.stApp .ciel-home-note { margin: 0; text-align: center; font-size: 0.8125rem; color: var(--c-faint); }
 .st-key-beranda [data-testid="stChatInput"] { margin: 0.4rem 6px 0.3rem; }
 .st-key-templates { justify-content: center; flex-wrap: wrap; gap: 0.5rem; }
 .st-key-templates .stButton > button {
@@ -2971,6 +2983,40 @@ def delete_my_chat_history():
     st.session_state.confirm_delete_history = False
 
 
+def delete_my_account():
+    """
+    Hapus akun: riwayat pesan di server, memory, dataset, lalu chat, proyek,
+    dan profil di database, kemudian keluar. Semua langkah dicoba; jika ada
+    yang gagal pengguna tetap login dan bisa menekan lagi (setiap langkah
+    aman diulang). Catatan pembelian Pro tetap disimpan (kewajiban pajak).
+    """
+    database_ok = CHAT_STORE.delete_account(chat_owner())
+
+    if database_ok:
+        # Jangan biarkan sidebar menyimpan ulang chat yang sudah terhapus.
+        st.session_state.chats = {}
+        st.session_state.projects = {}
+        st.session_state.active_project = None
+        st.session_state.profile = clean_profile({})
+        new_chat()
+
+    steps = (
+        ("riwayat pesan di server", delete_server_chat_history().get("ok")),
+        ("memory", memory_admin("delete_all").get("ok")),
+        ("dataset", memory_admin("delete_all_datasets").get("ok")),
+        ("chat, proyek, dan profil", database_ok),
+    )
+    left = [name for name, ok in steps if not ok]
+
+    if left:
+        logger.error("delete_account_incomplete parts=%s", ",".join(left))
+        st.session_state.data_notice = ("error", f"Sebagian data belum terhapus: {', '.join(left)}. Coba lagi.")
+        return
+
+    st.session_state.clear()
+    st.logout()
+
+
 # ============================================================
 # UI HELPERS
 # ============================================================
@@ -3555,13 +3601,13 @@ def current_view():
 
 def open_settings_from_url():
     """
-    ?page=settings&tab=..., dan alamat lama ?page=pricing / ?page=privacy
+    ?page=settings&tab=..., alamat lama ?page=pricing / ?page=privacy, dan ?page=terms
     (landing, kembali dari Midtrans), membuka dialog Pengaturan sekali di tab
     itu. Parameternya dibuang supaya dialog tidak terbuka lagi saat dimuat ulang.
     """
     page = current_page()
 
-    if page in ("settings", "pricing", "privacy"):
+    if page in ("settings", "pricing", "privacy", "terms"):
         st.session_state.settings_open = settings_tab(page, st.query_params.get("tab"), logged_in())
         st.query_params.pop("page", None)
         st.query_params.pop("tab", None)
@@ -3591,9 +3637,81 @@ def show_privacy():
     open_settings("privasi")
 
 
+def show_terms():
+    open_settings("ketentuan")
+
+
+def render_legal_page(tab):
+    """Tab Ketentuan atau Privasi, di Pengaturan maupun di atas gerbang persetujuan."""
+    if tab == "ketentuan":
+        render_terms(
+            operator=OPERATOR_NAME,
+            contact_url=safe_contact_url(CONTACT_URL),
+            payments=PAYMENT_PROVIDER_NAME if PAYMENTS_ENABLED else False,
+        )
+    else:
+        render_privacy(
+            retention_days=CHAT_RETENTION_DAYS,
+            memory_enabled=AUTH_ENABLED,
+            data_controls=bool(MEMORY_ADMIN_FLOW_ID),
+            contact_url=safe_contact_url(CONTACT_URL),
+            operator=OPERATOR_NAME,
+            history_saved=CHAT_STORE is not None,
+            payments=PAYMENT_PROVIDER_NAME if PAYMENTS_ENABLED else False,
+        )
+
+
+def show_consent_doc(tab):
+    st.session_state.consent_doc = tab
+
+
+def close_consent_doc():
+    st.session_state.consent_doc = None
+
+
+@st.dialog("Ketentuan dan privasi", width="large", on_dismiss=close_consent_doc)
+def consent_doc_dialog():
+    render_legal_page(st.session_state.consent_doc)
+
+
 def show_login():
     close_settings()
     st.query_params["page"] = "login"
+
+
+def consent_needed():
+    """
+    True jika akun yang login belum menyetujui LEGAL_VERSION. Tanpa database
+    tidak ada bukti yang bisa disimpan, jadi gerbangnya tidak tampil. Jika
+    persetujuan gagal dibaca, pengguna tidak dikunci: sesi ini lolos dan
+    gerbang dicoba lagi di sesi berikutnya.
+    """
+    if not logged_in() or CHAT_STORE is None:
+        return False
+
+    owner = memory_owner_id()
+
+    if st.session_state.get("consented") == (owner, LEGAL_VERSION):
+        return False
+
+    stored = CHAT_STORE.load_consent(owner)
+
+    if stored is None:
+        logger.warning("consent_load_failed")
+    elif stored != LEGAL_VERSION:
+        return True
+
+    st.session_state.consented = (owner, LEGAL_VERSION)
+    return False
+
+
+def accept_consent():
+    owner = memory_owner_id()
+
+    if not CHAT_STORE.save_consent(owner, LEGAL_VERSION):
+        logger.error("consent_save_failed")
+
+    st.session_state.consented = (owner, LEGAL_VERSION)
 
 
 def new_chat():
@@ -3895,6 +4013,10 @@ def render_beranda():
     )
 
     value = composer("Tanya soal skripsimu" if project else "Tanyakan sesuatu kepada Ciel...")
+    st.markdown(
+        '<p class="ciel-home-note">Ciel adalah AI dan bisa keliru. Cek sumbernya sebelum kamu pakai.</p>',
+        unsafe_allow_html=True,
+    )
     riset = latest_riset(st.session_state.chats.values(), project_id)
 
     with st.container(key="templates", horizontal=True, gap="small"):
@@ -4512,6 +4634,26 @@ def render_error(content, index, show_retry):
 
 
 # ============================================================
+# CONSENT GATE
+# ============================================================
+# Sekali per versi ketentuan (tabel consents). Gerbangnya berdiri sebelum
+# sidebar, dialog, dan Pengaturan, supaya tidak ada fitur yang memproses data
+# sebelum pengguna setuju. Alamat seperti ?page=pricing tetap di URL dan
+# dibuka setelah persetujuan.
+
+if consent_needed():
+    render_consent(
+        accept_consent,
+        st.logout,
+        lambda: show_consent_doc("ketentuan"),
+        lambda: show_consent_doc("privasi"),
+    )
+    if st.session_state.get("consent_doc"):
+        consent_doc_dialog()
+    st.stop()
+
+
+# ============================================================
 # SIDEBAR
 # ============================================================
 
@@ -5123,6 +5265,30 @@ def render_data_settings():
             on_click=delete_my_chat_history,
         )
 
+        if CHAT_STORE:
+            st.markdown(
+                '<div class="ciel-settings-head"><h2>Hapus akun</h2>'
+                "<p>Semua chat, proyek, profil, memory, dan datasetmu dihapus permanen, lalu "
+                "kamu keluar. Akun Google-mu tidak terhapus. Catatan pembelian Pro tetap "
+                "disimpan 10 tahun karena kewajiban pajak, dan masa Pro yang tersisa tetap "
+                "tercatat jika kamu masuk lagi dengan akun yang sama.</p></div>",
+                unsafe_allow_html=True,
+            )
+
+            st.checkbox(
+                "Saya paham semua dataku akan dihapus permanen",
+                key="confirm_delete_account",
+            )
+
+            st.button(
+                "Hapus akun dan semua data",
+                key="delete_account",
+                type="secondary",
+                icon=":material/person_remove:",
+                disabled=not st.session_state.get("confirm_delete_account"),
+                on_click=delete_my_account,
+            )
+
 
 @st.dialog("Pengaturan", width="large", on_dismiss=close_settings)
 def settings_dialog():
@@ -5188,15 +5354,7 @@ def render_settings_tab(tab):
         )
 
     else:
-        render_privacy(
-            retention_days=CHAT_RETENTION_DAYS,
-            memory_enabled=AUTH_ENABLED,
-            data_controls=bool(MEMORY_ADMIN_FLOW_ID),
-            contact_url=safe_contact_url(CONTACT_URL),
-            operator=OPERATOR_NAME,
-            history_saved=CHAT_STORE is not None,
-            payments=PAYMENT_PROVIDER_NAME if PAYMENTS_ENABLED else False,
-        )
+        render_legal_page(tab)
 
 
 # Dialog Pengaturan (tombol ⚙ di sidebar, atau ?page=settings / pricing / privacy).
@@ -5218,6 +5376,7 @@ if current_view() == "login":
         ),
         history_saved=CHAT_STORE is not None,
         on_privacy=show_privacy,
+        on_terms=show_terms,
     )
     st.stop()
 

@@ -20,7 +20,7 @@ import chat_store  # noqa: E402
 import payments  # noqa: E402
 import pricing  # noqa: E402
 import privacy  # noqa: E402
-from tests.test_chat_store import ALICE, ENV, SIGNED_IN, SIGNED_IN_OWNER, Response  # noqa: E402
+from tests.test_chat_store import ALICE, CONSENTED, ENV, SIGNED_IN, SIGNED_IN_OWNER, Response  # noqa: E402
 
 ORDER = "0123456789abcdef0123456789abcdef"
 
@@ -291,6 +291,7 @@ class CheckoutAppTest(unittest.TestCase):
 
     def database(self, order=None, pro_until=None):
         tables = {
+            **CONSENTED,
             "pro_orders": [order] if order else [],
             "pro_members": [{"expires_at": iso(pro_until)}] if pro_until else [],
         }

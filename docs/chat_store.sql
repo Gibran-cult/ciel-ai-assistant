@@ -49,6 +49,20 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
+-- Bukti persetujuan Syarat dan Ketentuan serta Kebijakan Privasi (UU PDP
+-- Pasal 22-24): satu baris per akun per versi (terms.LEGAL_VERSION), ditulis
+-- saat pengguna menekan "Setuju dan lanjut" (ChatStore.save_consent). Baris
+-- ini sengaja tidak ikut terhapus oleh "Hapus akun": isinya hanya kode akun,
+-- versi, dan waktu.
+create table if not exists public.consents (
+    owner text not null,
+    version text not null,
+    accepted_at timestamptz not null default now(),
+    primary key (owner, version)
+);
+
+alter table public.consents enable row level security;
+
 -- Status Ciel Pro per akun. App hanya membaca (ChatStore.load_pro_until);
 -- yang menulis adalah admin lewat SQL di bawah, atau nanti webhook pembayaran.
 -- owner = "ID memory" yang tampil di menu akun Ciel (memory_owner_id).
