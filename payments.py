@@ -39,6 +39,9 @@ ITEM_ID = "ciel-pro-30"
 # Transaksi yang tidak dibayar kedaluwarsa setelah ini, supaya order lama
 # tidak bisa dilunasi berhari-hari kemudian.
 EXPIRY_MINUTES = 60
+# Mayar mengabaikan expiredAt: QRIS-nya tetap bisa dibayar 24 jam (sandbox
+# 2026-10-31) dan webhooknya tetap melunasi order, jadi Ciel memakai batas itu.
+MAYAR_EXPIRY_MINUTES = 24 * 60
 
 
 def new_order_id():
@@ -100,12 +103,13 @@ MAYAR_URLS = {
 }
 
 
-def mayar_payload(order_id, amount, redirect_url, email=None, now=None):
-    """Badan Single Payment Request Mayar untuk Pro 30 hari, kedaluwarsa 60 menit."""
+def mayar_payload(order_id, amount, redirect_url, email=None, name=None, now=None):
+    """Badan Single Payment Request Mayar untuk Pro 30 hari, kedaluwarsa 24 jam."""
 
-    expires = time.gmtime((time.time() if now is None else now) + EXPIRY_MINUTES * 60)
+    expires = time.gmtime((time.time() if now is None else now) + MAYAR_EXPIRY_MINUTES * 60)
     payload = {
-        "name": f"Ciel Pro {PRO_DAYS} hari",
+        # Mayar menampilkan "name" sebagai nama pembeli di invoice.
+        "name": str(name)[:100] if name else "Pembeli Ciel",
         "amount": int(amount),
         "description": f"Ciel Pro {PRO_DAYS} hari, order {order_id}",
         "redirectUrl": redirect_url,
@@ -179,6 +183,17 @@ ORDER_MESSAGES = {
 }
 
 
+def expiry_minutes(provider):
+    """Lama halaman bayar penyedia ini bisa dibayar."""
+    return MAYAR_EXPIRY_MINUTES if provider == "mayar" else EXPIRY_MINUTES
+
+
+def payment_window(provider):
+    """Lama halaman bayar sebagai teks: "60 menit" atau "24 jam"."""
+    minutes = expiry_minutes(provider)
+    return f"{minutes // 60} jam" if minutes > 60 and minutes % 60 == 0 else f"{minutes} menit"
+
+
 def order_message(order, now=None):
     """(jenis, teks) untuk status order dari database, atau None jika order tidak dikenal."""
 
@@ -192,7 +207,8 @@ def order_message(order, now=None):
     # dibuka tetap "pending" selamanya di database, padahal transaksi Snap-nya
     # sudah kedaluwarsa (live 2026-10-19: tanpa notifikasi apa pun).
     created = order.get("created_at")
-    if status == "pending" and created and (now or time.time()) - created > EXPIRY_MINUTES * 60:
+    limit = expiry_minutes(order.get("provider")) * 60
+    if status == "pending" and created and (now or time.time()) - created > limit:
         status = "expire"
 
     return ORDER_MESSAGES.get(status, ORDER_MESSAGES["pending"])

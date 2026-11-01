@@ -158,11 +158,10 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
 
     if payments:
         # payments = nama penyedia yang aktif (lihat PAYMENT_PROVIDER di app.py).
-        sent = "email dan namamu" if payments == "Midtrans" else "emailmu"
         stored.append(
             "<strong>Pembelian Ciel Pro:</strong> pembayaran diproses oleh "
             f"<strong>{payments}</strong>, penyedia pembayaran pihak ketiga. "
-            f"Ciel mengirim {sent} ke {payments} untuk bukti bayar, dan "
+            f"Ciel mengirim email dan namamu ke {payments} untuk bukti bayar, dan "
             "menyimpan nomor order, nominal, status bayar, serta masa aktif Pro "
             "dengan kode akunmu. Ciel tidak pernah menerima atau menyimpan data "
             "kartu, rekening, atau PIN e-wallet-mu."

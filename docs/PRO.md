@@ -23,7 +23,7 @@ Paket Pro berisi **Riset Skripsi** (peta sumber), **Kerangka Bab 1–3** dan **C
 | `WRITER_FLOW_ID` | ya, untuk kerangka | – | ID flow "Ciel Penulis" di Langflow. Tanpa ini tombol "Susun kerangka Bab 1–3" tidak tampil. |
 | `KERANGKA_PER_DAY` | tidak | 10 | Kerangka Bab 1–3 per hari per akun. |
 | `CEK_KUTIPAN_PER_DAY` | tidak | 20 | Cek kutipan & kemiripan per hari per akun. Tidak butuh flow: berjalan di app (`draft_check.py`). |
-| `PAYMENT_PROVIDER` | tidak | `midtrans` | Penyedia pembayaran: `midtrans` atau `mayar`. Hanya key penyedia ini yang dipakai. |
+| `PAYMENT_PROVIDER` | tidak | `midtrans` | Penyedia pembayaran: `midtrans` atau `mayar`. Hanya key penyedia ini yang dipakai. Nilai lain (salah ketik) mematikan pembelian dan mencatat `payment_provider_unknown` di log. |
 | `MIDTRANS_SERVER_KEY` | ya, untuk Midtrans | – | Server key Midtrans. Akun baru memakai awalan `Mid-server-` di sandbox maupun produksi (akun lama: `SB-Mid-server-` untuk sandbox); lingkungannya ditentukan `MIDTRANS_PRODUCTION`. Tanpa ini Pro tampil sebagai "sedang disiapkan". |
 | `MIDTRANS_PRODUCTION` | tidak | `false` | `true` memakai akun produksi Midtrans. |
 | `MAYAR_API_KEY` | ya, untuk Mayar | – | API key Mayar dengan akses **Read & Write** (key Read Only ditolak 401 di semua endpoint). Sandbox dari web.mayar.io/api-keys, produksi dari web.mayar.id/api-keys; lingkungannya ditentukan `MAYAR_PRODUCTION`. |
@@ -49,7 +49,7 @@ Midtrans -> Supabase Edge Function midtrans-notify
 ```
 
 - App **tidak pernah** memberi Pro dari parameter URL saat pengguna kembali. Halaman Pricing membaca order terakhir akun itu dari database (2 jam terakhir) dan status Pro yang dibaca ulang.
-- Order yang belum dibayar kedaluwarsa setelah 60 menit.
+- Order Midtrans yang belum dibayar kedaluwarsa setelah 60 menit; order Mayar setelah 24 jam (lihat bagian Mayar).
 - Pembelian berikutnya menambah 30 hari dari sisa masa aktif.
 - Refund atau chargeback hanya dicatat di `pro_orders.midtrans_status`. Pencabutan Pro diputuskan pengelola (SQL di bawah).
 - Logika notifikasi ada di `supabase/functions/midtrans-notify/notification.js` dan dites dengan `node --test supabase/functions/midtrans-notify/notification.test.mjs`.
@@ -99,8 +99,9 @@ Mayar -> Supabase Edge Function mayar-notify?token=<MAYAR_WEBHOOK_TOKEN>
 
 - Webhook Mayar **tidak ditandatangani**. Isinya hanya petunjuk order mana yang dicek; yang memutuskan lunas adalah API Mayar dengan key kita.
 - Di webhook `payment.received` asli, `data.id` dan `data.transactionId` adalah transaksi baru yang dibuat saat membayar. Hanya `data.productId` yang sama dengan `provider_ref`.
-- Mayar mencatat webhook yang dijawab 2xx sebagai SUCCESS dan tidak mengirim ulang, juga lewat `/webhooks/retry`. Tombol **Cek lagi** (dan sekali per sesi sebelum order Mayar dinyatakan kedaluwarsa) meminta `mayar-notify` mengecek ulang `provider_ref` ke API Mayar, jadi webhook yang hilang tetap bisa dipulihkan.
-- Mayar mengabaikan `expiredAt` yang kita kirim: QRIS berlaku 24 jam, sedangkan Pricing menyebut order kedaluwarsa setelah 60 menit. Pembayaran yang terlambat tetap melunasi order lewat webhook.
+- Mayar mencatat webhook yang dijawab 2xx sebagai SUCCESS dan tidak mengirim ulang, juga lewat `/webhooks/retry`. Tombol **Cek lagi** meminta `mayar-notify` mengecek ulang `provider_ref` ke API Mayar, jadi webhook yang hilang tetap bisa dipulihkan.
+- Mayar mengabaikan `expiredAt`: QRIS tetap bisa dibayar 24 jam. Karena itu Ciel mengirim `expiredAt` 24 jam, Pricing menyebut "Halaman bayar berlaku 24 jam", dan order Mayar baru dianggap kedaluwarsa setelah 24 jam (selama itu tombol **Cek lagi** tetap ada).
+- Mayar menampilkan `name` sebagai nama pembeli di invoice, jadi Ciel mengirim nama akun Google pembeli (atau "Pembeli Ciel" jika kosong), bersama emailnya.
 - Jika id dari Mayar gagal disimpan, app mencatat `mayar_unattached order=… ref=… tx=…` di log. Cocokkan manual jika request itu tetap dibayar.
 - Logika webhook ada di `supabase/functions/mayar-notify/notification.js` dan dites dengan `node --test supabase/functions/mayar-notify/notification.test.mjs`.
 
@@ -119,7 +120,9 @@ Mayar -> Supabase Edge Function mayar-notify?token=<MAYAR_WEBHOOK_TOKEN>
 
 Pindah ke produksi: buat key **Read & Write** di web.mayar.id/api-keys setelah verifikasi akun Mayar disetujui. Ulangi langkah 3–4 dengan key produksi, `MAYAR_PRODUCTION=true`, dan host `api.mayar.id` (pengaturan webhook sandbox dan produksi terpisah). Terakhir, isi secrets Streamlit Cloud: `PAYMENT_PROVIDER = "mayar"`, `MAYAR_API_KEY`, `MAYAR_PRODUCTION = "true"`, `MAYAR_WEBHOOK_TOKEN`, lalu beli sekali dengan akun sendiri.
 
-Token webhook ada di URL, jadi bisa tercatat di log request Supabase (hanya admin project yang bisa melihatnya). Ganti token jika bocor: buat token baru, pasang di secrets function dan app, daftarkan ulang URL webhook-nya.
+Token webhook ada di URL dan memang tercatat di log edge function Supabase (terlihat 2026-11-01; hanya admin project yang bisa melihatnya). Mayar tidak menyediakan header atau signature webhook, jadi tidak ada tempat lain untuk token itu. Token ini hanya bisa memicu pengecekan ulang, bukan memberi Pro, karena function tetap mengambil status dari API Mayar. Ganti token jika bocor: buat token baru, pasang di secrets function dan app, daftarkan ulang URL webhook-nya.
+
+Key sandbox di app tidak bisa memberi Pro gratis selama function memakai key produksi: payment request sandbox tidak ada di API produksi, jadi "Cek lagi" dijawab 502 dan webhook sandbox ditolak 403 (tokennya beda). Yang menentukan adalah secret function, jadi pastikan `MAYAR_PRODUCTION=true` di sana (cek digest dengan `supabase secrets list`).
 
 ```sql
 -- Order 7 hari terakhir.
