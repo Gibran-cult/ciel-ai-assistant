@@ -113,7 +113,8 @@ Root's crontab (`crontab -e`, after `mkdir -p /var/log/ciel`):
 
 `update.sh` fast-forwards to `origin/main`, builds the image, and restarts the app only
 when the build succeeded. A failed build leaves the running app as it was and is retried
-on the next run; `tail /var/log/ciel/app_update.log` shows why. A restart drops open
+once an hour (`./update.sh --now` retries at once); `tail /var/log/ciel/app_update.log`
+shows why. A restart drops open
 sessions for a few seconds; the browser reconnects on its own.
 
 ## 8. Switch `app.ciel-ai.web.id` (Go-ahead, about 20 minutes)

@@ -66,7 +66,7 @@ Option A keeps all app traffic and logs in Indonesia, which also shortens the pr
 ### Task 1: App container stack and runbook (agent, no production change)
 
 **Files:**
-- Create: `deploy/app/Dockerfile`, `deploy/app/docker-compose.yml`, `deploy/app/Caddyfile`, `deploy/app/.env.example`, `deploy/app/update.sh`, `deploy/app/README.md`, `.dockerignore`
+- Create: `deploy/app/Dockerfile`, `deploy/app/docker-compose.yml`, `deploy/app/caddy/Caddyfile` (directory-mounted, so a deploy that changes it takes effect), `deploy/app/.env.example`, `deploy/app/update.sh`, `deploy/app/README.md`, `.dockerignore`
 - Modify: `.gitignore`, `.github/workflows/ci.yml` (add `tests.test_app_deploy`; the `bash -n deploy/vps/*.sh` step becomes `bash -n deploy/vps/*.sh deploy/app/*.sh`)
 - Test: `tests/test_app_deploy.py`
 

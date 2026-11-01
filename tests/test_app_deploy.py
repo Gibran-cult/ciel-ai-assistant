@@ -12,7 +12,7 @@ def read(path):
 
 DOCKERFILE = read(APP / "Dockerfile")
 COMPOSE = read(APP / "docker-compose.yml")
-CADDYFILE = read(APP / "Caddyfile")
+CADDYFILE = read(APP / "caddy" / "Caddyfile")
 ENV_EXAMPLE = read(APP / ".env.example")
 UPDATE = read(APP / "update.sh")
 README = read(APP / "README.md")
@@ -45,9 +45,15 @@ class DockerfileTest(unittest.TestCase):
         self.assertIn("deploy/app/secrets.toml", GITIGNORE)
         self.assertIn("deploy/app/.env", GITIGNORE)
 
-    def test_streamlit_config_still_reaches_the_image(self):
-        # config.toml carries the theme and gatherUsageStats = false.
-        self.assertNotIn(".streamlit", [l.rstrip("/") for l in code_lines(DOCKERIGNORE)])
+    def test_runtime_files_still_reach_the_image(self):
+        # config.toml carries the theme and gatherUsageStats = false; the app
+        # reads the logo PNGs from assets/brand. Only exact paths are excluded.
+        for line in code_lines(DOCKERIGNORE):
+            self.assertFalse(line.startswith((".streamlit", "assets")), line)
+            if "*" in line:
+                self.assertIn(line, ("**/__pycache__", "**/*.pyc"))
+            self.assertNotIn(".toml", line.replace("secrets.toml", ""), line)
+            self.assertNotIn(".png", line, line)
 
 
 class ComposeTest(unittest.TestCase):
@@ -56,8 +62,16 @@ class ComposeTest(unittest.TestCase):
         self.assertIn("dockerfile: deploy/app/Dockerfile", COMPOSE)
 
     def test_only_caddy_is_public(self):
-        ports = re.findall(r"-\s*\"(\d+:\d+)\"", COMPOSE)
+        # Any port mapping, quoted or not, bound to an address or not.
+        ports = re.findall(r"^\s*-\s*\"?([\d.:]+:\d+)\"?\s*$", COMPOSE, re.MULTILINE)
         self.assertEqual(sorted(ports), ["443:443", "80:80"])
+        self.assertEqual(COMPOSE.count("ports:"), 1)
+
+    def test_caddy_config_is_a_directory_mount(self):
+        # git replaces a changed file with a new inode; a single-file bind
+        # mount would keep serving the old Caddyfile after a deploy.
+        self.assertIn("./caddy:/etc/caddy:ro", COMPOSE)
+        self.assertNotIn("Caddyfile:/etc/caddy/Caddyfile", COMPOSE)
 
     def test_secrets_file_is_mounted_read_only(self):
         self.assertIn("./secrets.toml:/app/.streamlit/secrets.toml:ro", COMPOSE)
@@ -106,6 +120,16 @@ class UpdateScriptTest(unittest.TestCase):
         # failed build is tried again on the next run instead of being skipped
         # because HEAD already equals origin/main.
         self.assertLess(UPDATE.index("docker compose up -d"), UPDATE.index('> "$DEPLOYED"'))
+
+    def test_a_failing_commit_is_retried_at_most_hourly(self):
+        # A broken dependency install must not re-download everything every
+        # two minutes next to the live app.
+        self.assertIn("RETRY_MINUTES=60", UPDATE)
+        self.assertLess(UPDATE.index('echo "$head" > "$ATTEMPTED"'), UPDATE.index("docker compose build app"))
+        self.assertLess(UPDATE.index('> "$DEPLOYED"'), UPDATE.index('rm -f "$ATTEMPTED"'))
+
+    def test_old_images_are_pruned_after_a_deploy(self):
+        self.assertLess(UPDATE.index('> "$DEPLOYED"'), UPDATE.index("docker image prune -f"))
 
     def test_survives_rewriting_itself(self):
         # git merge can replace this file while bash is reading it; a body

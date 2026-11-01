@@ -4,11 +4,16 @@
 # minutes (README.md, step 7), or by hand.
 #
 # The app is restarted only after the new image has built. The deployed commit
-# is recorded only after the restart, so a failed build is tried again on the
-# next run (and logged each time) instead of being skipped.
+# is recorded only after the restart, so a failed deploy is not forgotten: it
+# is tried again, but at most once an hour, because a failed dependency
+# install would otherwise download everything again every two minutes next to
+# the live app.
 set -euo pipefail
 
-DEPLOYED=/var/lib/ciel/app-deployed
+STATE=/var/lib/ciel
+DEPLOYED=$STATE/app-deployed
+ATTEMPTED=$STATE/app-attempted
+RETRY_MINUTES=60
 
 stamp() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
@@ -27,16 +32,26 @@ main() {
   if [ -f "$DEPLOYED" ] && [ "$(cat "$DEPLOYED")" = "$head" ]; then
     exit 0
   fi
+  # This commit failed less than RETRY_MINUTES ago: wait (or run by hand).
+  if [ "${1:-}" != "--now" ] && [ -f "$ATTEMPTED" ] && [ "$(cat "$ATTEMPTED")" = "$head" ] \
+    && [ -n "$(find "$ATTEMPTED" -mmin -"$RETRY_MINUTES")" ]; then
+    exit 0
+  fi
 
+  mkdir -p "$STATE"
+  echo "$head" > "$ATTEMPTED"
   echo "$(stamp) deploying $head"
   docker compose build app
   docker compose up -d
-  # The Caddyfile is a bind mount: a changed file needs a reload, not a
-  # recreate. Reloading an unchanged one is harmless.
+  # caddy/ is a directory mount, so the container sees a changed Caddyfile;
+  # reloading an unchanged one is a no-op and keeps open connections.
   docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
 
-  mkdir -p "$(dirname "$DEPLOYED")"
   echo "$head" > "$DEPLOYED"
+  rm -f "$ATTEMPTED"
+  # Each deploy leaves the previous image untagged; a lockfile change makes
+  # that about 1 GB on a 60 GB disk.
+  docker image prune -f > /dev/null
   echo "$(stamp) deployed $head"
 }
 
