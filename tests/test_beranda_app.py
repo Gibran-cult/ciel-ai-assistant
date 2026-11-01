@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = ROOT / "app.py"
 sys.path.insert(0, str(ROOT))
 
-from tests.test_chat_store import ENV, SIGNED_IN, Response  # noqa: E402
+from tests.test_chat_store import CONSENTED, ENV, SIGNED_IN, Response  # noqa: E402
 
 FEATURES = {
     "SUPABASE_URL": "https://db.example.invalid",
@@ -34,7 +34,7 @@ def chat(chat_id, project, updated, riset=False, title=None):
 
 
 def no_database():
-    return Mock(side_effect=lambda method, url, **kw: Response([]))
+    return Mock(side_effect=lambda method, url, **kw: Response(CONSENTED.get(url.rsplit("/", 1)[1], [])))
 
 
 class BerandaAppTest(unittest.TestCase):
@@ -80,6 +80,7 @@ class BerandaAppTest(unittest.TestCase):
         self.assertEqual(at.chat_input[0].placeholder, "Tanyakan sesuatu kepada Ciel...")
         for key in ("tpl_jelasin", "tpl_analisis", "tpl_cek_referensi"):
             self.assertIn(key, self.keys(at))
+        self.assertIn("Ciel adalah AI dan bisa keliru. Cek sumbernya sebelum kamu pakai.", self.text(at))
         # Riset Skripsi and Kerangka are off in this deployment, and there is no project file.
         for key in ("tpl_cari_jurnal", "tpl_kerangka", "tpl_ringkas_file"):
             self.assertNotIn(key, self.keys(at))

@@ -51,7 +51,7 @@ Midtrans -> Supabase Edge Function midtrans-notify
 - App **tidak pernah** memberi Pro dari parameter URL saat pengguna kembali. Halaman Pricing membaca order terakhir akun itu dari database (2 jam terakhir) dan status Pro yang dibaca ulang.
 - Order Midtrans yang belum dibayar kedaluwarsa setelah 60 menit; order Mayar setelah 24 jam (lihat bagian Mayar).
 - Pembelian berikutnya menambah 30 hari dari sisa masa aktif.
-- Refund atau chargeback hanya dicatat di `pro_orders.midtrans_status`. Pencabutan Pro diputuskan pengelola (SQL di bawah).
+- Aturan pengembalian dana ada di tab Ketentuan (`terms.py`); cara menanganinya, termasuk SQL penanda refund dan pencabutan Pro, ada di `docs/LEGAL.md` bagian 6.
 - Logika notifikasi ada di `supabase/functions/midtrans-notify/notification.js` dan dites dengan `node --test supabase/functions/midtrans-notify/notification.test.mjs`.
 
 ### Menyiapkan (sekali, sandbox dulu)

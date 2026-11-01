@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = ROOT / "app.py"
 sys.path.insert(0, str(ROOT))
 
-from tests.test_chat_store import ENV, SIGNED_IN, Response  # noqa: E402
+from tests.test_chat_store import CONSENTED, ENV, SIGNED_IN, Response  # noqa: E402
 
 SECRETS = {
     "auth": {"redirect_uri": "http://localhost/oauth2callback"},
@@ -46,7 +46,7 @@ def chats():
 
 
 def database(expires_at):
-    rows = {"pro_members": [{"expires_at": expires_at}] if expires_at else []}
+    rows = {**CONSENTED, "pro_members": [{"expires_at": expires_at}] if expires_at else []}
     return Mock(side_effect=lambda method, url, **kw: Response(rows.get(url.rsplit("/", 1)[1], [])))
 
 

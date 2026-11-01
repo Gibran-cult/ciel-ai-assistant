@@ -99,6 +99,9 @@ jobs:
             tests.test_performance_snapshot \
             tests.test_pricing \
             tests.test_privacy \
+            tests.test_terms \
+            tests.test_consent_app \
+            tests.test_legal_docs \
             tests.test_login \
             tests.test_chat_store \
             tests.test_ciel_pro \

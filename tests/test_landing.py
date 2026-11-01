@@ -85,7 +85,7 @@ class LandingContentTest(unittest.TestCase):
         self.assertNotIn("streamlit.app", page())
         for link in app_links:
             with self.subTest(link=link):
-                self.assertIn(link, {APP, f"{APP}?page=login", f"{APP}?page=pricing", f"{APP}?page=privacy"})
+                self.assertIn(link, {APP, f"{APP}?page=login", f"{APP}?page=pricing", f"{APP}?page=privacy", f"{APP}?page=terms"})
         for match in re.finditer(r'<a\b[^>]*href="([^"]+)"[^>]*>(.*?)</a>', page(), flags=re.S):
             label = visible_text(match.group(2))
             if label.startswith("Masuk"):
@@ -94,6 +94,11 @@ class LandingContentTest(unittest.TestCase):
         for link in re.findall(r'<a\b[^>]*href="([^"]+)"', page()):
             with self.subTest(link=link):
                 self.assertRegex(link, r"^(#|https://|mailto:)")
+
+    def test_footer_links_terms_and_privacy(self):
+        footer = page()[page().index("<footer"):]
+        self.assertIn(f'href="{APP}?page=terms"', footer)
+        self.assertIn(f'href="{APP}?page=privacy"', footer)
 
     def test_no_placeholders_or_contact_stubs(self):
         source = page()

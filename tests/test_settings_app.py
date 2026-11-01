@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = ROOT / "app.py"
 sys.path.insert(0, str(ROOT))
 
-from tests.test_chat_store import ENV, SIGNED_IN, SIGNED_IN_OWNER, Response  # noqa: E402
+from tests.test_chat_store import CONSENTED, ENV, SIGNED_IN, SIGNED_IN_OWNER, Response  # noqa: E402
 
 FEATURES = {
     "SUPABASE_URL": "https://db.example.invalid",
@@ -38,7 +38,7 @@ class SettingsAppTest(unittest.TestCase):
         """Jalankan app. `rows` = {tabel: baris} untuk GET Supabase, `down` = tabel yang gagal."""
         from streamlit.testing.v1 import AppTest
 
-        self.rows = rows if rows is not None else {}
+        self.rows = {**CONSENTED, **(rows if rows is not None else {})}
         self.down = set(down)
         self.post = Mock(return_value=Response(ANSWER))
         self.user = patch.object(streamlit, "user", user or {})
@@ -191,12 +191,12 @@ class SettingsAppTest(unittest.TestCase):
 
     def test_settings_lists_tabs_for_the_login_state(self):
         at = self.start(query={"page": "settings"})
-        self.assertEqual(self.tab_keys(at), ["settabactive_tampilan", "settab_paket", "settab_privasi"])
+        self.assertEqual(self.tab_keys(at), ["settabactive_tampilan", "settab_paket", "settab_privasi", "settab_ketentuan"])
 
         at = self.start(user=SIGNED_IN, query={"page": "settings"})
         self.assertEqual(
             self.tab_keys(at),
-            ["settabactive_profil", "settab_tampilan", "settab_data", "settab_paket", "settab_privasi"],
+            ["settabactive_profil", "settab_tampilan", "settab_data", "settab_paket", "settab_privasi", "settab_ketentuan"],
         )
 
     def test_tab_buttons_switch_the_tab_inside_the_dialog(self):
@@ -296,6 +296,16 @@ class SettingsAppTest(unittest.TestCase):
         self.assertEqual(at.session_state["profile"]["nickname"], "")
         deletes = [c for c in at_requests(self) if c.args[0] == "DELETE"]
         self.assertTrue(deletes[-1].args[1].endswith("/rest/v1/profiles"))
+
+    def test_delete_account_needs_confirmation_and_is_hidden_without_data_controls(self):
+        at = self.start(user=SIGNED_IN, secrets=FEATURES, env={"MEMORY_ADMIN_FLOW_ID": "admin-flow"}, query={"page": "settings", "tab": "data"})
+        self.assertIn("Hapus akun", self.text(at))
+        self.assertTrue(at.button(key="delete_account").disabled)
+        at.checkbox(key="confirm_delete_account").check().run()
+        self.assertFalse(at.button(key="delete_account").disabled)
+
+        at = self.start(user=SIGNED_IN, secrets=FEATURES, query={"page": "settings", "tab": "data"})
+        self.assertNotIn("delete_account", self.keys(at))
 
     def test_data_tab_holds_the_old_controls_and_the_export(self):
         at = self.start(user=SIGNED_IN, env={"MEMORY_ADMIN_FLOW_ID": "admin"}, query={"page": "settings", "tab": "data"})

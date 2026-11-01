@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT))
 
 import chat_store  # noqa: E402
 import riset_export  # noqa: E402
-from tests.test_chat_store import ALICE, ENV, SIGNED_IN, SIGNED_IN_OWNER, Response, State  # noqa: E402
+from tests.test_chat_store import ALICE, CONSENTED, ENV, SIGNED_IN, SIGNED_IN_OWNER, Response, State  # noqa: E402
 
 SOURCE = APP_PATH.read_text(encoding="utf-8")
 
@@ -334,7 +334,7 @@ class RisetAppTest(unittest.TestCase):
     EXCERPTS = "\n\n<!-- ciel-excerpts:v1 W3sibiI6IDEsICJoaWdobGlnaHRzIjogWyJDdXBsaWthbi4iXX1d -->"
 
     def database(self, expires_at):
-        rows = {"pro_members": [{"expires_at": expires_at}] if expires_at else []}
+        rows = {**CONSENTED, "pro_members": [{"expires_at": expires_at}] if expires_at else []}
         return Mock(side_effect=lambda method, url, **kw: Response(rows.get(url.rsplit("/", 1)[1], [])))
 
     def run_riset(self, expires_at):

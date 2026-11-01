@@ -16,6 +16,7 @@ APP_PATH = ROOT / "app.py"
 sys.path.insert(0, str(ROOT))
 
 import chat_store  # noqa: E402
+from terms import LEGAL_VERSION  # noqa: E402
 
 # MEMORY_ADMIN_FLOW_ID is empty on purpose: app.py's load_dotenv() can find a
 # parent .env that sets it, and the Beranda and chat rail then list memories
@@ -25,6 +26,9 @@ ENV = {"NGROK_URL": "http://127.0.0.1:9", "NGROK_USER": "u", "NGROK_PASSWORD": "
 SIGNED_IN = {"is_logged_in": True, "name": "Ciel Tester", "email": "ciel@example.com", "sub": "sub-1"}
 ALICE = "a1b2c3d4e5f60718"
 SIGNED_IN_OWNER = hashlib.sha256(b"ciel-memory:sub-1").hexdigest()[:16]  # memory_owner_id()
+# Supabase rows for an account that already accepted the current terms, so
+# signed-in AppTests reach the chat instead of the consent gate.
+CONSENTED = {"consents": [{"version": LEGAL_VERSION}]}
 
 
 class Response:
@@ -238,6 +242,85 @@ class ProfileStoreTest(unittest.TestCase):
         self.assertIn("alter table public.profiles enable row level security;", sql)
 
 
+class DeleteAccountStoreTest(unittest.TestCase):
+
+    def setUp(self):
+        self.store = chat_store.ChatStore("https://db.example.invalid/", "service-key")
+
+    def tables(self, request):
+        return [(c.args[0], c.args[1].rsplit("/", 1)[1], c.kwargs["params"]["owner"]) for c in request.call_args_list]
+
+    def test_delete_account_removes_only_own_rows_from_three_tables(self):
+        with patch("requests.request", return_value=Response()) as request:
+            self.assertTrue(self.store.delete_account(ALICE))
+
+        self.assertEqual(self.tables(request), [
+            ("DELETE", "chats", f"eq.{ALICE}"),
+            ("DELETE", "projects", f"eq.{ALICE}"),
+            ("DELETE", "profiles", f"eq.{ALICE}"),
+        ])
+
+    def test_delete_account_keeps_going_after_a_failure(self):
+        def answer(method, url, **kwargs):
+            return Response(status=500) if url.endswith("/projects") else Response()
+
+        with self.assertLogs("ciel_ai.chat_store", level="ERROR"),                 patch("requests.request", side_effect=answer) as request:
+            self.assertFalse(self.store.delete_account(ALICE))
+
+        self.assertEqual([table for _, table, _ in self.tables(request)], ["chats", "projects", "profiles"])
+
+
+class ConsentStoreTest(unittest.TestCase):
+
+    def setUp(self):
+        self.store = chat_store.ChatStore("https://db.example.invalid/", "service-key")
+
+    def test_load_consent_returns_newest_version_or_empty(self):
+        with patch("requests.request", return_value=Response([{"version": "2026-11-01"}])) as request:
+            self.assertEqual(self.store.load_consent(ALICE), "2026-11-01")
+
+        call = request.call_args
+        self.assertEqual(call.args[:2], ("GET", "https://db.example.invalid/rest/v1/consents"))
+        self.assertEqual(call.kwargs["params"]["owner"], f"eq.{ALICE}")
+        self.assertEqual(call.kwargs["params"]["order"], "accepted_at.desc")
+        self.assertEqual(call.kwargs["params"]["limit"], "1")
+
+        with patch("requests.request", return_value=Response([])):
+            self.assertEqual(self.store.load_consent(ALICE), "")
+
+    def test_load_consent_failure_is_none(self):
+        with self.assertLogs("ciel_ai.chat_store", level="ERROR"), \
+                patch("requests.request", return_value=Response(status=500)):
+            self.assertIsNone(self.store.load_consent(ALICE))
+
+    def test_save_consent_posts_owner_and_version_without_duplicates(self):
+        with patch("requests.post", return_value=Response()) as post:
+            self.assertTrue(self.store.save_consent(ALICE, "2026-11-01"))
+
+        self.assertEqual(post.call_args.args[0], "https://db.example.invalid/rest/v1/consents")
+        self.assertEqual(post.call_args.kwargs["json"], {"owner": ALICE, "version": "2026-11-01"})
+        self.assertIn("resolution=ignore-duplicates", post.call_args.kwargs["headers"]["Prefer"])
+
+        with self.assertLogs("ciel_ai.chat_store", level="ERROR"), \
+                patch("requests.post", return_value=Response(status=500)):
+            self.assertFalse(self.store.save_consent(ALICE, "2026-11-01"))
+
+    def test_consent_rejects_bad_owner(self):
+        with self.assertLogs("ciel_ai.chat_store", level="ERROR"), \
+                patch("requests.request") as request, patch("requests.post") as post:
+            self.assertIsNone(self.store.load_consent("x; drop"))
+            self.assertFalse(self.store.save_consent("x; drop", "2026-11-01"))
+
+        request.assert_not_called()
+        post.assert_not_called()
+
+    def test_sql_creates_consents_with_rls(self):
+        sql = (ROOT / "docs" / "chat_store.sql").read_text(encoding="utf-8")
+        self.assertIn("create table if not exists public.consents", sql)
+        self.assertIn("primary key (owner, version)", sql)
+        self.assertIn("alter table public.consents enable row level security;", sql)
+
+
 class RateLimitHitTest(unittest.TestCase):
 
     LIMITS = {"user:a:hour": (60, 3600)}
@@ -418,6 +501,7 @@ class SidebarHistoryTest(unittest.TestCase):
 
     def signed_in_store(self, projects=(), chats=()):
         rows = {
+            **CONSENTED,
             "projects": [chat_store.to_project_row(ALICE, p) for p in projects],
             "chats": [chat_store.to_row(ALICE, c) for c in chats],
         }
@@ -450,7 +534,7 @@ class SidebarHistoryTest(unittest.TestCase):
         self.assertFalse(at.exception)
         tables = [c.args[1].rsplit("/", 1)[1] for c in request.call_args_list]
         self.assertEqual(tables[:2], ["projects", "chats"])
-        self.assertLessEqual(set(tables[2:]), {"pro_members", "profiles"})
+        self.assertLessEqual(set(tables[2:]), {"pro_members", "profiles", "consents"})
         self.assertEqual(at.session_state["projects"]["p1"]["files"][0]["name"], "data.csv")
         self.assertEqual(at.session_state["chats"]["c1"]["project_id"], "p1")
         self.assertTrue(at.button(key="proj_p1"))

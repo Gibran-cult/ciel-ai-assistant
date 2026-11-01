@@ -18,7 +18,23 @@ import streamlit as st
 
 
 # Ubah tanggal ini setiap kali isi halaman berubah (Pasal 21 ayat 2).
-PRIVACY_UPDATED = "28 Oktober 2026"
+PRIVACY_UPDATED = "1 November 2026"
+
+
+# Layanan pihak ketiga yang menerima data pengguna: (nama, tugasnya untuk
+# Ciel, negara server). Langflow tidak ada di sini karena berjalan di server
+# Ciel sendiri. Penyedia pembayaran ditambahkan privacy_sections jika aktif.
+SUBPROCESSORS = (
+    ("DeepSeek", "model AI yang menyusun jawaban", "Tiongkok"),
+    ("Exa", "pencarian web dan jurnal", "Amerika Serikat"),
+    ("Google (Gemini API)", "membaca foto yang kamu kirim", "Amerika Serikat"),
+    ("Google", "login dengan akun Google", "Amerika Serikat"),
+    ("Supabase", "database riwayat chat, proyek, profil, dan status Pro", "Jepang"),
+    ("Streamlit Community Cloud", "menjalankan tampilan aplikasi", "Amerika Serikat"),
+    ("ngrok", "jalur terenkripsi ke server Ciel", "Amerika Serikat"),
+    ("Google Fonts", "huruf di halaman depan dan aplikasi Ciel", "Amerika Serikat"),
+    ("GitHub Pages", "menyajikan halaman depan ciel-ai.web.id", "Amerika Serikat"),
+)
 
 
 PRIVACY_CSS = """
@@ -84,7 +100,8 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
     processing = [
         "Pesan dan file yang kamu lampirkan dikirim ke server Ciel untuk dijawab.",
         "Untuk menyusun jawaban, isi pesan juga diproses oleh penyedia model AI "
-        "dan layanan pencarian web pihak ketiga. Server mereka bisa berada di "
+        "dan layanan pencarian web pihak ketiga (daftarnya ada di bagian berikut). "
+        "Server mereka bisa berada di "
         "<strong>luar Indonesia</strong>. Dengan memakai Ciel, kamu menyetujui "
         "pemrosesan ini.",
         "Foto yang kamu kirim diperkecil, lalu dibaca oleh layanan model AI "
@@ -93,6 +110,13 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
         "layanan itu tidak tersedia, foto dibaca oleh model di server Ciel sendiri.",
         "Embedding memory diproses oleh model yang berjalan di server Ciel sendiri.",
     ]
+
+    recipients = SUBPROCESSORS + ((payments, "pembayaran Ciel Pro", "Indonesia"),) if payments else SUBPROCESSORS
+    third_parties = [
+        f"<strong>{html.escape(name)}</strong> ({html.escape(country)}): {html.escape(role)}."
+        for name, role, country in recipients
+    ]
+    third_parties.append("Ciel hanya mengirim data yang dibutuhkan untuk tugas masing-masing.")
 
     stored = [
         (
@@ -164,8 +188,15 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
             f"Ciel mengirim email dan namamu ke {payments} untuk bukti bayar, dan "
             "menyimpan nomor order, nominal, status bayar, serta masa aktif Pro "
             "dengan kode akunmu. Ciel tidak pernah menerima atau menyimpan data "
-            "kartu, rekening, atau PIN e-wallet-mu."
+            "kartu, rekening, atau PIN e-wallet-mu. Catatan pembelian disimpan "
+            "10 tahun karena kewajiban pajak, juga setelah akunmu dihapus."
         )
+
+    stored.append(
+        "<strong>Cookie:</strong> Ciel sendiri tidak memasang cookie iklan atau "
+        "pelacak; cookie yang dipakai hanya untuk login dan keamanan, dan "
+        "statistik pemakaian bawaan Streamlit dimatikan."
+    )
 
     stored.append(
         "<strong>Catatan teknis:</strong> saat terjadi error, server mencatat "
@@ -184,7 +215,8 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
             "samping namamu, di bawah sidebar), lalu <strong>Data saya</strong> untuk "
             "mengunduh riwayat chat, melihat dan menghapus memory-mu, melihat, "
             "mengunduh, dan menghapus dataset pribadimu, serta menghapus riwayat "
-            "chat-mu di server."
+            "chat-mu di server, atau hapus semuanya sekaligus lewat "
+            "<strong>Hapus akun</strong>."
         )
     elif memory_enabled:
         rights.append(
@@ -227,6 +259,7 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
         ("Siapa yang mengelola Ciel", who),
         ("Untuk apa datamu diproses", purpose),
         ("Apa yang terjadi saat kamu mengirim pesan", processing),
+        ("Pihak ketiga yang menerima datamu", third_parties),
         ("Apa yang disimpan", stored),
         ("Hakmu atas datamu", rights),
         ("Pengguna di bawah 18 tahun", children),

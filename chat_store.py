@@ -191,7 +191,7 @@ class ChatStore:
 
         return {item["id"]: item for item in items}
 
-    def _upsert(self, action, table, row):
+    def _upsert(self, action, table, row, resolution="merge-duplicates"):
         # Upsert lewat primary key (owner, id), atau owner saja untuk profil:
         # PostgREST tidak memakai filter di POST, jadi kuncinya ada di badan
         # baris dan divalidasi di sini.
@@ -202,7 +202,7 @@ class ChatStore:
         try:
             response = requests.post(
                 f"{self.base}/{table}",
-                headers={**self.headers, "Prefer": "resolution=merge-duplicates,return=minimal"},
+                headers={**self.headers, "Prefer": f"resolution={resolution},return=minimal"},
                 json=row,
                 timeout=TIMEOUT,
             )
@@ -261,6 +261,45 @@ class ChatStore:
 
     def delete_profile(self, owner):
         return self._request("DELETE", "delete_profile", owner, "profiles") is not None
+
+    def delete_account(self, owner):
+        """Hapus chat, proyek, dan profil akun ini. Semua dicoba walau ada yang gagal.
+
+        Catatan pembelian (pro_orders, pro_members) dan bukti persetujuan
+        (consents) tidak ikut dihapus; lihat docs/chat_store.sql.
+        """
+        results = [
+            self.delete_all(owner),
+            self._request("DELETE", "delete_projects", owner, "projects") is not None,
+            self.delete_profile(owner),
+        ]
+        return all(results)
+
+    def load_consent(self, owner):
+        """Versi ketentuan terbaru yang disetujui akun ini ("" jika belum ada), atau None jika gagal."""
+
+        response = self._request(
+            "GET",
+            "load_consent",
+            owner,
+            "consents",
+            params={"select": "version", "order": "accepted_at.desc", "limit": "1"},
+        )
+
+        if response is None:
+            return None
+
+        try:
+            rows = response.json()
+            return str(rows[0]["version"]) if rows else ""
+        except (ValueError, KeyError, TypeError, AttributeError, IndexError) as error:
+            logger.error("chat_store_error action=load_consent type=%s error=%s", type(error).__name__, error)
+            return None
+
+    def save_consent(self, owner, version):
+        # Persetujuan pertama untuk versi ini yang dipakai sebagai bukti, jadi
+        # baris yang sudah ada tidak ditimpa.
+        return self._upsert("save_consent", "consents", {"owner": owner, "version": version}, "ignore-duplicates")
 
     def load_pro_until(self, owner):
         """

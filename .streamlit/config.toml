@@ -11,3 +11,7 @@ textColor = "#f4f4f2"
 # MB per file. Images are capped at 5 MB and text at 40,000 characters in
 # app.py; this stops oversized uploads before the app reads them.
 maxUploadSize = 25
+
+[browser]
+# Streamlit's built-in usage statistics stay off; the Privasi page promises it.
+gatherUsageStats = false

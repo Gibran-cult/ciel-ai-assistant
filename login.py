@@ -44,8 +44,8 @@ LOGIN_CSS = """
 .stApp .ciel-loginnotes li { margin: 0 0 0.35rem; font-size: 0.8125rem; line-height: 1.55; color: var(--c-muted); }
 .st-key-loginback .stButton > button[kind="secondary"] { border-color: transparent; color: var(--c-muted); }
 .st-key-loginback .stButton > button[kind="secondary"]:hover { background: var(--c-raised); color: var(--c-text); }
-.st-key-loginlegal .stButton > button { width: auto; min-height: 0; padding: 0; color: var(--c-faint); font-size: 0.8125rem; text-decoration: underline; text-underline-offset: 3px; }
-.st-key-loginlegal .stButton > button:hover { background: transparent; color: var(--c-text); }
+.st-key-loginlegal .stButton > button, .st-key-consentlegal .stButton > button { width: auto; min-height: 0; padding: 0; color: var(--c-faint); font-size: 0.8125rem; text-decoration: underline; text-underline-offset: 3px; }
+.st-key-loginlegal .stButton > button:hover, .st-key-consentlegal .stButton > button:hover { background: transparent; color: var(--c-text); }
 .stApp .ciel-peek h2 { margin: 0 0 1rem; padding: 0; font-family: var(--font-sans); font-size: 0.875rem; font-weight: 600; color: var(--c-muted); }
 .ciel-peekcard {
     display: flex;
@@ -70,7 +70,7 @@ LOGIN_CSS = """
 .stApp .ciel-why li { display: flex; align-items: center; gap: 0.75rem; margin: 0; padding: 0.75rem 0.9rem; border-radius: var(--r-md); background: var(--c-raised); font-size: 0.875rem; color: var(--c-text); }
 .ciel-why li span { margin-left: auto; font-size: 0.75rem; color: var(--c-faint); white-space: nowrap; }
 .stApp .ciel-peekcap { margin: 1rem 0 0; font-size: 0.8125rem; color: var(--c-faint); }
-.st-key-loginbox {
+.st-key-loginbox, .st-key-consentbox {
     max-width: 26rem;
     margin: 1.5rem auto 0;
     padding: 2rem 1.75rem 1.5rem;
@@ -79,6 +79,9 @@ LOGIN_CSS = """
     box-shadow: 0 0 0 5px var(--c-bg), 0 0 0 6px var(--c-line);
 }
 .st-key-loginbox .stButton, .st-key-loginbox .stButton button { width: 100%; }
+.st-key-consentbox .stButton:has(button[kind="primary"]), .st-key-consentbox .stButton:has(button[kind="secondary"]),
+.st-key-consentbox button[kind="primary"], .st-key-consentbox button[kind="secondary"] { width: 100%; }
+.st-key-consentbox .ciel-loginhead { margin-bottom: 1rem; }
 @media (max-width: 900px) {
     .st-key-loginpage [data-testid="stHorizontalBlock"] { flex-direction: column; }
     .st-key-loginpage [data-testid="stColumn"] { width: 100% !important; flex: 1 1 auto !important; }
@@ -146,7 +149,7 @@ def login_notes(auth_enabled, rate_limits, history_saved=False):
     return notes
 
 
-def render_login(auth_enabled=False, on_google=None, on_back=None, rate_limits=(20, 60), signed_in_as=None, history_saved=False, on_privacy=None):
+def render_login(auth_enabled=False, on_google=None, on_back=None, rate_limits=(20, 60), signed_in_as=None, history_saved=False, on_privacy=None, on_terms=None):
     """Render halaman masuk.
 
     auth_enabled: True jika login Google (st.login) dikonfigurasi.
@@ -156,6 +159,7 @@ def render_login(auth_enabled=False, on_google=None, on_back=None, rate_limits=(
     signed_in_as: nama/email jika pengguna sudah masuk.
     history_saved: True jika riwayat chat pengguna login disimpan di database.
     on_privacy: callback ke halaman Privasi.
+    on_terms: callback ke halaman Syarat dan Ketentuan.
     """
 
     st.markdown(LOGIN_CSS, unsafe_allow_html=True)
@@ -202,7 +206,8 @@ def render_login(auth_enabled=False, on_google=None, on_back=None, rate_limits=(
                     on_click=on_google,
                 )
                 st.markdown(
-                    '<p class="ciel-loginscope">Ciel cuma minta nama, email, dan foto profil dari akun Google kamu.</p>',
+                    '<p class="ciel-loginscope">Ciel cuma minta nama, email, dan foto profil dari akun Google kamu.</p>'
+                    '<p class="ciel-loginscope">Dengan masuk, kamu menyetujui Syarat dan Ketentuan dan Kebijakan Privasi Ciel.</p>',
                     unsafe_allow_html=True,
                 )
 
@@ -218,8 +223,49 @@ def render_login(auth_enabled=False, on_google=None, on_back=None, rate_limits=(
                     on_click=on_back,
                 )
 
-            with st.container(key="loginlegal"):
+            with st.container(key="loginlegal", horizontal=True, gap="medium"):
+                st.button("Syarat dan Ketentuan", key="login_terms", type="tertiary", on_click=on_terms)
                 st.button("Kebijakan privasi", key="login_privacy", type="tertiary", on_click=on_privacy)
 
         with peek:
             st.markdown(PEEK_HTML, unsafe_allow_html=True)
+
+
+def render_consent(on_accept, on_logout, on_terms, on_privacy):
+    """Gerbang persetujuan sekali per versi ketentuan, setelah login Google.
+
+    on_accept: simpan persetujuan (tombol aktif setelah kotak dicentang).
+    on_logout: st.logout dari app.py.
+    on_terms, on_privacy: buka tab Ketentuan / Privasi di Pengaturan.
+    """
+
+    st.markdown(LOGIN_CSS, unsafe_allow_html=True)
+
+    with st.container(key="consentbox"):
+        st.markdown(
+            f'<div class="ciel-loginbrand">{MARK}Ciel</div>'
+            '<div class="ciel-loginhead">'
+            "<h1>Sebelum mulai</h1>"
+            "<p>Ciel memproses pesanmu lewat layanan pihak ketiga, termasuk penyedia "
+            "model AI di Tiongkok serta server di Jepang dan Amerika Serikat. "
+            "Rinciannya ada di Kebijakan Privasi.</p>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        st.checkbox(
+            "Saya sudah membaca dan menyetujui Syarat dan Ketentuan serta Kebijakan "
+            "Privasi Ciel, termasuk pemrosesan data di luar Indonesia.",
+            key="consent_check",
+        )
+        st.button(
+            "Setuju dan lanjut",
+            key="consent_accept",
+            type="primary",
+            disabled=not st.session_state.get("consent_check"),
+            on_click=on_accept,
+        )
+        st.button("Keluar", key="consent_logout", type="secondary", on_click=on_logout)
+
+        with st.container(key="consentlegal", horizontal=True, gap="medium"):
+            st.button("Syarat dan Ketentuan", key="consent_terms", type="tertiary", on_click=on_terms)
+            st.button("Kebijakan privasi", key="consent_privacy", type="tertiary", on_click=on_privacy)

@@ -195,6 +195,59 @@ class AppDataControlsTest(unittest.TestCase):
             self.assertEqual(self.namespace("")["delete_server_chat_history"](), {"ok": False, "error": "login_required"})
         get.assert_not_called()
 
+    def account_namespace(self, failing=()):
+        import logging
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+
+        class Session(dict):
+            __getattr__ = dict.__getitem__
+            __setattr__ = dict.__setitem__
+
+        def result(name):
+            return {"ok": name not in failing, "error": "request_failed"}
+
+        self.st = SimpleNamespace(session_state=Session(chats={"c1": {}}, projects={"p1": {}}, profile={"nickname": "Raka"},
+                                                        consented=(ALICE, "v")), logout=Mock())
+        self.store = Mock(delete_account=Mock(return_value="database" not in failing))
+        self.calls = []
+
+        def memory_admin(action, **kwargs):
+            self.calls.append(action)
+            return result({"delete_all": "memory", "delete_all_datasets": "dataset"}[action])
+
+        return load_app_functions(
+            ("delete_my_account",),
+            st=self.st, CHAT_STORE=self.store, chat_owner=lambda: ALICE, memory_admin=memory_admin,
+            delete_server_chat_history=lambda: result("history"), logger=logging.getLogger("test_privacy"),
+            clean_profile=lambda raw: {"cleared": True}, new_chat=lambda: None,
+        )
+
+    def test_delete_account_logs_out_only_when_everything_is_gone(self):
+        self.account_namespace()["delete_my_account"]()
+        self.assertEqual(self.calls, ["delete_all", "delete_all_datasets"])
+        self.store.delete_account.assert_called_once_with(ALICE)
+        self.st.logout.assert_called_once()
+        self.assertEqual(dict(self.st.session_state), {})
+
+    def test_partial_delete_clears_what_the_database_lost(self):
+        # The database step worked, so the sidebar must not keep (and re-save) deleted chats.
+        self.account_namespace(failing={"memory"})["delete_my_account"]()
+        self.assertEqual(self.st.session_state["chats"], {})
+        self.assertEqual(self.st.session_state["projects"], {})
+        self.assertEqual(self.st.session_state["profile"], {"cleared": True})
+
+    def test_delete_account_failure_names_what_is_left_and_stays_signed_in(self):
+        self.account_namespace(failing={"memory"})["delete_my_account"]()
+        self.st.logout.assert_not_called()
+        kind, text = self.st.session_state["data_notice"]
+        self.assertEqual(kind, "error")
+        self.assertIn("memory", text)
+        for done in ("riwayat pesan di server", "dataset", "chat, proyek, dan profil"):
+            self.assertNotIn(done, text)
+        # Everything is attempted, so pressing again retries the rest.
+        self.store.delete_account.assert_called_once_with(ALICE)
+
     def test_memory_admin_uses_the_apps_owner_and_parses_json(self):
         ns = self.namespace(ALICE)
         reply = {"outputs": [{"outputs": [{"results": {"message": {"data": {"text": json.dumps({"ok": True, "deleted": 1})}}}}]}]}
@@ -260,6 +313,7 @@ class PrivacyPageTest(unittest.TestCase):
         self.assertIn("<strong>Pengaturan</strong>", full)
         self.assertIn("mengunduh riwayat chat", full)
         self.assertNotIn("kanan atas", full)
+        self.assertIn("<strong>Hapus akun</strong>", full)
 
     def test_sidebar_history_text_follows_the_chat_store(self):
         saved = self.text(retention_days=30, memory_enabled=True, data_controls=True, history_saved=True)
@@ -299,11 +353,32 @@ class PrivacyPageTest(unittest.TestCase):
         self.assertIn("cadangan terenkripsi", text)
         self.assertIn("5 minggu", text)
 
-    def test_third_parties_are_disclosed_without_brand_names(self):
+    def test_recipients_are_named_with_their_country(self):
+        sections = dict(__import__("privacy").privacy_sections(
+            retention_days=30, memory_enabled=True, data_controls=True, payments="Mayar"))
+        text = " ".join(sections["Pihak ketiga yang menerima datamu"])
+        for name, country in (("DeepSeek", "Tiongkok"), ("Exa", "Amerika Serikat"),
+                              ("Supabase", "Jepang"), ("Mayar", "Indonesia"), ("Google Fonts", "Amerika Serikat"),
+                              ("GitHub Pages", "Amerika Serikat")):
+            self.assertIn(name, text)
+            self.assertIn(country, text)
+        self.assertNotIn("Langflow", text)
+
+    def test_payment_recipient_only_when_payments_are_on(self):
+        sections = dict(__import__("privacy").privacy_sections(
+            retention_days=30, memory_enabled=True, data_controls=True))
+        self.assertNotIn("Mayar", " ".join(sections["Pihak ketiga yang menerima datamu"]))
+
+    def test_cookies_and_telemetry_are_disclosed(self):
         text = self.text(retention_days=30, memory_enabled=True, data_controls=True)
-        self.assertIn("penyedia model AI dan layanan pencarian web pihak ketiga", text)
-        for name in ("DeepSeek", "Exa", "Langflow", "ngrok", "Gemini", "Google AI"):
-            self.assertNotIn(name, text)
+        self.assertIn("tidak memasang cookie iklan atau pelacak", text)
+        self.assertIn("untuk login dan keamanan", text)
+        self.assertIn("statistik pemakaian bawaan Streamlit dimatikan", text)
+
+    def test_purchase_records_are_kept_for_tax(self):
+        text = self.text(retention_days=30, memory_enabled=True, data_controls=True, payments="Mayar")
+        self.assertIn("10 tahun", text)
+        self.assertIn("kewajiban pajak", text)
 
     def test_photos_are_disclosed_as_read_by_a_paid_third_party_model(self):
         # Since flow v1.10.0 photos are read through a hosted model (paid tier)
