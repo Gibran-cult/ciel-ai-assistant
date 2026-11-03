@@ -24,6 +24,8 @@ class LegalRegisterTest(unittest.TestCase):
         sys.path.insert(0, str(ROOT))
         import terms
         self.assertNotEqual(terms.LEGAL_VERSION, "2026-11-01")
+        # Gemini became the fallback answer model (privacy change of 2026-11-03).
+        self.assertNotEqual(terms.LEGAL_VERSION, "2026-11-01.2")
 
 
 if __name__ == "__main__":

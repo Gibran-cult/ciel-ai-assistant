@@ -64,6 +64,22 @@ The previous run (2026-10-14, v1.5.1) had 17.4 s, 14.6 s, 14.6 s and 16.7 s.
 
 For comparison, the v1.1.0 baseline recorded a median of 36.2 s and a P95 of 51.1 s. The main contributors to the drop: v1.2.0 stopped sending every message through the local vision model, and v1.5.2 removed the shared test session and shortened sub-agent history. Runs through local Langflow skip ngrok, so public latency is slightly higher. These are observed benchmarks, not service-level guarantees.
 
+### Flow v1.13.0: Gemini when DeepSeek fails (2026-11-03)
+
+On 2026-11-03 DeepSeek answered 503 "Service is too busy" for a while; with the SDK's default 2 retries a request failed after 55-113 s, and the app was down. Measured on test copies on the Langflow PC (no ngrok), 16 cases (chat, concepts, math, worksheet, research, analysis, table, ML, memory save and recall), one run each. DeepSeek was made to fail by a wrong API path (404), so the fallback path spent nothing on DeepSeek.
+
+| Run | Answered | Right tools | Median | Max |
+|---|---|---|---|---|
+| Normal (DeepSeek through Ciel Fallback Model, afternoon) | 16/16 | 16/16 | 8.4 s | 17.6 s |
+| DeepSeek fails, `gemini-3.5-flash-lite` answers (morning) | 16/16 | 15/16 | 9.3 s | 43.3 s |
+| DeepSeek fails, `gemini-3.5-flash-lite` answers (afternoon) | 15/16 | 15/15 | 30.0 s | 62.7 s |
+| DeepSeek fails after the first tool call (morning, 10 runs) | 10/10 | 10/10 | 11.9 s | 16.5 s |
+
+- The fallback is as fast as DeepSeek in the morning but 3-5 times slower in the afternoon (UTC 17:00): Gemini itself was slow then (the earlier experiment component measured the same 20-33 s), and the one failure was Gemini answering 503 "This model is currently experiencing high demand", logged as `Ciel Fallback Model: gemini-3.5-flash-lite failed too`. The app then showed "Model AI Ciel sedang tidak tersedia".
+- `gemini-3.5-flash` and `gemini-3.8-flash` timed out on this key (7/16 and 0/16), so the fallback stays on flash-lite.
+- In the morning run flash-lite answered a three-problem worksheet itself instead of calling the Math Tutor (answer correct), and twice wrote a `[1]` marker with no search and no source list. Ciel Source Guard now removes such markers.
+- The answers were correct in both runs; the one "Analisis dimulai" check that failed on the normal path was only the bold first line.
+
 ### Flow v1.12.0: thinking off and the Calculator (2026-10-18)
 
 Measured on the Langflow PC (no ngrok), own session per request with app tweaks, one run per question. "Before" is production with thinking on, earlier the same day:

@@ -12,6 +12,9 @@ FLOW_V180 = ROOT / "flow" / "v1.8.0" / "Ciel_AI_Long-Term_Memory_Master.json"
 RESEARCH_SUBFLOW = ROOT / "flow" / "subflows" / "Web_Research_Assistant.json"
 COMPONENTS = ROOT / "flow" / "components"
 GUARDED = {"CielExaSearch": "ciel_exa_search.py", "CielSourceGuard": "ciel_source_guard.py"}
+# ciel_source_guard.py changed in main flow v1.13.0 (unlisted [n] markers);
+# this snapshot keeps the guard code it shipped with.
+SUPERSEDED = {"CielSourceGuard": "1e081c38bf116baba58d8d85e505f6f2b0598f7556738a9c3a58265c023892ab"}
 
 
 def agent(flow):
@@ -124,8 +127,11 @@ class ResearchSubflowContractTest(unittest.TestCase):
         for kind, filename in GUARDED.items():
             with self.subTest(component=kind):
                 code = nodes[kind]["template"]["code"]["value"]
-                source = (COMPONENTS / filename).read_text(encoding="utf-8")
-                self.assertEqual(code.splitlines(), source.splitlines())
+                if kind in SUPERSEDED:
+                    self.assertEqual(hashlib.sha256(code.encode()).hexdigest(), SUPERSEDED[kind])
+                else:
+                    source = (COMPONENTS / filename).read_text(encoding="utf-8")
+                    self.assertEqual(code.splitlines(), source.splitlines())
                 self.assertEqual(nodes[kind]["metadata"]["code_hash"], hashlib.sha256(code.encode()).hexdigest()[:12])
                 self.assertNotIn("[probe", code)
 

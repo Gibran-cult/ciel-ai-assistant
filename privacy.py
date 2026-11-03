@@ -18,7 +18,7 @@ import streamlit as st
 
 
 # Ubah tanggal ini setiap kali isi halaman berubah (Pasal 21 ayat 2).
-PRIVACY_UPDATED = "1 November 2026"
+PRIVACY_UPDATED = "3 November 2026"
 
 
 # Layanan pihak ketiga yang menerima data pengguna: (nama, tugasnya untuk
@@ -27,7 +27,7 @@ PRIVACY_UPDATED = "1 November 2026"
 SUBPROCESSORS = (
     ("DeepSeek", "model AI yang menyusun jawaban", "Tiongkok"),
     ("Exa", "pencarian web dan jurnal", "Amerika Serikat"),
-    ("Google (Gemini API)", "membaca foto yang kamu kirim", "Amerika Serikat"),
+    ("Google (Gemini API)", "membaca foto yang kamu kirim, dan menyusun jawaban saat DeepSeek sedang sibuk atau tidak tersedia", "Amerika Serikat"),
     ("Google", "login dengan akun Google", "Amerika Serikat"),
     ("Supabase", "database riwayat chat, proyek, profil, dan status Pro", "Jepang"),
     ("Streamlit Community Cloud", "menjalankan tampilan aplikasi", "Amerika Serikat"),
@@ -108,6 +108,9 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
         "pihak ketiga dengan paket berbayar yang tidak memakai data untuk "
         "melatih model; servernya juga bisa berada di luar Indonesia. Jika "
         "layanan itu tidak tersedia, foto dibaca oleh model di server Ciel sendiri.",
+        "Jika DeepSeek sedang sibuk atau tidak tersedia, pesanmu dijawab oleh "
+        "model AI cadangan, Google (Gemini API), dengan paket berbayar yang "
+        "tidak memakai data untuk melatih model; servernya di Amerika Serikat.",
         "Embedding memory diproses oleh model yang berjalan di server Ciel sendiri.",
     ]
 
@@ -255,6 +258,8 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
         "setelah mengetahuinya.",
         "Jika isi halaman ini berubah, perubahannya diumumkan di halaman ini "
         "sebelum berlaku.",
+        "Perubahan 3 November 2026: Google (Gemini API) juga menjadi model AI "
+        "cadangan yang menyusun jawaban saat DeepSeek sedang sibuk atau tidak tersedia.",
     ]
 
     advice = [

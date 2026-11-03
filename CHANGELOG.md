@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Gemini answers when DeepSeek fails (flow v1.13.0)
+- New `flow/components/ciel_fallback_model.py` replaces the main flow's DeepSeek node. DeepSeek still answers, with a 60 s timeout and no retries; when a call fails (503 "too busy", 402 empty balance, timeout), `gemini-3.5-flash-lite` answers that call, and after one failure the rest of the run goes straight to Gemini. Tool results already gathered are kept. Both models' failures are logged.
+- When Gemini fails too, the app says "Model AI Ciel sedang tidak tersedia" and asks to try again in a few minutes, instead of the generic internal-error message (`app.MODEL_UNAVAILABLE`, the prefix of the component's error).
+- Ciel Source Guard also removes `[n]` markers that point at no entry in the answer's "Sumber:" list, with or without a search. Code, math, intervals such as `[0, 2]`, `x = [1]` and Markdown links are left alone. The Riset Skripsi flow and the old Web Research sub-flow keep the guard code they shipped with (their contract tests pin its hash).
+- The Privasi page names Google (Gemini API) as the fallback model that answers when DeepSeek is busy or unavailable, with a dated change notice; `terms.LEGAL_VERSION` is `2026-11-03`, so every account accepts again once. The flow switches only after this is live.
+- Measured on test copies: normal path 16/16 (median 8.4 s); with DeepSeek failing, 16/16 in the morning (median 9.3 s) and 15/16 in the afternoon (median 30.0 s, one Gemini 503). Details in `docs/OBSERVABILITY.md`.
+
 ### Vendor data terms reviewed
 - `docs/LEGAL.md` section 3 records what each vendor's own documents say (2026-11-01) and the action left for each. The biggest finding is that Streamlit Community Cloud allows personal, non-commercial use only. DeepSeek's privacy policy uses inputs for training with an email opt-out. Exa uses query data to improve its products. Gemini's paid tier does not train. The Supabase DPA must be signed from the dashboard.
 - The Privasi page now says DeepSeek and Exa may use the data they receive to train or improve their models. `terms.LEGAL_VERSION` is `2026-11-01.2`, so every account is asked to accept again once.

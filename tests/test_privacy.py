@@ -397,6 +397,18 @@ class PrivacyPageTest(unittest.TestCase):
         self.assertIn("foto dibaca oleh model di server Ciel sendiri", text)
         self.assertNotIn("Foto dan embedding memory diproses oleh model yang berjalan di server Ciel sendiri", text)
 
+    def test_gemini_fallback_for_answers_is_disclosed(self):
+        # Since flow v1.13.0 Gemini answers when DeepSeek fails; announced on
+        # the page (dated) before the flow switched, as the page promises.
+        sections = dict(__import__("privacy").privacy_sections(
+            retention_days=30, memory_enabled=True, data_controls=True))
+        recipients = " ".join(sections["Pihak ketiga yang menerima datamu"])
+        self.assertIn("menyusun jawaban saat DeepSeek sedang sibuk atau tidak tersedia", recipients)
+        processing = " ".join(sections["Apa yang terjadi saat kamu mengirim pesan"])
+        self.assertIn("model AI cadangan, Google (Gemini API), dengan paket berbayar", processing)
+        notice = " ".join(sections["Kebocoran data dan perubahan halaman ini"])
+        self.assertIn("Perubahan 3 November 2026: Google (Gemini API)", notice)
+
     def test_app_passes_the_operator_name(self):
         self.assertIn("operator=OPERATOR_NAME", APP_PATH.read_text(encoding="utf-8"))
 
