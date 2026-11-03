@@ -23,7 +23,7 @@ def load_app_functions():
                               "security_event"))
         or (isinstance(node, ast.ClassDef) and node.name == "CielError")
         or (isinstance(node, ast.Assign)
-            and getattr(node.targets[0], "id", None) in ("MARKDOWN_IMAGE", "IMAGE_REMOVED"))
+            and getattr(node.targets[0], "id", None) in ("MARKDOWN_IMAGE", "IMAGE_REMOVED", "MODEL_UNAVAILABLE"))
     ]
 
     namespace = {
@@ -204,6 +204,23 @@ class TestResiliencePolicy(unittest.TestCase):
             mock_post.call_count,
             1,
         )
+
+    def test_both_models_failing_gets_its_own_message(self):
+        # Shape of Langflow's 500 detail when Ciel Fallback Model's DeepSeek and
+        # Gemini both failed (the component starts its error with the marker).
+        detail = (
+            '{"detail":"{\\"message\\":\\"Error running graph: Error building Component Agent: '
+            '\\\\n\\\\nCiel model unavailable: deepseek-flash failed: APIStatusError: Service is too busy.\\"}"}'
+        )
+        with patch("requests.post", return_value=DummyResponse(status_code=500, text=detail)):
+            with self.assertLogs("test_resilience", level="ERROR"):
+                result = ask_langflow("test")
+
+        self.assertIn("Model AI Ciel sedang tidak tersedia.", result)
+        self.assertIn("coba lagi dalam beberapa menit", result)
+        self.assertIn("Request ID:", result)
+        self.assertNotIn("deepseek", result.lower())
+        self.assertNotIn("internal error", result)
 
     def test_internal_server_error(self):
 

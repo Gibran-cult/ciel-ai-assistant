@@ -71,6 +71,7 @@ jobs:
             tests.test_flow_v1102_contract \
             tests.test_flow_v1110_contract \
             tests.test_flow_v1120_contract \
+            tests.test_flow_v1130_contract \
             tests.test_flow_riset_v100_contract \
             tests.test_flow_riset_v110_contract \
             tests.test_riset_components \
@@ -88,6 +89,7 @@ jobs:
             tests.test_secrets \
             tests.test_supply_chain \
             tests.test_source_guard \
+            tests.test_fallback_model \
             tests.test_vision_images \
             tests.test_vision_router \
             tests.test_personal_datasets \

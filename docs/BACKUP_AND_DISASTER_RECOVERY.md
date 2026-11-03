@@ -13,7 +13,7 @@ The following parts of production are **not in Git** and need their own protecte
 | Part | Where it lives | Notes |
 |---|---|---|
 | App secrets | Streamlit Cloud Secrets, local `.streamlit/secrets.toml` / `.env` | `NGROK_URL`, `NGROK_USER`, `NGROK_PASSWORD`, `LANGFLOW_API_KEY`, `FLOW_ID`, optional `[auth]` and rate limits |
-| Langflow global variables | Langflow database | At least `DEEPSEEK_API_KEY` (main Agent and the DeepSeek sub-flows) and `EXA_API_KEY` (Web Research). Flows store only the variable names. |
+| Langflow global variables | Langflow database | At least `DEEPSEEK_API_KEY` (main Agent and the DeepSeek sub-flows), `EXA_API_KEY` (Web Research) and `GEMINI_API_KEY` (Vision Router, and the main Agent's fallback model since v1.13.0). Flows store only the variable names. |
 | Sub-flows | Langflow database | Math Tutor Agent and Knowledge Retriever, called by Run Flow; Web Research Assistant, kept as the rollback path for research. Verified Data Analyst was removed in v1.11.0 (a backup is in the flow backups). |
 | Built-in sales dataset | `~/.ciel_ai/builtin_datasets/200_sales_data.csv` on the Langflow host | Read by Ciel Table Analyst (`file_name=200_sales_data`). Copied from Langflow file storage (`200_sales_data (1).csv`, 200 rows); keep a copy with the flow backups. |
 | Knowledge base | `~/.langflow/knowledge_bases` on the Langflow host | Knowledge base `TITANIC_DATA_SCIENCE_SOLUTIONS`, used by Knowledge Retriever |

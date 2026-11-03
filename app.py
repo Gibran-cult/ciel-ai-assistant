@@ -2384,6 +2384,12 @@ def strip_markdown_images(text):
     return MARKDOWN_IMAGE.subn(IMAGE_REMOVED, str(text))
 
 
+# Awal pesan error Ciel Fallback Model (flow/components/ciel_fallback_model.py)
+# saat DeepSeek dan model cadangannya sama-sama gagal; Langflow menaruhnya di
+# detail HTTP 500.
+MODEL_UNAVAILABLE = "Ciel model unavailable"
+
+
 def ask_langflow(message, tweaks=None, session_id=None, flow_id=None, timeout=240):
 
     flow_id = flow_id or FLOW_ID
@@ -2559,6 +2565,16 @@ def ask_langflow(message, tweaks=None, session_id=None, flow_id=None, timeout=24
                 "Silakan coba lagi dalam beberapa saat.\n\n"
                 f"HTTP Status: {status}\n"
                 f"Request ID: `{request_id}`"
+            )
+
+        if status == 500 and MODEL_UNAVAILABLE in (getattr(response, "text", "") or ""):
+            return CielError(
+                "Model AI Ciel sedang tidak tersedia.\n\n"
+                "Model utama dan cadangannya sama-sama tidak bisa menjawab saat ini. "
+                "Silakan coba lagi dalam beberapa menit.\n\n"
+                f"HTTP Status: {status}\n"
+                f"Request ID: `{request_id}`\n"
+                "Penyebab: model AI utama dan cadangan gagal."
             )
 
         if status == 500:

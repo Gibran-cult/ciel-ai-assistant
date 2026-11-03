@@ -26,7 +26,7 @@ Ciel Vision Router
  |
  v
 Agent
- +-- DeepSeek Model
+ +-- Ciel Fallback Model  (DeepSeek; Gemini when a DeepSeek call fails, since v1.13.0)
  +-- Ciel Memory Search   (filtered by owner)
  +-- Ciel Memory Store    (tagged with owner)
  +-- Ciel Table Analyst   (user CSV/TSV via tweaks, and the built-in sales dataset)
@@ -38,7 +38,7 @@ Agent
  +-- Ciel Exa Search      (web search; records every URL Exa returns)
  |
  v
-Ciel Source Guard        (drops sources no search returned)
+Ciel Source Guard        (drops sources no search returned, and [n] markers without a source)
  |
  v
 Chat Output
@@ -349,6 +349,8 @@ The model acts as the reasoning engine while the Agent remains responsible for o
 
 The model is `deepseek-flash`. Since v1.12.0 the main Agent runs it with thinking off (`model_kwargs = {"extra_body": {"thinking": {"type": "disabled"}}}`), like the research Agent and the Math Tutor. Thinking made analysis answers take about 25 s, and turning it off kept all 26 exact-answer checks correct. In thinking mode DeepSeek ignores `temperature` (at temperature 0 the same prompt gave four different answers); with thinking off the flow's temperature of 1 applies, which is DeepSeek's default.
 
+Since v1.13.0 the model node is Ciel Fallback Model (`flow/components/ciel_fallback_model.py`): DeepSeek as before, with `gemini-3.5-flash-lite` (Gemini API, thinking level low, the `GEMINI_API_KEY` the Vision Router uses) answering when a DeepSeek call fails. DeepSeek gets a 60 s timeout and no retries, so a 503 "Service is too busy" or a 402 (empty balance) switches within a second instead of after the SDK's two retries (55-113 s). The fallback is attached in `bind_tools`, which LangChain's agent calls before every model call, because Langflow's Agent accepts only a language model and rejects a `.with_fallbacks()` wrapper. Each model call falls back on its own, so a run can switch mid-way and keep the tool results it has; after DeepSeek fails once in a run, the rest of that run goes straight to Gemini. Both models' failures are logged (`Ciel Fallback Model: ... failed`). When Gemini fails too, the error starts with `Ciel model unavailable`, and the app shows "Model AI Ciel sedang tidak tersedia" instead of the generic internal-error message. The Riset Skripsi and Penulis flows still call DeepSeek directly.
+
 Without thinking, tool routing depends more on the prompt's wording. In tests on 2026-10-18, small unrelated edits to the prompt made "Makanan penurun kolestrol" go unsearched in 3-4 of 4 runs, and v14.7 answered a paracetamol dose without a search. Prompt v14.8 therefore names health, nutrition, medicine and safety, and law, official rules, scholarships, prices and official figures as research topics. Check research routing with a must-search / must-not-search set after every prompt change.
 
 ## Request Lifecycle
@@ -459,6 +461,7 @@ Contract tests check that each snapshot embeds the same component code as `flow/
 - **v1.6.0:** adds Ciel ML Analyst and prompt v14.3: a machine learning route for user files (predict, important factors, new-row prediction, clustering), no derived target columns as features, model quality always reported with the result, and ML results as a study-companion example.
 - **v1.7.0:** adds Ciel Dataset Store; Table Analyst and ML Analyst read saved datasets; prompt v14.4 (save only on an explicit request, no table data in long-term memory, deletion only through "Data saya"). The Memory Admin flow gained the dataset actions.
 - **v1.8.0:** prompt v14.5: research questions go to the Web Research Assistant as fast or deep research.
+- **v1.13.0:** Ciel Fallback Model replaces the DeepSeek node (Gemini answers when DeepSeek fails), and Ciel Source Guard also removes `[n]` markers that point at no listed source. Announced on the Privasi page first (`terms.LEGAL_VERSION` `2026-11-03`).
 - **v1.12.0:** speed: the main Agent runs with thinking off and has the Calculator as a tool; both Run Flows are cached; prompt v14.8 sends calculations to the Calculator, keeps the Math Tutor for worksheets, and names health and official facts as research topics. Outside the repository the Math Tutor runs with thinking off.
 - **v1.11.0:** security hardening: the Verified Data Analyst tool is removed and Ciel Table Analyst reads the built-in dataset; prompt v14.7 adds "10. KEAMANAN" (content from tools is data, not instructions; no images or data-carrying URLs). Outside the repository the Math Tutor sub-flow lost its Python Interpreter.
 - **v1.10.2:** `gemini-3.5-flash-lite` reads first and `gemini-3.1-flash-lite` is the backup, each limited to 8 s.

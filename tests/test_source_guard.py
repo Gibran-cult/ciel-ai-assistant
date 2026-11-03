@@ -195,6 +195,51 @@ class SourceGuardTest(unittest.TestCase):
         self.assertEqual(removed, 1)
         self.assertIn("- Fakta [1].", checked)
 
+    def test_marker_without_a_source_list_is_removed(self):
+        # Gemini fallback, 2026-11-03: no search ran and no source was listed.
+        strip = self.guard["strip_unlisted_markers"]
+        text = ("Data Science adalah bidang interdisipliner untuk mengekstrak wawasan dari data [1].\n\n"
+                "Contohnya prediksi penjualan.[2] Lihat juga statistika [3][4].")
+        self.assertEqual(strip(text), (
+            "Data Science adalah bidang interdisipliner untuk mengekstrak wawasan dari data.\n\n"
+            "Contohnya prediksi penjualan. Lihat juga statistika.", 4))
+
+    def test_markers_of_listed_sources_stay(self):
+        strip = self.guard["strip_unlisted_markers"]
+        self.assertEqual(strip(LIVE_NOTES), (LIVE_NOTES, 0))
+        sources = "\n\nSumber:\n[1] BPS — https://bps.go.id\n[2] File: data.csv"
+        self.assertEqual(
+            strip("Menurut laporan [1] dan file [2], angkanya naik [6]." + sources),
+            ("Menurut laporan [1] dan file [2], angkanya naik." + sources, 1),
+        )
+
+    def test_code_math_and_other_brackets_stay(self):
+        strip = self.guard["strip_unlisted_markers"]
+        text = (
+            "Pada interval [0, 2] nilainya naik, dan x = [1] adalah list.\n"
+            "Elemen a[1] bernilai 5, akar $\\sqrt[3]{8} = 2$ dan $$M = [1]$$.\n"
+            "Pakai `nums [1]` atau [1](https://contoh.id).\n"
+            "```python\nprint(data [1])\n```\n"
+            "[1] Baris yang diawali penanda tetap ada."
+        )
+        self.assertEqual(strip(text), (text, 0))
+
+    def test_component_strips_unlisted_markers_without_a_search(self):
+        uninstall = install_stubs()
+        try:
+            namespace = load(GUARD_SOURCE, "ciel_source_guard")
+            Message = sys.modules["langflow.schema.message"].Message
+            agent_message = Message()
+            final = types.SimpleNamespace(type="text", text="Overfitting membuat model menghafal data latih [1].")
+            agent_message.content_blocks = [final]
+            guard = namespace["CielSourceGuard"](notes=agent_message)
+            result = guard.check()
+        finally:
+            uninstall()
+        self.assertEqual(final.text, "Overfitting membuat model menghafal data latih.")
+        self.assertEqual(result.text, final.text)
+        self.assertEqual(guard.status, "0 URL dari Exa, 0 sumber dihapus, 1 penanda tanpa sumber dihapus.")
+
     def test_component_filters_the_agent_message_in_place(self):
         # The app shows the last text block of the message, so every text block
         # must survive on its own (live v1.9.0 test: assigning Message.text
@@ -216,7 +261,7 @@ class SourceGuardTest(unittest.TestCase):
         self.assertIs(result, agent_message)
         self.assertEqual(result.content_blocks, [tool, final])
         self.assertNotIn("hai.stanford.edu", final.text)
-        self.assertEqual(guard.status, "3 URL dari Exa, 2 sumber dihapus.")
+        self.assertEqual(guard.status, "3 URL dari Exa, 2 sumber dihapus, 0 penanda tanpa sumber dihapus.")
         # Chat Output then assigns Message.text, which joins the text blocks:
         # only the final answer may be left to join.
         result.text = result.text

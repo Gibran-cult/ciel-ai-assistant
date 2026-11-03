@@ -6,9 +6,13 @@ every line under "Sumber:" whose URLs Ciel Exa Search did not return, the [n]
 markers of those entries, and findings whose only markers pointed at removed
 entries. One line at the end says how many sources were removed.
 
-It never adds other text. Answers from runs without a search pass through
-unchanged, and so do source lines without a URL (an attached file, the
-Knowledge Base). The Agent message is filtered in place, block by block,
+It also removes [n] markers that point at no "Sumber:" entry, with or without
+a search (v1.13.0; 2026-11-03, the Gemini fallback wrote "dari data [1]."
+without searching or listing a source). Code, math and other bracketed numbers
+stay.
+
+It never adds other text. Source lines without a URL (an attached file, the
+Knowledge Base) are kept. The Agent message is filtered in place, block by block,
 because the app shows the last text block of the message. Text from earlier
 Agent rounds is dropped so the stored answer is the final answer only.
 
@@ -31,6 +35,10 @@ SOURCES_HEADING = re.compile(r"^\W*sumber\W*$", re.IGNORECASE)
 SOURCE_ENTRY = re.compile(r"^\W*\[(\d+)\]")
 MARKER = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
 URL = re.compile(r"https?://[^\s<>\"'\[\]]+")
+# One citation marker after prose: "data [1]." or "data.[1]". Not "x = [1]",
+# "a[1]", a Markdown link "[1](url)" or an interval such as "[0, 2]".
+CITATION = re.compile(r"(?:(?<=\w)[ \t]|(?<=[.,;:!?)*_\]\"'”])[ \t]?)\[(\d+)\](?!\()")
+CODE_OR_MATH = re.compile(r"```.*?```|`[^`\n]*`|\$\$.*?\$\$|\$[^$\n]*\$", re.DOTALL)
 
 
 def cited_urls(line):
@@ -110,6 +118,39 @@ def filter_sources(text, retrieved_urls):
     return f"{checked}\n\n{note}", removed_lines
 
 
+def strip_unlisted_markers(text):
+    """(text, number of removed markers) without [n] markers that no "Sumber:" entry carries."""
+    lines = text.splitlines()
+    heading = next((i for i in range(len(lines) - 1, -1, -1) if SOURCES_HEADING.match(lines[i])), None)
+    if heading is None:
+        prose, listed = text, set()
+    else:
+        prose = "\n".join(lines[:heading])
+        listed = {entry.group(1) for entry in map(SOURCE_ENTRY.match, lines[heading + 1:]) if entry}
+
+    removed = 0
+
+    def drop(match):
+        nonlocal removed
+        if match.group(1) in listed:
+            return match.group(0)
+        removed += 1
+        return ""
+
+    parts, start = [], 0
+    for skipped in CODE_OR_MATH.finditer(prose):
+        parts += [CITATION.sub(drop, prose[start:skipped.start()]), skipped.group(0)]
+        start = skipped.end()
+    parts.append(CITATION.sub(drop, prose[start:]))
+
+    if not removed:
+        return text, 0
+    checked = "".join(parts)
+    if heading is not None:
+        checked = "\n".join([checked] + lines[heading:])
+    return checked, removed
+
+
 def text_contents(message):
     """Text items of a message's content blocks (flat or grouped under .contents)."""
     for block in getattr(message, "content_blocks", None) or []:
@@ -161,16 +202,22 @@ class CielSourceGuard(Component):
         # it replaces every text block with one joined block (the app would then
         # show earlier rounds too). So filter inside the blocks and assign text
         # only for a message without blocks, and only when it changed.
-        removed = 0
+        removed = markers = 0
         items = list(text_contents(message))
         for item in items:
             item.text, count = filter_sources(item.text, retrieved)
+            item.text, unlisted = strip_unlisted_markers(item.text)
             removed += count
+            markers += unlisted
         if not items and isinstance(message.text, str):
             checked, removed = filter_sources(message.text, retrieved)
-            if removed:
+            checked, markers = strip_unlisted_markers(checked)
+            if removed or markers:
                 message.text = checked
         keep_final_answer_only(message)
 
-        self.status = f"{len(set(retrieved))} URL dari Exa, {removed} sumber dihapus."
+        self.status = (
+            f"{len(set(retrieved))} URL dari Exa, {removed} sumber dihapus, "
+            f"{markers} penanda tanpa sumber dihapus."
+        )
         return message
