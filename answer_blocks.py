@@ -240,7 +240,7 @@ def _load(body):
 def _parse_grafik(body):
     spec = _load(body)
     kind = spec.get("jenis")
-    if kind not in _GRAFIK:
+    if not isinstance(kind, str) or kind not in _GRAFIK:
         raise _Invalid("jenis grafik tidak dikenal")
     return Visual(_GRAFIK[kind](spec))
 
@@ -268,9 +268,13 @@ _CLOSER = re.compile(r"^```[ \t]*\r?$", re.M)
 
 
 def _markdown(text):
-    if text.strip():
-        return [Markdown(tidy_math(text.strip("\r\n")))]
-    return []
+    if not text.strip():
+        return []
+    text = text.strip("\r\n")
+    try:
+        return [Markdown(tidy_math(text))]
+    except Exception:  # noqa: BLE001 - lebih baik teks apa adanya daripada gagal
+        return [Markdown(text)]
 
 
 def parse_answer(text: str) -> list:
@@ -301,6 +305,8 @@ def parse_answer(text: str) -> list:
             segments.append(_parse_grafik(body) if kind == "grafik" else _parse_kuis(body))
         except _Invalid as exc:
             segments.append(Broken(kind, str(exc)))
+        except Exception as exc:  # noqa: BLE001 - teks model tak boleh merusak jawaban
+            segments.append(Broken(kind, f"galat tak terduga: {type(exc).__name__}"))
 
 
 # --------------------------------------------------------------------------- tidy_math
@@ -370,6 +376,7 @@ def _find_closer(line, start):
 
 
 def _tidy_prose(chunk):
+    chunk = chunk.replace("\x00", "")   # NUL dipakai sebagai penanda; buang dari teks model
     stash: list[str] = []
 
     def hide(match):

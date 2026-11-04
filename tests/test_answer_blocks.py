@@ -1,6 +1,7 @@
 """Pemecah jawaban jadi segmen markdown/grafik/kuis dan perapian matematika (answer_blocks.py)."""
 
 import json
+import random
 import sys
 import unittest
 from pathlib import Path
@@ -148,6 +149,26 @@ class ParseAnswerTest(unittest.TestCase):
     def test_math_is_tidied_in_markdown_segments(self):
         segs = parse_answer(r"Nilai \(x = 2,5\) ya.")
         self.assertEqual(segs[0].text, "Nilai $x = 2{,}5$ ya.")
+
+
+class RobustnessTest(unittest.TestCase):
+    def test_unhashable_jenis_is_broken(self):
+        for body in ('{"jenis": []}', '{}', '{"jenis": {"a": 1}}', '{"jenis": 5}'):
+            with self.subTest(body=body):
+                self.assertIsInstance(only(f"```ciel-grafik\n{body}\n```"), Broken)
+
+    def test_nul_placeholder_text_does_not_raise(self):
+        self.assertIsInstance(parse_answer("a \x000\x00 b")[0], Markdown)
+        self.assertNotIn("\x00", tidy_math("pakai `kode` \x000\x00 \x001\x00"))
+
+    def test_fuzz_never_raises(self):
+        rng = random.Random(1234)
+        pieces = ["```ciel-grafik\n", "```ciel-kuis\n", "```\n", "```", "$", "$$", "\\(", "\\)", "\\[", "\\]",
+                  "\x00", "\x000\x00", "{", "}", "[", "]", '"jenis"', '"alur"', ":", ",", "1,5", "`", "\n",
+                  "\r\n", " ", "x", "5", '"soal"', '"jawaban"', "null", "NaN", "\\"]
+        for _ in range(3000):
+            text = "".join(rng.choice(pieces) for _ in range(rng.randint(0, 30)))
+            self.assertIsInstance(parse_answer(text), list)
 
 
 class TidyMathTest(unittest.TestCase):
