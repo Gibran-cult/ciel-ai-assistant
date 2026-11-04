@@ -80,6 +80,7 @@ jobs:
             tests.test_kerangka_app \
             tests.test_draft_check \
             tests.test_answer_cache \
+            tests.test_visuals \
             tests.test_answer_cache_app \
             tests.test_cek_kutipan_app \
             tests.test_gateway_policy \
