@@ -16,7 +16,7 @@ from answer_pdf import (  # noqa: E402
     answer_pdf,
     answer_png,
     SPILL_NOTE,
-    _compose,
+    _png_document,
     document_title,
     latex_to_text,
     wants_document,
@@ -38,15 +38,6 @@ MATH_ANSWER = (
     f"{GRAFIK}\n\n{KUIS}\n\n{KUIS}\n\n"
     "Sumber:\n[1] Kemdikbud — Matematika SMA — https://buku.kemdikbud.go.id/mat\n"
 )
-
-
-def answer_pdf_png_source(content):
-    """PDF 120 x 600 mm yang dirasterisasi answer_png, setelah catatan lanjutan."""
-    from answer_pdf import _write_footer, _write_spill_note
-
-    pdf = _compose(content, "Uji", png=True).pdf
-    (_write_spill_note if pdf.page_no() > 1 else _write_footer)(pdf)
-    return bytes(pdf.output())
 
 
 def pdf_text(data):
@@ -89,9 +80,9 @@ class AnswerPdfTest(unittest.TestCase):
 
     def test_png_spill_note_is_written_on_page_one(self):
         long = "\n\n".join(["Paragraf " + "kata " * 200] * 20)
-        first_page = PdfReader(io.BytesIO(answer_pdf_png_source(long))).pages[0].extract_text()
+        first_page = PdfReader(io.BytesIO(_png_document(long, "Uji"))).pages[0].extract_text()
         self.assertIn(SPILL_NOTE, first_page)
-        self.assertNotIn(SPILL_NOTE, pdf_text(answer_pdf_png_source("Halo")))
+        self.assertNotIn(SPILL_NOTE, pdf_text(_png_document("Halo", "Uji")))
 
     def test_png_of_short_answer_is_cropped(self):
         png = Image.open(io.BytesIO(answer_png("Halo dunia", "Uji")))

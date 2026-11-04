@@ -565,19 +565,22 @@ def answer_pdf(content, title):
     return bytes(writer.pdf.output())
 
 
+def _png_document(content, title):
+    """PDF 120 x 600 mm yang dirasterisasi answer_png, lengkap dengan catatan/footer."""
+    pdf = _compose(content, title, png=True).pdf
+    if pdf.page_no() > 1:
+        _write_spill_note(pdf)
+    else:
+        _write_footer(pdf)
+    return bytes(pdf.output())
+
+
 def answer_png(content, title):
     """Jawaban sebagai PNG selebar 1080 px, dipotong tepat di akhir isi."""
     import pypdfium2 as pdfium
     from PIL import Image, ImageChops
 
-    writer = _compose(content, title, png=True)
-    pdf = writer.pdf
-    if pdf.page_no() > 1:
-        _write_spill_note(pdf)
-    else:
-        _write_footer(pdf)
-
-    document = pdfium.PdfDocument(bytes(pdf.output()))
+    document = pdfium.PdfDocument(_png_document(content, title))
     try:
         page = document[0]
         image = page.render(scale=PNG_WIDTH_PX / page.get_width()).to_pil().convert("RGB")
