@@ -33,7 +33,9 @@ from account_settings import (
     profile_context,
     settings_tab,
 )
+from answer_blocks import Broken, Markdown, Quiz, Visual, parse_answer, tidy_math
 from answer_cache import AnswerCache, cacheable_question, question_key
+from answer_pdf import answer_pdf, answer_png, document_title, wants_document
 from beranda import greeting, has_riset_map, latest_riset, relative_time, templates_for
 from chat_sources import answer_parts, count_line, source_buttons_html, source_label, summarize
 from chat_store import ChatStore
@@ -51,6 +53,7 @@ from payments import (
 )
 from pricing import PLANS, render_pricing, safe_contact_url
 from riset_export import report_docx, report_filename
+import visuals
 from writing import APPROACHES, KERANGKA_FOOTNOTE, MAX_OBJECT_CHARS, finish_kerangka, kerangka_payload
 from draft_check import MAX_DRAFT_CHARS, MIN_DRAFT_WORDS, check_report, clean_draft, draft_from_file, split_excerpts, word_count
 from privacy import render_privacy
@@ -941,6 +944,29 @@ details.ciel-home-more { display: block; }
 }
 .ciel-copy:hover { background: var(--c-raised-strong); }
 .ciel-copy:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+/* "Simpan gambar" / "Unduh PDF" under an answer match "Salin jawaban" above.
+   Only the label (p) gets the font; the icon keeps its Material family. */
+:is([class*="st-key-ansimg_"], [class*="st-key-anspdf_"]) .stDownloadButton > button {
+    margin-top: 0.5rem;
+    min-height: 2rem;
+    height: 2rem;
+    padding: 0 0.875rem;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: var(--c-raised);
+    color: var(--c-text);
+}
+:is([class*="st-key-ansimg_"], [class*="st-key-anspdf_"]) .stDownloadButton > button:hover {
+    background: var(--c-raised-strong);
+    border: 0;
+    color: var(--c-text);
+}
+:is([class*="st-key-ansimg_"], [class*="st-key-anspdf_"]) .stDownloadButton > button:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+:is([class*="st-key-ansimg_"], [class*="st-key-anspdf_"]) .stDownloadButton > button p {
+    color: inherit;
+    font: 500 0.8125rem var(--font-sans);
+}
+:is([class*="st-key-ansimg_"], [class*="st-key-anspdf_"]) .stDownloadButton > button [data-testid="stIconMaterial"] { color: inherit; font-size: 1rem; }
 /* With the rail the page widens; the composer stays under the conversation. */
 .stMain .block-container:has(.st-key-rail) { max-width: 78rem; }
 body:has(.st-key-rail) [data-testid="stBottomBlockContainer"] { max-width: 78rem; }
@@ -1025,6 +1051,34 @@ body:has(.st-key-rail) [data-testid="stBottomBlockContainer"] { max-width: 78rem
     background: var(--c-bg);
     margin: 0.5rem 0 0.7rem;
 }
+
+/* ---------- Callouts, graphs, quizzes in answers ---------- */
+[data-testid="stChatMessage"] blockquote {
+    margin: 0.7rem 0;
+    padding: 0.65rem 0.95rem;
+    background: var(--c-raised);
+    border: 0;
+    border-left: 3px solid var(--c-accent);
+    border-radius: 8px;
+}
+[data-testid="stChatMessage"] blockquote > :first-child { margin-top: 0; }
+[data-testid="stChatMessage"] blockquote > :last-child { margin-bottom: 0; }
+.ciel-visual { max-width: 640px; margin: 0.5rem 0; }
+.ciel-visual svg { display: block; max-width: 100%; height: auto; }
+/* Long formulas scroll inside themselves, not the whole page (375px). */
+[data-testid="stChatMessage"] .katex-display { overflow-x: auto; overflow-y: hidden; max-width: 100%; }
+[class*="st-key-"][class*="_quizcard"] {
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--c-line);
+    border-left: 3px solid var(--c-accent);
+    border-radius: var(--r-md);
+    background: var(--c-raised);
+    max-width: 44rem;
+    margin: 0.5rem 0;
+}
+.ciel-quiz-title { margin: 0 0 0.35rem; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--c-muted); }
+.ciel-quiz-ok { color: var(--c-ok); font-weight: 600; }
+.ciel-quiz-no { color: var(--c-err); font-weight: 600; }
 
 /* ---------- Composer ---------- */
 [data-testid="stBottom"] > div,
@@ -4488,7 +4542,7 @@ def render_files(names):
 
 
 def render_user(message):
-    st.markdown(message["content"])
+    st.markdown(message.get("content") or "")
     render_files(message.get("files"))
 
     images = message.get("images") or []
@@ -4617,6 +4671,131 @@ def render_rail(summary, memories, riset_message):
         parts.append(section("Riset ini", None, f'<dl class="ciel-kv">{facts}</dl>'))
 
     st.markdown(f'<div class="ciel-rail">{"".join(parts)}</div>', unsafe_allow_html=True)
+
+
+def render_visual(spec):
+    """Satu grafik sebagai <figure>. Gagal apa pun jadi catatan, tidak pernah galat mentah."""
+    try:
+        svg = cached_svg(json.dumps(spec, sort_keys=True))
+    except ValueError as exc:
+        logger.warning("Grafik gagal dirender: %s", exc)
+        st.caption("Grafik ini tidak bisa ditampilkan.")
+        return
+    # Bukan st.html: DOMPurify-nya (profil html) membuang semua elemen SVG, jadi
+    # grafik tidak terlihat. Aman lewat unsafe_allow_html karena SVG ini dibuat di
+    # server oleh visuals.py dari spec yang sudah divalidasi: teks di-escape oleh
+    # matplotlib dan aria-label lewat quoteattr; HTML dari model tidak pernah sampai
+    # ke panggilan ini. Satu baris tanpa baris kosong, supaya Markdown tidak
+    # mengakhiri blok HTML di tengah gambar.
+    flat = re.sub(r">\s+<", "><", svg).replace("\n", " ")
+    st.markdown(f'<figure class="ciel-visual">{flat}</figure>', unsafe_allow_html=True)
+
+
+@st.cache_data(max_entries=256, show_spinner=False)
+def cached_svg(spec_json):
+    return visuals.render_svg(json.loads(spec_json))
+
+
+def render_quiz(quiz, key, card_key):
+    """Kuis kecil: pengecekan lokal saja, tanpa panggilan model dan tanpa mengubah riwayat."""
+    # Kunci kartu unik ("quizcard"): kunci widget di dalamnya tidak boleh memuatnya,
+    # karena CSS memilih kartu lewat kunci itu.
+    with st.container(key=card_key):
+        st.markdown('<p class="ciel-quiz-title">Coba sendiri</p>', unsafe_allow_html=True)
+        st.markdown(tidy_math(quiz.soal))
+
+        if not quiz.pilihan:
+            with st.expander("Lihat jawaban"):
+                st.markdown(tidy_math(str(quiz.jawaban)))
+                if quiz.pembahasan:
+                    st.markdown(tidy_math(quiz.pembahasan))
+            return
+
+        choice = st.radio(
+            "Pilih jawabanmu",
+            range(len(quiz.pilihan)),
+            index=None,
+            format_func=lambda i: tidy_math(quiz.pilihan[i]),
+            key=f"{key}_pick",
+            label_visibility="collapsed",
+        )
+
+        if st.button("Cek jawaban", key=f"{key}_check"):
+            st.session_state[f"{key}_checked"] = choice if choice is not None else -1
+
+        # Hasil hanya untuk pilihan yang sedang dicek; ganti pilihan = cek lagi.
+        checked = st.session_state.get(f"{key}_checked")
+
+        if checked is not None and checked != -1 and checked == choice:
+            if choice == quiz.jawaban:
+                st.markdown('<p class="ciel-quiz-ok">Benar.</p>', unsafe_allow_html=True)
+            else:
+                # Teks tetap seperti "Benar."; jawaban dari model lewat st.markdown biasa
+                # (tanpa HTML) supaya matematikanya ikut dirender.
+                st.markdown('<p class="ciel-quiz-no">Belum tepat.</p>', unsafe_allow_html=True)
+                st.markdown("Jawabannya: " + tidy_math(quiz.pilihan[quiz.jawaban]))
+            if quiz.pembahasan:
+                st.markdown(tidy_math(quiz.pembahasan))
+        elif checked == -1 and choice is None:
+            st.caption("Pilih satu jawaban dulu.")
+
+
+def render_answer_body(text, key_prefix):
+    """Gantikan st.markdown(teks): teks, grafik, kuis, atau catatan untuk blok rusak."""
+    quiz_n = 0
+
+    for segment in parse_answer(text):
+
+        if isinstance(segment, Markdown):
+            st.markdown(segment.text)
+
+        elif isinstance(segment, Visual):
+            render_visual(segment.spec)
+
+        elif isinstance(segment, Quiz):
+            render_quiz(segment, f"{key_prefix}_quiz{quiz_n}", f"{key_prefix}_quizcard{quiz_n}")
+            quiz_n += 1
+
+        elif isinstance(segment, Broken):
+            logger.info("Blok %s ditolak: %s", segment.kind, segment.reason)
+            st.caption(
+                "Grafik ini tidak bisa ditampilkan."
+                if segment.kind == "grafik"
+                else "Kuis ini tidak bisa ditampilkan."
+            )
+
+
+def render_answer_downloads(content, index, messages):
+    """Simpan gambar selalu; Unduh PDF hanya jika pengguna memintanya. Dibuat saat diklik."""
+    previous = messages[index - 1] if index > 0 else None
+    request = (previous.get("content") or "") if previous and previous.get("role") == "user" else ""
+    title = document_title(content, request)
+    chat_id = st.session_state.active_chat
+
+    with st.container(horizontal=True, gap="small"):
+
+        st.download_button(
+            "Simpan gambar",
+            data=lambda: answer_png(content, title),
+            file_name=report_filename(title, prefix="Ciel", ext="png"),
+            mime="image/png",
+            key=f"ansimg_{chat_id}_{index}",
+            icon=":material/image:",
+            type="tertiary",
+            on_click="ignore",
+        )
+
+        if wants_document(request):
+            st.download_button(
+                "Unduh PDF",
+                data=lambda: answer_pdf(content, title),
+                file_name=report_filename(title, prefix="Ciel", ext="pdf"),
+                mime="application/pdf",
+                key=f"anspdf_{chat_id}_{index}",
+                icon=":material/picture_as_pdf:",
+                type="tertiary",
+                on_click="ignore",
+            )
 
 
 def render_error(content, index, show_retry):
@@ -5469,13 +5648,17 @@ for index, message in enumerate(messages):
             # Riwayat lama (Supabase) dibersihkan lagi saat ditampilkan.
             content = strip_markdown_images(message["content"])[0]
             before, sources, after = answer_parts(content)
-            st.markdown(before)
+            body_key = f"ans_{st.session_state.active_chat}_{index}"
+            render_answer_body(before, f"{body_key}_a")
 
             if sources:
                 st.markdown(source_buttons_html(sources), unsafe_allow_html=True)
 
             if after:
-                st.markdown(after)
+                render_answer_body(after, f"{body_key}_b")
+
+            if message.get("kind") not in (RISET_KIND, KERANGKA_KIND):
+                render_answer_downloads(content, index, messages)
 
             if message.get("kind") == RISET_KIND:
 
