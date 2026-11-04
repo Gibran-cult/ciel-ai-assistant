@@ -82,6 +82,24 @@ class FlowV1140ContractTest(unittest.TestCase):
                 self.assertNotIsInstance(parts[0], Broken)
                 self.assertIsInstance(parts[0], Quiz if lang == "ciel-kuis" else Visual)
 
+    def test_consistency_rules_live_in_section_11(self):
+        start = self.prompt.index("11. TAMPILAN JAWABAN")
+        for sentence in (
+            "Dalam mode analisis (bagian 6B), format 6B tetap dipakai apa adanya",
+            'Kuis "Coba sendiri" menggantikan pertanyaan cek pemahaman di bagian 8.',
+            "Angka di dalam JSON ditulis sebagai angka JSON biasa dengan titik desimal (2.5)",
+        ):
+            with self.subTest(sentence=sentence[:40]):
+                self.assertEqual(self.prompt.count(sentence), 1)
+                self.assertGreater(self.prompt.index(sentence), start)
+        banner = "=" * 64
+        self.assertIn(banner + "\n11. TAMPILAN JAWABAN\n" + banner + "\n", self.prompt)
+
+    def test_version_and_old_math_rules(self):
+        self.assertIn("v15.0", self.prompt.split("\n", 1)[0])
+        self.assertNotIn("v14.8", self.prompt)
+        self.assertNotIn("- Jangan gunakan $, $$", self.prompt)
+
     def test_no_illustration_promise(self):
         self.assertIn("belum bisa membuat ilustrasi atau mengedit foto", self.prompt)
 
