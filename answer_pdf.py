@@ -35,8 +35,11 @@ ACCENT = (37, 99, 235)
 RULE = (209, 213, 219)
 TINT = (230, 230, 226)   # latar callout (--c-raised terang)
 
+# Akhiran percakapan (pdfnya, cetakkan, cetaklah, printin) tetap dihitung;
+# -an tidak, supaya "cetakan kue" dan "percetakan" tidak memunculkan tombol PDF.
 _DOCUMENT_WORDS = re.compile(
-    r"\b(pdf|cetak|dicetak|print|printable|lembar (soal|latihan|kerja)|worksheet|handout|modul)\b",
+    r"\b(pdf|cetak|dicetak|print|printable|lembar (soal|latihan|kerja)|worksheet|handout|modul)"
+    r"(nya|kan|lah|in|kah)?\b",
     re.IGNORECASE,
 )
 
