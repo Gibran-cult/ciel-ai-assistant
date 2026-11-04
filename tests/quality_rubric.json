@@ -15,7 +15,7 @@
       },
       {
         "id": "format",
-        "description": "Gunakan format matematika plain text/Unicode dan hindari LaTeX mentah."
+        "description": "Rumus memakai $...$ atau $$...$$; tidak ada perintah LaTeX di luar tanda $."
       }
     ]
   },

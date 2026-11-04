@@ -72,6 +72,7 @@ jobs:
             tests.test_flow_v1110_contract \
             tests.test_flow_v1120_contract \
             tests.test_flow_v1130_contract \
+            tests.test_flow_v1140_contract \
             tests.test_flow_riset_v100_contract \
             tests.test_flow_riset_v110_contract \
             tests.test_riset_components \
@@ -80,6 +81,8 @@ jobs:
             tests.test_kerangka_app \
             tests.test_draft_check \
             tests.test_answer_cache \
+            tests.test_visuals \
+            tests.test_answer_pdf \
             tests.test_answer_cache_app \
             tests.test_cek_kutipan_app \
             tests.test_gateway_policy \
@@ -121,6 +124,8 @@ jobs:
             tests.test_vps_deploy \
             tests.test_migrate_flows \
             tests.test_backend_health \
+            tests.test_safe_expr \
+            tests.test_answer_blocks \
             tests.test_ci_coverage
 
       # Node that comes with the runner (no extra setup): the Edge Function's

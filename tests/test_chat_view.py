@@ -94,6 +94,22 @@ class CopyButtonScriptTest(unittest.TestCase):
         self.assertIn("Tersalin", js)
         self.assertIn('[aria-label="Chat message from assistant"]', js)
 
+    def test_download_button_css_leaves_the_icon_font_alone(self):
+        css = app_constants()["CIEL_CSS"]
+        rules = [r for r in css.split("}") if "st-key-ansimg_" in r]
+        self.assertTrue(rules)
+        for rule in rules:
+            selector, _, body = rule.partition("{")
+            if "stIconMaterial" in selector:
+                self.assertNotIn("font:", body)
+                self.assertNotIn("font-family", body)
+            elif not selector.rstrip().endswith("p"):
+                self.assertNotIn("font:", body)
+                self.assertNotIn("font-family", body)
+        joined = "".join(rules)
+        self.assertIn("margin-top: 0.5rem", joined)
+        self.assertIn(":focus-visible", joined)
+
     def test_copied_answer_includes_its_sources_and_is_read_at_click_time(self):
         # Final review: the Sumber block moved into separate buttons, so the
         # copy must add them back; the text is looked up when clicked.
@@ -191,6 +207,139 @@ class ChatPageTest(unittest.TestCase):
             at.run()
         (stored,) = at.session_state["chats"].values()
         self.assertIsInstance(stored["messages"][-1]["elapsed"], int)
+
+
+class VisualAnswerTest(unittest.TestCase):
+    """Graphs, quizzes and callouts in answers (Task 4) and download buttons (Task 6)."""
+
+    start = ChatPageTest.start
+    text = ChatPageTest.text
+
+    def answer(self, content, request="jelaskan"):
+        return self.start([
+            {"role": "user", "content": request},
+            {"role": "assistant", "error": False, "content": content},
+        ])
+
+    def test_visual_block_renders_as_figure(self):
+        from tests.test_answer_blocks import GRAFIK
+
+        at = self.answer(f"Lihat grafik ini.\n\n{GRAFIK}\n\nSelesai.")
+        # st.html runs DOMPurify's html profile, which strips every SVG element, so the
+        # figure goes through st.markdown(unsafe_allow_html=True) as one HTML block.
+        figures = self.figures(at)
+        self.assertEqual(len(figures), 1)
+        self.assertTrue(figures[0].value.startswith('<figure class="ciel-visual">'))
+        self.assertNotIn("\n\n", figures[0].value)   # a blank line would end the HTML block
+        self.assertFalse([el for el in at.get("html") if "ciel-visual" in el.proto.body])
+        self.assertFalse([md for md in at.markdown if "jenis" in md.value])
+
+    def figures(self, at):
+        return [md for md in at.markdown if "ciel-visual" in md.value and "<svg" in md.value]
+
+    def test_wrong_choice_shows_the_answer_as_math(self):
+        quiz = '```ciel-kuis\n{"soal": "Turunan dari $x^3$?", "pilihan": ["$3x^2$", "$x^2$"], "jawaban": 0}\n```'
+        at = self.answer(quiz)
+        at.radio[0].set_value(1)
+        at.run()
+        next(b for b in at.button if b.label == "Cek jawaban").click()
+        at.run()
+        self.assertFalse(at.exception)
+        self.assertIn("Belum tepat", self.text(at))
+        self.assertIn("Jawabannya: $3x^2$", [md.value for md in at.markdown])
+        self.assertFalse([md for md in at.markdown if "&#x27;" in md.value or "\\$3x" in md.value])
+
+    def test_quiz_checks_the_choice(self):
+        from tests.test_answer_blocks import KUIS
+
+        at = self.answer(f"Coba ini.\n\n{KUIS}")
+        self.assertIn("Coba sendiri", self.text(at))
+        at.radio[0].set_value("±3")
+        at.run()
+        next(b for b in at.button if b.label == "Cek jawaban").click()
+        at.run()
+        self.assertFalse(at.exception)
+        self.assertIn("Benar", self.text(at))
+        self.assertEqual(len(at.session_state["chats"]["c1"]["messages"]), 2)
+
+    def test_broken_block_shows_note_not_json(self):
+        at = self.answer('Ini:\n\n```ciel-grafik\n{"jenis": "pie"}\n```\n\nSelesai.')
+        self.assertIn("Grafik ini tidak bisa ditampilkan.", [c.value for c in at.caption])
+        self.assertFalse([md for md in at.markdown if '"pie"' in md.value or "jenis" in md.value])
+
+    def test_plain_answer_unchanged(self):
+        at = self.answer("Pecahan adalah **bagian** dari keseluruhan.")
+        self.assertIn("Pecahan adalah **bagian** dari keseluruhan.", [md.value for md in at.markdown])
+        self.assertFalse(self.figures(at))
+
+    def test_fixture_renders_every_kind_and_wrong_choice_is_explained(self):
+        fixture = ROOT / ".superpowers" / "sdd" / "2026-11-04-ciel-visual-answers" / "ui-fixture.md"
+        if not fixture.exists():
+            self.skipTest("fixture not present")
+        at = self.answer(fixture.read_text(encoding="utf-8"))
+        self.assertEqual(len(self.figures(at)), 4)
+        self.assertFalse([md for md in self.figures(at) if "\n\n" in md.value])
+        self.assertEqual(len(at.expander), 1)
+        self.assertIn("Grafik ini tidak bisa ditampilkan.", [c.value for c in at.caption])
+        at.radio[0].set_value(0)
+        at.run()
+        next(b for b in at.button if b.label == "Cek jawaban").click()
+        at.run()
+        self.assertIn("Belum tepat", self.text(at))
+
+    def test_quiz_widget_keys_never_match_the_card_selector(self):
+        from tests.test_answer_blocks import KUIS
+
+        css = app_constants()["CIEL_CSS"]
+        self.assertIn('[class*="_quizcard"]', css)
+        self.assertNotIn('[class*="_quiz"]', css)
+        at = self.answer(f"{KUIS}\n\n{KUIS}")
+        keys = [w.key for w in list(at.radio) + list(at.button) if w.key]
+        self.assertTrue(keys)
+        self.assertFalse([k for k in keys if "quizcard" in k])
+        self.assertEqual(len(keys), len(set(keys)))
+
+    def test_old_user_message_without_content_renders(self):
+        at = self.start([
+            {"role": "user"},
+            {"role": "assistant", "error": False, "content": "Jawaban lama."},
+        ])
+        self.assertEqual(len(self.buttons(at, "Unduh PDF")), 0)
+        self.assertEqual(len(self.buttons(at, "Simpan gambar")), 1)
+
+    def buttons(self, at, label):
+        return [b for b in at.get("download_button") if b.proto.label == label]
+
+    def test_every_answer_has_simpan_gambar(self):
+        at = self.start([
+            {"role": "user", "content": "apa itu pecahan"},
+            {"role": "assistant", "error": False, "content": "Bagian dari keseluruhan."},
+            {"role": "user", "content": "contohnya"},
+            {"role": "assistant", "error": False, "content": "Setengah adalah 1/2."},
+        ])
+        self.assertEqual(len(self.buttons(at, "Simpan gambar")), 2)
+        self.assertEqual(len(self.buttons(at, "Unduh PDF")), 0)
+
+    def test_pdf_button_only_when_asked(self):
+        at = self.start([
+            {"role": "user", "content": "buatkan lembar soal pecahan pdf"},
+            {"role": "assistant", "error": False, "content": "# Lembar Soal\n\n1. 1/2 + 1/4"},
+            {"role": "user", "content": "apa itu pecahan"},
+            {"role": "assistant", "error": False, "content": "Bagian dari keseluruhan."},
+        ])
+        self.assertEqual(len(self.buttons(at, "Unduh PDF")), 1)
+        self.assertEqual(len(self.buttons(at, "Simpan gambar")), 2)
+
+    def test_riset_and_error_messages_get_no_new_buttons(self):
+        at = self.start([
+            {"role": "user", "content": "Riset Skripsi: x"},
+            {"role": "assistant", "error": False, "kind": "riset_skripsi", "topic": "x", "content": RISET_TEXT},
+            {"role": "user", "content": "q"},
+            {"role": "assistant", "error": True, "content": "Permintaan gagal diproses. Silakan coba lagi."},
+        ])
+        self.assertEqual(len(self.buttons(at, "Simpan gambar")), 0)
+        self.assertEqual(len(self.buttons(at, "Unduh PDF")), 0)
+        self.assertEqual(len(self.buttons(at, "Unduh DOCX")), 1)
 
 
 if __name__ == "__main__":
