@@ -23,7 +23,7 @@ from privacy import PRIVACY_CSS
 # Versi yang disetujui pengguna di gerbang persetujuan (tabel consents).
 # Naikkan setiap kali Ketentuan atau Privasi berubah secara material, supaya
 # setiap akun diminta setuju lagi sekali.
-LEGAL_VERSION = "2026-11-03"
+LEGAL_VERSION = "2026-11-04"
 
 # Ubah tanggal ini setiap kali isi halaman berubah.
 TERMS_UPDATED = "1 November 2026"

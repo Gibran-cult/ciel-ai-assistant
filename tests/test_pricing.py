@@ -69,6 +69,13 @@ class PricingHonestyTest(unittest.TestCase):
         for word in ("riset", "csv", "foto", "proyek"):
             self.assertIn(word, free)
 
+    def test_pro_lists_ai_image_with_quota(self):
+        pro = next(plan for plan in pricing.PLANS if plan["id"] == "pro")
+        self.assertIn("Edit gambar dengan AI & ilustrasi (3 per hari)", pro["features"])
+
+    def test_free_lists_manual_edit(self):
+        self.assertIn("Edit gambar", pricing.PLANS[0]["features"])
+
     def test_free_plan_extras_follow_the_app_config(self):
         self.assertEqual(
             pricing.free_plan_extras((5, 50), memory_enabled=True),

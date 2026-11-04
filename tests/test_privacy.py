@@ -409,6 +409,23 @@ class PrivacyPageTest(unittest.TestCase):
         notice = " ".join(sections["Kebocoran data dan perubahan halaman ini"])
         self.assertIn("Perubahan 3 November 2026: Google (Gemini API)", notice)
 
+    def test_ai_photo_edit_to_deepseek_is_disclosed(self):
+        # Plan 2 (image edit): Edit AI sends the photo to DeepSeek, which may train on it.
+        sections = dict(__import__("privacy").privacy_sections(
+            retention_days=30, memory_enabled=True, data_controls=True))
+        processing = " ".join(sections["Apa yang terjadi saat kamu mengirim pesan"])
+        self.assertIn("Jika kamu memakai Edit AI atau Ilustrasi (Ciel Pro), foto dan instruksimu dikirim ke DeepSeek", processing)
+        self.assertIn("DeepSeek dapat memakai data yang diterimanya untuk melatih model", processing)
+        self.assertIn("Edit manual diproses di server Ciel saja.", processing)
+        # The AI-edit line comes right after the photo line.
+        photo = next(i for i, line in enumerate(sections["Apa yang terjadi saat kamu mengirim pesan"]) if line.startswith("Foto yang kamu kirim"))
+        self.assertTrue(sections["Apa yang terjadi saat kamu mengirim pesan"][photo + 1].startswith("Jika kamu memakai Edit AI"))
+        recipients = " ".join(sections["Pihak ketiga yang menerima datamu"])
+        self.assertIn("model AI yang menyusun jawaban, memahami foto untuk Edit AI, dan menggambar ilustrasi", recipients)
+        notice = " ".join(sections["Kebocoran data dan perubahan halaman ini"])
+        self.assertIn("Perubahan 4 November 2026: foto yang kamu pilih untuk Edit AI dikirim ke DeepSeek.", notice)
+        self.assertEqual(__import__("privacy").PRIVACY_UPDATED, "4 November 2026")
+
     def test_app_passes_the_operator_name(self):
         self.assertIn("operator=OPERATOR_NAME", APP_PATH.read_text(encoding="utf-8"))
 
