@@ -12,7 +12,7 @@ from unittest.mock import patch
 import requests
 
 SOURCE = (Path(__file__).resolve().parents[1] / "flow" / "components" / "ciel_image_ai.py").read_text(encoding="utf-8")
-KEY = "sk-test-key-not-real-0000"
+KEY = "test-key-not-real"
 
 
 def install_stubs():
