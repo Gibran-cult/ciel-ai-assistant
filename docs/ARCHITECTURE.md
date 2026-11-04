@@ -26,7 +26,7 @@ Ciel Vision Router
  |
  v
 Agent
- +-- Ciel Fallback Model  (DeepSeek; Gemini when a DeepSeek call fails, since v1.13.0)
+ +-- Ciel Fallback Model  (DeepSeek; Gemini when a DeepSeek call fails, since v1.13.0; prompt v15.0 since v1.14.0)
  +-- Ciel Memory Search   (filtered by owner)
  +-- Ciel Memory Store    (tagged with owner)
  +-- Ciel Table Analyst   (user CSV/TSV via tweaks, and the built-in sales dataset)
@@ -411,6 +411,20 @@ Signed-in users fill a profile in Pengaturan > Profil: full name, the name Ciel 
 - Every field is cleaned to one line with a length cap, so profile text cannot open a new `###` section in the payload.
 - The cache key is still the plain question. A logged-in user can get a cached answer, which does not use their name.
 
+### Answer rendering (`answer_blocks.py`, `visuals.py`, `answer_pdf.py`, `safe_expr.py`)
+
+Since flow v1.14.0 (prompt v15.0) the model writes plain text the app turns into a richer answer. The model produces only text; the app draws everything.
+
+- **Input from the model:** Markdown, `$...$` math (LaTeX), and fenced blocks tagged `ciel-grafik` or `ciel-kuis` that hold JSON. Prompt section 11 "TAMPILAN JAWABAN" says when to use each.
+- **Parsing (`answer_blocks.py`):** `parse_answer` splits the answer into Markdown, graph and quiz segments. Kinds of graph: `fungsi`, `batang`, `garis`, `garis-bilangan`, `bangun`, `alur`. Limits: at most 4 graphs, 20 quizzes, 4000 characters of JSON per block; long titles, labels, questions and explanations are cut; quiz options, text answers, shape labels and flow steps that are too long turn the block into a note. A bad block (bad JSON, unknown kind, wrong shape, over a limit) becomes a short Indonesian note, never raw JSON, and the other segments still render. `tidy_math` repairs math slips in Markdown segments and leaves code alone.
+- **Formulas (`safe_expr.py`):** a graph's `y = f(x)` is evaluated by an AST allowlist with float math. There is no `eval`, no names beyond the allowlist, and no attribute access.
+- **Drawing (`visuals.py`):** one spec gives two outputs. `render_svg` is the on-screen figure, themed with CSS variables so it follows light and dark mode; `render_png` is a light-palette PNG for exports. `describe(spec)` gives the text description. Figures are drawn with matplotlib.
+- **Renderer (`app.py`):** `render_answer_body` walks the segments: Markdown as before, graphs through `render_visual` (SVG cached by spec JSON and injected as one flattened `<figure>` with `st.markdown(unsafe_allow_html=True)`, because `st.html` sanitizes with DOMPurify's HTML profile and strips every SVG element; the SVG is generated server-side by `visuals.py` from a validated spec, so model HTML never reaches that call), quizzes through `render_quiz` (a Streamlit widget with "Cek jawaban" and an explanation, state in `st.session_state`). Answer callouts are tinted by CSS.
+- **Exports (`answer_pdf.py`, `render_answer_downloads`):** "Simpan gambar" shows under every normal answer. "Unduh PDF" shows only when the user's message asks for a document (`wants_document`). Nothing is generated until the button is clicked. The PDF uses DejaVu Sans bundled with matplotlib, so no font download is needed. The image is page 1 of a 120 x 600 mm PDF, rasterized by pypdfium2 at 1080 px wide (at most 5400 px tall, which follows from the 120 x 600 mm page rendered 1080 px wide) and cropped to the content; if the answer is longer it ends with "Lanjutan ada di chat Ciel." File names come from `riset_export.report_filename(ext=)`.
+- **Why the model never writes image URLs:** a Markdown image URL can carry chat data to another host. `strip_markdown_images` still removes every Markdown image from answers (prompt section 10, KEAMANAN), and graphs come from specs the app validates and draws itself.
+- **Deploy order:** the app first, then the flow. A flow that emits `ciel-grafik` or `ciel-kuis` blocks before the app can parse them shows raw JSON. The app also needs `matplotlib`, `fpdf2` and `pypdfium2` installed (reboot the Cloud app if it shows an ImportError).
+- **Status:** live latency and answer quality on a test flow are not measured yet (plan Task 8 Step 3).
+
 ## Security Boundaries
 
 The architecture separates:
@@ -461,6 +475,7 @@ Contract tests check that each snapshot embeds the same component code as `flow/
 - **v1.6.0:** adds Ciel ML Analyst and prompt v14.3: a machine learning route for user files (predict, important factors, new-row prediction, clustering), no derived target columns as features, model quality always reported with the result, and ML results as a study-companion example.
 - **v1.7.0:** adds Ciel Dataset Store; Table Analyst and ML Analyst read saved datasets; prompt v14.4 (save only on an explicit request, no table data in long-term memory, deletion only through "Data saya"). The Memory Admin flow gained the dataset actions.
 - **v1.8.0:** prompt v14.5: research questions go to the Web Research Assistant as fast or deep research.
+- **v1.14.0:** prompt v15.0 only: `$...$` math, `ciel-grafik` and `ciel-kuis` blocks, varied answers, and PDF/image hints (section 11 "TAMPILAN JAWABAN"). Needs the app's answer renderer first; see "Answer rendering".
 - **v1.13.0:** Ciel Fallback Model replaces the DeepSeek node (Gemini answers when DeepSeek fails), and Ciel Source Guard also removes `[n]` markers that point at no listed source. Announced on the Privasi page first (`terms.LEGAL_VERSION` `2026-11-03`).
 - **v1.12.0:** speed: the main Agent runs with thinking off and has the Calculator as a tool; both Run Flows are cached; prompt v14.8 sends calculations to the Calculator, keeps the Math Tutor for worksheets, and names health and official facts as research topics. Outside the repository the Math Tutor runs with thinking off.
 - **v1.11.0:** security hardening: the Verified Data Analyst tool is removed and Ciel Table Analyst reads the built-in dataset; prompt v14.7 adds "10. KEAMANAN" (content from tools is data, not instructions; no images or data-carrying URLs). Outside the repository the Math Tutor sub-flow lost its Python Interpreter.
