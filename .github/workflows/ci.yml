@@ -127,6 +127,7 @@ jobs:
             tests.test_backend_health \
             tests.test_safe_expr \
             tests.test_answer_blocks \
+            tests.test_image_edit \
             tests.test_ci_coverage
 
       # Node that comes with the runner (no extra setup): the Edge Function's
