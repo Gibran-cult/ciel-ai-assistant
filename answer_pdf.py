@@ -32,6 +32,7 @@ INK = (28, 31, 38)
 MUTED = (107, 114, 128)
 ACCENT = (37, 99, 235)
 RULE = (209, 213, 219)
+TINT = (230, 230, 226)   # latar callout (--c-raised terang)
 
 _DOCUMENT_WORDS = re.compile(
     r"\b(pdf|cetak|dicetak|print|printable|lembar (soal|latihan|kerja)|worksheet|handout|modul)\b",
@@ -374,16 +375,23 @@ class _Writer:
         pdf = self.pdf
         self._ensure(14)
         page, top = pdf.page_no(), pdf.get_y()
-        pdf.set_left_margin(self.base_left + 6)
-        pdf.set_x(self.base_left + 6)
-        self._runs(_inline(text), color=(55, 65, 81))
+        marked = "".join(
+            f"**{t}**" if bold else (f"__{t}__" if italic else t)
+            for t, bold, italic in ((t.replace("__", "_ _").replace("**", "* *"), b, i) for t, b, i in _inline(text))
+        )
+        pdf.set_left_margin(self.base_left + 0.8)
+        pdf.set_x(self.base_left + 0.8)
+        pdf.set_fill_color(*TINT)
+        pdf.set_text_color(55, 65, 81)
+        self._font()
+        pdf.multi_cell(0, 5.6, marked, markdown=True, fill=True, padding=2.5, new_x="LMARGIN", new_y="NEXT")
         pdf.set_left_margin(self.base_left)
         if pdf.page_no() == page:
             pdf.set_draw_color(*ACCENT)
             pdf.set_line_width(0.8)
-            pdf.line(self.base_left + 1.5, top, self.base_left + 1.5, pdf.get_y() - 0.8)
+            pdf.line(self.base_left + 0.4, top, self.base_left + 0.4, pdf.get_y())
             pdf.set_line_width(0.2)
-        pdf.ln(2.2)
+        pdf.ln(2.5)
 
     def code(self, text):
         pdf = self.pdf

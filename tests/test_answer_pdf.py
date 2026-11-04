@@ -15,6 +15,8 @@ sys.path.insert(0, str(ROOT))
 from answer_pdf import (  # noqa: E402
     answer_pdf,
     answer_png,
+    SPILL_NOTE,
+    _compose,
     document_title,
     latex_to_text,
     wants_document,
@@ -36,6 +38,15 @@ MATH_ANSWER = (
     f"{GRAFIK}\n\n{KUIS}\n\n{KUIS}\n\n"
     "Sumber:\n[1] Kemdikbud — Matematika SMA — https://buku.kemdikbud.go.id/mat\n"
 )
+
+
+def answer_pdf_png_source(content):
+    """PDF 120 x 600 mm yang dirasterisasi answer_png, setelah catatan lanjutan."""
+    from answer_pdf import _write_footer, _write_spill_note
+
+    pdf = _compose(content, "Uji", png=True).pdf
+    (_write_spill_note if pdf.page_no() > 1 else _write_footer)(pdf)
+    return bytes(pdf.output())
 
 
 def pdf_text(data):
@@ -65,6 +76,22 @@ class AnswerPdfTest(unittest.TestCase):
         png = Image.open(io.BytesIO(answer_png(long, "Panjang")))
         self.assertEqual(png.width, 1080)
         self.assertLessEqual(png.height, 5400)
+
+    def test_blockquote_is_a_tinted_box(self):
+        def streams(data):
+            return b"".join(p.get_contents().get_data() for p in PdfReader(io.BytesIO(data)).pages)
+
+        tint = b"0.902 0.902 0.8863 rg"
+        self.assertIn(tint, streams(answer_pdf("> **Ingat** ini penting\n\nIsi.", "Uji")))
+        self.assertNotIn(tint, streams(answer_pdf("Tanpa callout.", "Uji")))
+        # callout panjang yang melewati batas halaman tidak boleh error
+        answer_pdf("Awal\n\n" + "> " + "kalimat callout panjang " * 400, "Uji")
+
+    def test_png_spill_note_is_written_on_page_one(self):
+        long = "\n\n".join(["Paragraf " + "kata " * 200] * 20)
+        first_page = PdfReader(io.BytesIO(answer_pdf_png_source(long))).pages[0].extract_text()
+        self.assertIn(SPILL_NOTE, first_page)
+        self.assertNotIn(SPILL_NOTE, pdf_text(answer_pdf_png_source("Halo")))
 
     def test_png_of_short_answer_is_cropped(self):
         png = Image.open(io.BytesIO(answer_png("Halo dunia", "Uji")))
