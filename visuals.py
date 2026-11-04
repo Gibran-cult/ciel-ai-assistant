@@ -71,11 +71,15 @@ def _checked(fn):
     """Spec tak valid (bukan dict, jenis asing, kunci hilang) selalu jadi ValueError berbahasa Indonesia."""
     @functools.wraps(fn)
     def wrapper(spec, *args, **kwargs):
-        if not isinstance(spec, dict) or spec.get("jenis") not in _KINDS:
+        if not isinstance(spec, dict):
+            raise ValueError("Spesifikasi visual tidak valid: harus berupa objek.")
+        if not isinstance(spec.get("jenis"), str) or spec["jenis"] not in _KINDS:
             raise ValueError("Spesifikasi visual tidak valid: jenis tidak dikenal.")
         try:
             return fn(spec, *args, **kwargs)
-        except (KeyError, TypeError, AttributeError, IndexError) as exc:
+        except ValueError:
+            raise
+        except Exception as exc:
             raise ValueError(f"Spesifikasi visual tidak valid: {exc!r}") from exc
     return wrapper
 
@@ -145,14 +149,15 @@ def _draw_fungsi(fig, ax, spec, pal):
         with np.errstate(all="ignore"):
             ys = np.asarray(compile_expression(fn["rumus"])(xs), dtype=float)
         curves.append(np.broadcast_to(ys, xs.shape) if ys.shape != xs.shape else ys)
+    allv = np.concatenate([c[np.isfinite(c)] for c in curves])
+    if allv.size == 0:
+        ax.text(0.5, 0.5, "Tidak ada nilai real pada selang ini", transform=ax.transAxes,
+                ha="center", va="center", color=pal["muted"], fontsize=10)
     if spec["y"]:
         y0, y1 = spec["y"]
     else:
-        allv = np.concatenate([c[np.isfinite(c)] for c in curves])
         if allv.size == 0:
             y0, y1 = -1.0, 1.0
-            ax.text(0.5, 0.5, "Tidak ada nilai real pada selang ini", transform=ax.transAxes,
-                    ha="center", va="center", color=pal["muted"], fontsize=10)
         else:
             y0, y1 = np.percentile(allv, [2, 98])
             for p in spec["titik"]:

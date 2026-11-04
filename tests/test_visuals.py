@@ -137,6 +137,27 @@ class VisualsTest(unittest.TestCase):
             render_png(spec)
         self.assertIn("Tidak ada nilai real pada selang ini", svg)
 
+    def test_all_nan_with_explicit_y_shows_note(self):
+        import warnings
+        spec = visual_from_json(json.dumps(
+            {"jenis": "fungsi", "fungsi": [{"rumus": "sqrt(x)"}], "x": [-5, -1], "y": [0, 5]}))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            svg = render_svg(spec)
+        self.assertIn("Tidak ada nilai real pada selang ini", svg)
+
+    def test_non_dict_message_and_unexpected_errors_become_value_error(self):
+        import visuals
+        from unittest import mock
+        with self.assertRaises(ValueError) as ctx:
+            render_svg("teks")
+        self.assertIn("harus berupa objek", str(ctx.exception))
+        with mock.patch.dict(visuals._DRAW, {"batang": lambda *a: 1 / 0}):
+            with self.assertRaises(ValueError) as ctx:
+                render_svg(SPECS["batang"])
+        self.assertIsInstance(ctx.exception.__cause__, ZeroDivisionError)
+        self.assertIn("ZeroDivisionError", str(ctx.exception))
+
     def test_importing_visuals_does_not_import_matplotlib(self):
         code = "import sys; sys.path.insert(0, %r); import visuals; print('matplotlib' in sys.modules)" % str(ROOT)
         out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
