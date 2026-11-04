@@ -228,9 +228,56 @@ def _reject_constant(name):
     raise _Invalid(f"konstanta JSON tidak valid: {name}")
 
 
+_HEX = frozenset("0123456789abcdefABCDEF")
+_LATEX_SYMBOLS = frozenset(",;:!{}%#&_^|()[] ")
+_JSON_LETTERS = frozenset("nrtbf")
+
+
+def _repair_backslashes(body):
+    """Double the single backslashes that start a LaTeX command.
+
+    A model writes one backslash before frac, which JSON reads as a form feed
+    or rejects. Valid pairs stay as they are: a doubled backslash, an escaped
+    quote or slash, a unicode escape with four hex digits, and a lone
+    one-letter n/r/t/b/f escape that is not followed by another letter.
+    """
+    out = []
+    i, n = 0, len(body)
+    while i < n:
+        ch = body[i]
+        if ch != "\\" or i + 1 >= n:
+            out.append(ch)
+            i += 1
+            continue
+        nxt = body[i + 1]
+        if nxt in '\\"/':
+            out.append(body[i:i + 2])
+            i += 2
+        elif nxt == "u" and n - i >= 6 and all(c in _HEX for c in body[i + 2:i + 6]):
+            out.append(body[i:i + 6])
+            i += 6
+        elif nxt.isascii() and nxt.isalpha():
+            run = 1
+            while i + 1 + run < n and body[i + 1 + run].isascii() and body[i + 1 + run].isalpha():
+                run += 1
+            if run == 1 and nxt in _JSON_LETTERS:
+                out.append(body[i:i + 2])
+            else:
+                out.append("\\\\" + body[i + 1:i + 1 + run])
+            i += 1 + run
+        elif nxt in _LATEX_SYMBOLS:
+            out.append("\\\\" + nxt)
+            i += 2
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
 def _load(body):
     if len(body) > MAX_JSON_CHARS:
         raise _Invalid("JSON terlalu panjang")
+    body = _repair_backslashes(body)
     try:
         data = json.loads(body, parse_constant=_reject_constant)
     except (ValueError, RecursionError) as exc:

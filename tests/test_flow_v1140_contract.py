@@ -88,6 +88,7 @@ class FlowV1140ContractTest(unittest.TestCase):
             "Dalam mode analisis (bagian 6B), format 6B tetap dipakai apa adanya",
             'Kuis "Coba sendiri" menggantikan pertanyaan cek pemahaman di bagian 8.',
             "Angka di dalam JSON ditulis sebagai angka JSON biasa dengan titik desimal (2.5)",
+            'Di dalam JSON, tulis backslash LaTeX dua kali: "$\\\\frac{1}{2}$".',
         ):
             with self.subTest(sentence=sentence[:40]):
                 self.assertEqual(self.prompt.count(sentence), 1)

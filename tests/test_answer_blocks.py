@@ -232,5 +232,46 @@ class TidyMathTest(unittest.TestCase):
         self.assertEqual(tidy_math(once), once)
 
 
+class LatexBackslashTest(unittest.TestCase):
+    """A model writes single LaTeX backslashes inside JSON; they must survive."""
+
+    def option(self, latex):
+        body = '{"soal": "Pilih", "pilihan": ["%s", "x"], "jawaban": 0}' % latex
+        seg = only("```ciel-kuis\n" + body + "\n```")
+        self.assertIsInstance(seg, Quiz, seg)
+        return seg.pilihan[0]
+
+    def test_single_backslash_commands_survive(self):
+        for latex in (
+            r"$\frac{9}{2}$", r"$a \times b$", r"$\theta$", r"$x \neq 0$", r"$\beta$",
+            r"$\left( x \right)$", r"$\sqrt{2}$", r"$\pi r^2$", r"$a \le b$", r"$a\,b$",
+            r"$\rho \phi \nabla \tan$", r"$a\;b\!c\{x\}\%$",
+        ):
+            with self.subTest(latex=latex):
+                self.assertEqual(self.option(latex), latex)
+
+    def test_already_doubled_stays_single(self):
+        self.assertEqual(self.option(r"$\\frac{1}{2}$"), r"$\frac{1}{2}$")
+        self.assertEqual(self.option(r"$\\sqrt{2}$"), r"$\sqrt{2}$")
+
+    def test_real_json_escapes_still_work(self):
+        self.assertEqual(self.option(r"\u00b2"), "\u00b2")
+        self.assertEqual(self.option(r"say \"hi\""), 'say "hi"')
+        self.assertEqual(self.option(r"a\/b"), "a/b")
+        self.assertEqual(self.option(r"baris\n 2"), "baris\n 2")
+        self.assertEqual(self.option(r"a\t c"), "a\t c")
+
+    def test_graph_title_keeps_frac(self):
+        body = r'{"jenis": "fungsi", "judul": "$f(x) = \frac{1}{2}x$", "fungsi": [{"rumus": "x/2"}], "x": [-1, 5]}'
+        seg = only("```ciel-grafik\n" + body + "\n```")
+        self.assertIsInstance(seg, Visual, seg)
+        self.assertEqual(seg.spec["judul"], r"$f(x) = \frac{1}{2}x$")
+
+    def test_repaired_math_is_untouched_by_tidy(self):
+        text = self.option(r"$\frac{9}{2}$")
+        self.assertEqual(tidy_math(text), text)
+        self.assertNotIn(r"\$", tidy_math(text))
+
+
 if __name__ == "__main__":
     unittest.main()
