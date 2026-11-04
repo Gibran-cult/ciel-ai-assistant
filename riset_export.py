@@ -180,7 +180,7 @@ def report_docx(markdown, topic, label="Peta Sumber", footnote=FOOTNOTE):
     return buffer.getvalue()
 
 
-def report_filename(topic, prefix="Peta Sumber"):
+def report_filename(topic, prefix="Peta Sumber", ext="docx"):
     """Nama file aman untuk unduhan: "Peta Sumber - Literasi Digital UMKM.docx"."""
     name = ""
 
@@ -191,4 +191,4 @@ def report_filename(topic, prefix="Peta Sumber"):
         name = f"{name} {word}".strip()[:60]
 
     name = name or "Riset Skripsi"
-    return f"{prefix} - {name}.docx"
+    return f"{prefix} - {name}.{ext}"
