@@ -5,6 +5,7 @@ tanpa render ulang. Untuk ekspor: PNG berpalet terang. Memakai Figure langsung
 (bukan pyplot) agar aman antar-thread Streamlit; matplotlib diimpor malas.
 """
 
+import functools
 import hashlib
 import io
 import json
@@ -41,6 +42,8 @@ def _mpl():
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     if not _ready:
         with _init_lock:
+            # Sengaja global dan disetel sekali: rc_context juga tidak aman antar-thread,
+            # dan visuals.py satu-satunya pemakai matplotlib di aplikasi ini.
             matplotlib.rcParams["svg.fonttype"] = "none"
             _ready = True
     return Figure, FigureCanvasAgg
@@ -64,7 +67,25 @@ def _ends(i):
     return f"dari {left} sampai {right}"
 
 
+def _checked(fn):
+    """Spec tak valid (bukan dict, jenis asing, kunci hilang) selalu jadi ValueError berbahasa Indonesia."""
+    @functools.wraps(fn)
+    def wrapper(spec, *args, **kwargs):
+        if not isinstance(spec, dict) or spec.get("jenis") not in _KINDS:
+            raise ValueError("Spesifikasi visual tidak valid: jenis tidak dikenal.")
+        try:
+            return fn(spec, *args, **kwargs)
+        except (KeyError, TypeError, AttributeError, IndexError) as exc:
+            raise ValueError(f"Spesifikasi visual tidak valid: {exc!r}") from exc
+    return wrapper
+
+
+_KINDS = ("fungsi", "batang", "garis", "garis-bilangan", "bangun", "alur")
+
+
+@_checked
 def describe(spec):
+    """Teks alternatif berbahasa Indonesia. Spec tak valid -> ValueError."""
     kind, judul = spec["jenis"], spec.get("judul") or ""
     pre = f"{judul}. " if judul and kind != "fungsi" else ""
     if kind == "fungsi":
@@ -130,6 +151,8 @@ def _draw_fungsi(fig, ax, spec, pal):
         allv = np.concatenate([c[np.isfinite(c)] for c in curves])
         if allv.size == 0:
             y0, y1 = -1.0, 1.0
+            ax.text(0.5, 0.5, "Tidak ada nilai real pada selang ini", transform=ax.transAxes,
+                    ha="center", va="center", color=pal["muted"], fontsize=10)
         else:
             y0, y1 = np.percentile(allv, [2, 98])
             for p in spec["titik"]:
@@ -155,7 +178,7 @@ def _draw_fungsi(fig, ax, spec, pal):
         if pos:
             ax.spines[side].set_position("zero")
     ax.grid(True, color=pal["axis"], lw=0.6)
-    if len(curves) > 1 or not spec["judul"]:
+    if ax.get_legend_handles_labels()[0] and (len(curves) > 1 or not spec["judul"]):
         ax.legend(frameon=False, labelcolor=pal["text"], loc="best", fontsize=9)
 
 
@@ -344,8 +367,11 @@ def _height(spec):
     return 5.2 if spec["siklus"] else (2.0 if n <= 4 else min(1.0 + 0.62 * n, 6.4))
 
 
+@_checked
 def build_figure(spec, palette):
-    """Gambar spec ke Figure baru (tanpa pyplot). `palette` berisi kunci seperti LIGHT."""
+    """Gambar spec ke Figure baru (tanpa pyplot). `palette` berisi kunci seperti LIGHT.
+
+    Spec tak valid -> ValueError (pesan Indonesia)."""
     Figure, FigureCanvasAgg = _mpl()
     pal = dict(palette)
     kind = spec["jenis"]
@@ -366,7 +392,9 @@ def build_figure(spec, palette):
     return fig
 
 
+@_checked
 def render_png(spec, width_px=1200):
+    """PNG berpalet terang. Spec tak valid -> ValueError."""
     fig = build_figure(spec, LIGHT)
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=width_px / WIDTH_IN, facecolor=LIGHT["bg"])
@@ -382,7 +410,9 @@ def _svg_unique_ids(svg, spec):
     return svg
 
 
+@_checked
 def render_svg(spec):
+    """SVG bertema variabel CSS. Spec tak valid -> ValueError."""
     fig = build_figure(spec, SENTINEL)
     buf = io.BytesIO()
     fig.savefig(buf, format="svg", transparent=True, metadata={"Date": None, "Creator": "Ciel"})

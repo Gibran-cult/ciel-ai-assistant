@@ -120,6 +120,23 @@ class VisualsTest(unittest.TestCase):
         png = render_png(SPECS["batang"], width_px=800)
         self.assertEqual(struct.unpack(">I", png[16:20])[0], 800)
 
+    def test_invalid_specs_raise_value_error(self):
+        for bad in ({}, {"jenis": "nope"}, {"jenis": "fungsi"}, "teks", None, [1]):
+            for fn in (render_svg, render_png, describe, lambda s: build_figure(s, LIGHT)):
+                with self.subTest(bad=bad, fn=getattr(fn, "__name__", "lambda")):
+                    with self.assertRaises(ValueError) as ctx:
+                        fn(bad)
+                    self.assertIn("tidak valid", str(ctx.exception))
+
+    def test_all_nan_function_shows_note_without_warnings(self):
+        import warnings
+        spec = valid_fungsi("sqrt(x)", x=[-5, -1])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            svg = render_svg(spec)
+            render_png(spec)
+        self.assertIn("Tidak ada nilai real pada selang ini", svg)
+
     def test_importing_visuals_does_not_import_matplotlib(self):
         code = "import sys; sys.path.insert(0, %r); import visuals; print('matplotlib' in sys.modules)" % str(ROOT)
         out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
