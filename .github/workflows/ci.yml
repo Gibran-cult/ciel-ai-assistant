@@ -73,6 +73,7 @@ jobs:
             tests.test_flow_v1120_contract \
             tests.test_flow_v1130_contract \
             tests.test_flow_v1140_contract \
+            tests.test_flow_v1141_contract \
             tests.test_flow_riset_v100_contract \
             tests.test_flow_riset_v110_contract \
             tests.test_riset_components \

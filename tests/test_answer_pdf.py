@@ -99,6 +99,17 @@ class AnswerPdfTest(unittest.TestCase):
         for no in ("apa itu fotosintesis", "gambarkan grafik y = x^2", "printilan acara"):
             self.assertFalse(wants_document(no))
 
+    def test_wants_document_with_indonesian_suffixes(self):
+        # Live 2026-11-04: "buatkan pdfnya" got no Unduh PDF button.
+        for yes in ("buatkan pdfnya", "PDFnya mana", "cetakkan soalnya", "tolong cetaklah",
+                    "bikinin lembar soalnya", "printnya dong", "modulnya dalam pdf"):
+            with self.subTest(yes=yes):
+                self.assertTrue(wants_document(yes))
+        for no in ("cetakan kue", "percetakan dekat sini", "apa itu pdfium", "printilan acara",
+                   "modular", "printer rusak"):
+            with self.subTest(no=no):
+                self.assertFalse(wants_document(no))
+
     def test_document_title(self):
         self.assertEqual(document_title("# Judul Saya\n\nisi", "apa saja"), "Judul Saya")
         self.assertEqual(document_title("tanpa judul", "jelaskan " * 20), "jelaskan " * 5 + "jelaskan")
