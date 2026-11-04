@@ -188,7 +188,7 @@ class RobustnessTest(unittest.TestCase):
 class TidyMathTest(unittest.TestCase):
     def test_currency_dollars_are_escaped(self):
         self.assertEqual(tidy_math("harga $5 dan $10"), r"harga \$5 dan \$10")
-        for kept in ("$5x + 3 = 8$", "$x^2$", "$$\\frac{1}{2}$$", "`$5`", "$x$ dan $y$"):
+        for kept in ("$5x + 3 = 8$", "$x^2$", "hasil $$\\frac{1}{2}$$ jadi", "`$5`", "$x$ dan $y$"):
             self.assertEqual(tidy_math(kept), kept)
 
     def test_currency_after_a_letter_or_before_a_digit_is_escaped(self):
@@ -202,7 +202,7 @@ class TidyMathTest(unittest.TestCase):
 
     def test_decimal_comma_and_delimiters(self):
         self.assertEqual(tidy_math(r"Jadi \(x = 2,5\)."), "Jadi $x = 2{,}5$.")
-        self.assertEqual(tidy_math(r"\[y = 0,25x\]"), "$$y = 0{,}25x$$")
+        self.assertEqual(tidy_math(r"\[y = 0,25x\]"), "$$\ny = 0{,}25x\n$$")
         self.assertEqual(tidy_math("1,5 kg"), "1,5 kg")   # outside math: unchanged
 
     def test_code_is_left_alone(self):
@@ -226,6 +226,27 @@ class TidyMathTest(unittest.TestCase):
         self.assertTrue(tidy_math("$$x = 1,5\n\nParagraf lain 2,5 kg").endswith("Paragraf lain 2,5 kg"))
         # a $$ span that does close keeps its comma fix, also after an unclosed one
         self.assertEqual(tidy_math("$$a\n\n$$\nx = 1,5\n$$"), "\\$\\$a\n\n$$\nx = 1{,}5\n$$")
+
+    def test_one_line_display_formula_gets_its_own_lines(self):
+        self.assertEqual(tidy_math("Rumusnya:\n$$x = \\frac{1}{2}$$\nLanjut"),
+                         "Rumusnya:\n$$\nx = \\frac{1}{2}\n$$\nLanjut")
+        self.assertEqual(tidy_math("> $$a^2$$"), "> $$\n> a^2\n> $$")
+        # a list item stays one line: the PDF reader keeps items on one line
+        self.assertEqual(tidy_math("- $$a^2$$"), "- $$a^2$$")
+
+    def test_one_line_display_keeps_decimal_fix_and_is_idempotent(self):
+        once = tidy_math("$$x = 2,5 \\times 4$$")
+        self.assertEqual(once, "$$\nx = 2{,}5 \\times 4\n$$")
+        self.assertEqual(tidy_math(once), once)
+        quote = tidy_math("> $$a^2$$")
+        self.assertEqual(tidy_math(quote), quote)
+
+    def test_display_left_alone_when_not_a_whole_line_or_already_multiline(self):
+        self.assertEqual(tidy_math("hasilnya $$x$$ jadi"), "hasilnya $$x$$ jadi")
+        block = "$$\nx = 1\n$$"
+        self.assertEqual(tidy_math(block), block)
+        self.assertEqual(tidy_math("```\n$$x$$\n```"), "```\n$$x$$\n```")
+        self.assertEqual(tidy_math("`$$x$$`"), "`$$x$$`")
 
     def test_idempotent(self):
         once = tidy_math(r"harga $5 dan $10, \(x = 2,5\)")

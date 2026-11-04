@@ -460,6 +460,26 @@ def _tidy_lines(lines):
         i += 1
 
 
+_ONE_LINE_DISPLAY = re.compile(
+    r"^(?P<prefix>[ \t]*(?:>[ \t]*)*)\$\$(?P<body>[^$\n]+?)\$\$[ \t]*$"
+)
+
+
+def _split_display_lines(lines):
+    """Satu baris `$$rumus$$` jadi tiga baris ($$, rumus, $$): Streamlit hanya menggambar
+    rumus tampilan (besar, di tengah) bila $$ berada di baris sendiri. Awalan kutipan
+    dipertahankan di setiap baris. Butir daftar tidak diubah (PDF membaca satu baris per butir)."""
+    out = []
+    for line in lines:
+        m = _ONE_LINE_DISPLAY.match(line)
+        if not m or not m.group("body").strip():
+            out.append(line)
+            continue
+        prefix = m.group("prefix")
+        out += [prefix + "$$", prefix + m.group("body").strip(), prefix + "$$"]
+    return out
+
+
 def _tidy_prose(chunk):
     chunk = chunk.replace("\x00", "")   # NUL dipakai sebagai penanda; buang dari teks model
     stash: list[str] = []
@@ -471,7 +491,7 @@ def _tidy_prose(chunk):
     chunk = _INLINE_CODE.sub(hide, chunk)
     chunk = _PAREN_MATH.sub(lambda m: "$" + m.group(1).strip() + "$", chunk)
     chunk = _BRACKET_MATH.sub(lambda m: "$$" + m.group(1).strip() + "$$", chunk)
-    chunk = "\n".join(_tidy_lines(chunk.split("\n")))
+    chunk = "\n".join(_split_display_lines(_tidy_lines(chunk.split("\n"))))
     return re.sub(r"\x00(\d+)\x00", lambda m: stash[int(m.group(1))], chunk)
 
 
