@@ -121,6 +121,59 @@ class ImageEditTest(unittest.TestCase):
         out = apply_recipe(two_tone(300, 200), ops)
         self.assertEqual(out.width, 100)
 
+    def test_ellipse_mark_draws_outline_not_fill(self):
+        out = apply_recipe(Image.new("RGB", (200, 200), "white"),
+                           [{"op": "mark", "shape": "ellipse", "box": [0.1, 0.1, 0.9, 0.9], "color": "#ff0000"}])
+        self.assertEqual(out.getpixel((20, 100)), (255, 0, 0))
+        self.assertEqual(out.getpixel((100, 100)), (255, 255, 255))
+        self.assertEqual(out.getpixel((5, 5)), (255, 255, 255))
+
+    def test_arrow_has_shaft_and_filled_head(self):
+        out = apply_recipe(Image.new("RGB", (400, 400), "white"),
+                           [{"op": "arrow", "from": [0.1, 0.5], "to": [0.9, 0.5], "color": "#0000ff"}])
+        blue = (0, 0, 255)
+        self.assertTrue(any(out.getpixel((200, y)) == blue for y in range(197, 203)))
+        self.assertEqual(out.getpixel((200, 195)), (255, 255, 255))     # shaft is thin
+        self.assertEqual(out.getpixel((352, 197)), blue)                # head is wider than the shaft
+        self.assertEqual(out.getpixel((352, 202)), blue)
+        self.assertEqual(out.getpixel((20, 200)), (255, 255, 255))      # nothing before the start
+
+    def test_text_background_box_and_clamping(self):
+        dark = Image.new("RGB", (300, 200), (20, 20, 20))
+        out = apply_recipe(dark, [{"op": "text", "text": "Hi", "at": [0.2, 0.3], "size": 0.1,
+                                   "color": "#000000", "background": True}])
+        self.assertTrue(all(c > 200 for c in out.getpixel((61, 61))))
+        self.assertEqual(out.getpixel((50, 50)), (20, 20, 20))
+        edge = apply_recipe(dark, [{"op": "text", "text": "Pojok kanan", "at": [0.98, 0.5], "size": 0.1,
+                                    "color": "#000000", "background": True}])
+        self.assertEqual(edge.size, (300, 200))
+        self.assertTrue(all(c > 200 for c in edge.getpixel((299, 101))))
+        self.assertEqual(edge.getpixel((5, 101)), (20, 20, 20))
+
+    def test_rotate_straighten_and_flip_directions(self):
+        half = Image.new("RGB", (100, 100), (0, 0, 255))
+        half.paste((255, 0, 0), (0, 0, 100, 50))                         # red top, blue bottom
+        turned = apply_recipe(half, [{"op": "rotate", "degrees": 90}])   # clockwise: top goes right
+        self.assertEqual(turned.getpixel((5, 50)), (0, 0, 255))
+        self.assertEqual(turned.getpixel((95, 50)), (255, 0, 0))
+
+        block = Image.new("RGB", (200, 200), "white")
+        block.paste((255, 0, 0), (180, 90, 200, 110))                    # right-middle
+        tilted = apply_recipe(block, [{"op": "straighten", "degrees": 10}])
+        ys = [y for y in range(tilted.height) for x in range(tilted.width)
+              if (lambda p: p[0] > 200 and p[1] < 60 and p[2] < 60)(tilted.getpixel((x, y)))]
+        self.assertTrue(ys)
+        self.assertGreater(sum(ys) / len(ys), tilted.height / 2 + 5)     # clockwise: right side dips down
+
+        corner = Image.new("RGB", (100, 60), "white")
+        corner.paste((255, 0, 0), (0, 0, 10, 10))                        # top-left
+        h = apply_recipe(corner, [{"op": "flip", "axis": "horizontal"}])
+        v = apply_recipe(corner, [{"op": "flip", "axis": "vertical"}])
+        self.assertEqual(h.getpixel((95, 5)), (255, 0, 0))
+        self.assertEqual(h.getpixel((5, 5)), (255, 255, 255))
+        self.assertEqual(v.getpixel((5, 55)), (255, 0, 0))
+        self.assertEqual(v.getpixel((5, 5)), (255, 255, 255))
+
     def test_blur_changes_only_the_box(self):
         image = Image.new("RGB", (200, 200), "white")
         for x in range(0, 200, 4):
