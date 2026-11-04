@@ -10,6 +10,7 @@ font itu untuk <text>, hasilnya jatuh ke Helvetica bawaan (label berhuruf Latin)
 """
 
 import io
+import math
 import re
 import xml.etree.ElementTree as ET
 
@@ -86,14 +87,52 @@ def _extract(text):
     return text[start:end + len("</svg>")]
 
 
-def _viewbox(root):
-    given = root.get("viewBox")
-    if given:
-        return given
-    width, height = _NUMBER.match(root.get("width", "")), _NUMBER.match(root.get("height", ""))
-    if width and height:
-        return f"0 0 {width.group(1)} {height.group(1)}"
-    return DEFAULT_VIEWBOX
+MAX_DEPTH = 50
+MAX_ASPECT = 4.0
+
+
+def _parse_viewbox(value):
+    """'x y w h' -> (x, y, w, h) kalau persis empat angka hingga dan w, h > 0; kalau tidak None."""
+    parts = re.split(r"[ ,]+", str(value or "").strip())
+    if len(parts) != 4:
+        return None
+    try:
+        numbers = tuple(float(v) for v in parts)
+    except ValueError:
+        return None
+    if not all(math.isfinite(v) for v in numbers) or numbers[2] <= 0 or numbers[3] <= 0:
+        return None
+    return numbers
+
+
+def _check_aspect(width, height):
+    if not (1 / MAX_ASPECT <= width / height <= MAX_ASPECT):
+        raise IllustrationError("rasio gambar terlalu ekstrem")
+
+
+def _viewbox(source):
+    """viewBox yang aman, selalu dibentuk ulang dari angka hasil parse (bukan string mentah)."""
+    box = _parse_viewbox(source.get("viewBox"))
+    if box is None:
+        width, height = _NUMBER.match(source.get("width", "")), _NUMBER.match(source.get("height", ""))
+        if width and height and float(width.group(1)) > 0 and float(height.group(1)) > 0:
+            box = (0.0, 0.0, float(width.group(1)), float(height.group(1)))
+            if not all(math.isfinite(v) for v in box):
+                box = None
+    if box is None:
+        box = (0.0, 0.0, 800.0, 600.0)
+    _check_aspect(box[2], box[3])
+    return " ".join(f"{v:.6g}" for v in box)
+
+
+def _too_deep(root):
+    stack = [(root, 1)]
+    while stack:
+        element, depth = stack.pop()
+        if depth > MAX_DEPTH:
+            return True
+        stack.extend((child, depth + 1) for child in element)
+    return False
 
 
 def clean_svg(text):
@@ -107,8 +146,10 @@ def clean_svg(text):
         raise IllustrationError("SVG tidak valid") from err
     if _local(source.tag) != "svg":
         raise IllustrationError("akar bukan svg")
+    if _too_deep(source):
+        raise IllustrationError("SVG terlalu dalam")
     root = _clean_element(source, True)
-    root.set("viewBox", _viewbox(source) if "viewBox" not in root.attrib else root.get("viewBox"))
+    root.set("viewBox", _viewbox(source))
     if _count(root) > MAX_SVG_ELEMENTS:
         raise IllustrationError("SVG terlalu rumit")
     root.set("xmlns", SVG_NS)
@@ -125,34 +166,38 @@ def _fonts():
 
 
 def svg_png(svg, width=ILLUSTRATION_PX):
-    """SVG bersih -> PNG berlatar putih selebar `width` px."""
+    """SVG bersih -> PNG berlatar putih selebar `width` px.
+
+    Galat apa pun (fpdf2, pdfium, Pillow) menjadi IllustrationError.
+    """
+    try:
+        return _render(svg, width)
+    except IllustrationError:
+        raise
+    except Exception as err:
+        raise IllustrationError("SVG tidak bisa digambar") from err
+
+
+def _render(svg, width):
     import pypdfium2 as pdfium
     from fpdf import FPDF
     from fpdf.svg import SVGObject
     from PIL import Image
 
-    try:
-        root = ET.fromstring(svg)
-        box = [float(v) for v in re.split(r"[ ,]+", root.get("viewBox", DEFAULT_VIEWBOX).strip())]
-        view_w, view_h = box[2], box[3]
-        if view_w <= 0 or view_h <= 0:
-            raise ValueError("viewBox kosong")
-    except (ET.ParseError, ValueError, IndexError) as err:
-        raise IllustrationError("SVG tidak valid") from err
+    box = _parse_viewbox(ET.fromstring(svg).get("viewBox"))
+    if box is None:
+        raise IllustrationError("viewBox tidak valid")
+    view_w, view_h = box[2], box[3]
+    ratio = min(view_h / view_w, MAX_ASPECT)       # penjaga kedua: tinggi paling banyak 4 x lebar
 
     page_w = 600.0   # pt; unit="pt" supaya fpdf2 menskalakan viewBox ke halaman penuh
-    page_h = page_w * view_h / view_w
-    pdf = FPDF(unit="pt", format=(page_w, page_h))
+    pdf = FPDF(unit="pt", format=(page_w, page_w * ratio))
     pdf.set_auto_page_break(False)
     pdf.set_margins(0, 0, 0)
     for style, path in _fonts().items():
         pdf.add_font("DejaVu Sans", style, path)
     pdf.add_page()
-    try:
-        drawing = SVGObject(svg)
-        drawing.draw_to_page(pdf, x=0, y=0, debug_stream=None)
-    except Exception as err:  # fpdf2 melempar banyak jenis galat untuk SVG aneh
-        raise IllustrationError("SVG tidak bisa digambar") from err
+    SVGObject(svg).draw_to_page(pdf, x=0, y=0, debug_stream=None)
 
     document = pdfium.PdfDocument(bytes(pdf.output()))
     try:
@@ -161,7 +206,7 @@ def svg_png(svg, width=ILLUSTRATION_PX):
         page.close()
     finally:
         document.close()
-    height = max(1, round(width * view_h / view_w))
+    height = max(1, round(width * ratio))
     if image.size != (width, height):          # pembulatan ukuran halaman PDF
         image = image.resize((width, height), Image.LANCZOS)
     out = io.BytesIO()
