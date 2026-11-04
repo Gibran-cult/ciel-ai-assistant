@@ -9,6 +9,7 @@ mentah ke pengguna). Rumus grafik hanya divalidasi lewat safe_expr.
 import json
 import math
 import re
+import textwrap
 from dataclasses import dataclass
 
 from safe_expr import ExpressionError, compile_expression
@@ -263,8 +264,9 @@ def _parse_kuis(body):
 
 # --------------------------------------------------------------------------- split
 
-_OPENER = re.compile(r"^```[ \t]*(ciel-grafik|ciel-kuis)[ \t]*\r?$", re.M)
-_CLOSER = re.compile(r"^```[ \t]*\r?$", re.M)
+# Boleh menjorok berapa pun (blok di bawah langkah bernomor atau daftar bertingkat).
+_OPENER = re.compile(r"^[ \t]*```[ \t]*(ciel-grafik|ciel-kuis)[ \t]*\r?$", re.M)
+_CLOSER = re.compile(r"^[ \t]*```[ \t]*\r?$", re.M)
 
 
 def _markdown(text):
@@ -292,7 +294,7 @@ def parse_answer(text: str) -> list:
         body_start = opener.end() + 1
         closer = _CLOSER.search(text, body_start)
         if closer:
-            body, pos = text[body_start:closer.start()], closer.end()
+            body, pos = textwrap.dedent(text[body_start:closer.start()]), closer.end()
         else:                                     # tidak pernah ditutup: sampai akhir
             segments.append(Broken(kind, "blok tidak ditutup"))
             return segments
@@ -322,8 +324,12 @@ def _fix_commas(math_text):
     return _DECIMAL_COMMA.sub("{,}", math_text)
 
 
-def _tidy_line(line, in_display):
-    """Rapikan satu baris di luar kode. Mengembalikan (baris, masih_di_dalam_$$)."""
+def _tidy_line(line, in_display, literal_open=False):
+    """Rapikan satu baris di luar kode. Mengembalikan (baris, masih_di_dalam_$$).
+
+    literal_open: $$ yang tidak ditutup di baris ini bukan matematika dan di-escape
+    (dipakai _tidy_lines setelah tahu $$ itu tak pernah ditutup).
+    """
     out = []
     i, n = 0, len(line)
     if in_display:
@@ -339,13 +345,25 @@ def _tidy_line(line, in_display):
             i += 2
         elif line.startswith("$$", i):
             j = line.find("$$", i + 2)
+            if j == -1 and literal_open:
+                out.append("\\$\\$")
+                i += 2
+                continue
             if j == -1:
                 out.append("$$" + _fix_commas(line[i + 2:]))
                 return "".join(out), True
             out.append("$$" + _fix_commas(line[i + 2:j]) + "$$")
             i = j + 2
         elif c == "$":
+            # Aturan ala Pandoc: $ tepat sesudah huruf/angka adalah mata uang (US$5),
+            # dan $ penutup tidak boleh langsung diikuti angka ($5-$10).
+            if i > 0 and line[i - 1].isalnum():
+                out.append("\\$")
+                i += 1
+                continue
             j = _find_closer(line, i + 1)
+            if j != -1 and j + 1 < n and line[j + 1].isdigit():
+                j = -1
             body = line[i + 1:j] if j != -1 else ""
             valid = j != -1 and body.strip() and not body[0].isspace() and not body[-1].isspace()
             if valid:
@@ -375,6 +393,26 @@ def _find_closer(line, start):
     return -1
 
 
+def _tidy_lines(lines):
+    """Rapikan baris demi baris. $$ yang belum ditutup saat bertemu baris kosong (atau
+    akhir teks) bukan matematika: baris sejak pembukanya diulang dengan $$ itu
+    di-escape, jadi koma di teks sesudahnya tidak ikut menjadi {,}."""
+    out, in_display, start, start_in, literal, i = [], False, 0, False, -1, 0
+    while True:
+        if in_display and (i == len(lines) or not lines[i].strip()):
+            del out[start:]
+            i, in_display, literal = start, start_in, start
+            continue
+        if i == len(lines):
+            return out
+        was_in = in_display
+        line, in_display = _tidy_line(lines[i], in_display, literal_open=i == literal)
+        if in_display and (not was_in or "$$" in lines[i]):
+            start, start_in = i, was_in     # baris tempat $$ yang masih terbuka dibuka
+        out.append(line)
+        i += 1
+
+
 def _tidy_prose(chunk):
     chunk = chunk.replace("\x00", "")   # NUL dipakai sebagai penanda; buang dari teks model
     stash: list[str] = []
@@ -386,11 +424,7 @@ def _tidy_prose(chunk):
     chunk = _INLINE_CODE.sub(hide, chunk)
     chunk = _PAREN_MATH.sub(lambda m: "$" + m.group(1).strip() + "$", chunk)
     chunk = _BRACKET_MATH.sub(lambda m: "$$" + m.group(1).strip() + "$$", chunk)
-    lines, in_display, result = chunk.split("\n"), False, []
-    for line in lines:
-        line, in_display = _tidy_line(line, in_display)
-        result.append(line)
-    chunk = "\n".join(result)
+    chunk = "\n".join(_tidy_lines(chunk.split("\n")))
     return re.sub(r"\x00(\d+)\x00", lambda m: stash[int(m.group(1))], chunk)
 
 

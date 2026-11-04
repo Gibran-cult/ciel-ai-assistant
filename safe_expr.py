@@ -34,6 +34,18 @@ class ExpressionError(ValueError):
     """Rumus tidak valid atau tidak diizinkan; pesannya berbahasa Indonesia."""
 
 
+# Tulisan buku: "y = ..." atau "f(x) = ..." di depan, dan simbol ², ³, π, ·.
+_LEADING_EQUATION = re.compile(r"^\s*(?:y|[A-Za-z]\s*\(\s*x\s*\))\s*=")
+_SYMBOLS = {"²": "^2", "³": "^3", "π": " pi ", "·": "*"}
+
+
+def _normalise(text: str) -> str:
+    text = _LEADING_EQUATION.sub("", text, count=1)
+    for symbol, plain in _SYMBOLS.items():
+        text = text.replace(symbol, plain)
+    return text
+
+
 def _tokenize(text: str) -> list[tuple[str, str]]:
     tokens: list[tuple[str, str]] = []
     pos = 0
@@ -56,7 +68,7 @@ def _tokenize(text: str) -> list[tuple[str, str]]:
 def _preprocess(text: str) -> str:
     out: list[str] = []
     prev: tuple[str, str] | None = None
-    for kind, value in _tokenize(text):
+    for kind, value in _tokenize(_normalise(text)):
         if prev is not None:
             left_ok = prev[0] == "num" or prev[1] == ")" or (prev[0] == "name" and prev[1] in _VALUE_NAMES)
             right_ok = kind in ("num", "name") or value == "("

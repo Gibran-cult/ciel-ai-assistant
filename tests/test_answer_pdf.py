@@ -104,6 +104,25 @@ class AnswerPdfTest(unittest.TestCase):
         self.assertEqual(document_title("tanpa judul", "jelaskan " * 20), "jelaskan " * 5 + "jelaskan")
         self.assertEqual(document_title("x", ""), "Jawaban Ciel")
 
+    def test_document_title_skips_comments_in_code(self):
+        for fence in ("```", "~~~"):
+            with self.subTest(fence=fence):
+                code = f"Contoh:\n\n{fence}python\n# hitung luas\nluas = p * l\n{fence}\n\n"
+                self.assertEqual(document_title(code + "# Judul Asli\n", "q"), "Judul Asli")
+                self.assertEqual(document_title(code, "luas persegi"), "luas persegi")
+
+    def test_deeply_nested_list_does_not_raise(self):
+        nested = "\n".join("  " * depth + f"- tingkat {depth}" for depth in range(20))
+        self.assertIn("tingkat 19", pdf_text(answer_pdf(nested, "Uji")))
+        self.assertEqual(Image.open(io.BytesIO(answer_png(nested, "Uji"))).width, 1080)
+
+    def test_quiz_currency_is_not_math(self):
+        quiz = ('```ciel-kuis\n{"soal": "Harga US$5 dan US$10, totalnya?", "pilihan": ["US$15", "$x^2$"], '
+                '"jawaban": 0, "pembahasan": "Jumlahkan US$5 dan US$10."}\n```')
+        text = pdf_text(answer_pdf(quiz, "Uji"))
+        for needle in ("US$5 dan US$10, totalnya?", "US$15", "x²", "Jumlahkan US$5 dan US$10."):
+            self.assertIn(needle, text)
+
     def test_report_filename_ext(self):
         self.assertEqual(report_filename("Kuadrat", prefix="Ciel", ext="pdf"), "Ciel - Kuadrat.pdf")
         self.assertTrue(report_filename("x").endswith(".docx"))

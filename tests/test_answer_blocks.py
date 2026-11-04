@@ -146,6 +146,20 @@ class ParseAnswerTest(unittest.TestCase):
         self.assertEqual(sum(isinstance(s, Quiz) for s in segs), 20)
         self.assertIsInstance(segs[-1], Broken)
 
+    def test_indented_blocks_under_a_list_step_parse(self):
+        grafik = '{"jenis": "fungsi", "fungsi": [{"rumus": "x^2"}], "x": [-2, 2]}'
+        kuis_lines = ['{"soal": "Berapa?", "pilihan": ["1", "2"],', ' "jawaban": 0}']
+        for indent in ("   ", "      ", "\t", "         "):
+            kuis = "\n".join(indent + line for line in kuis_lines)
+            text = (f"1. Langkah\n\n{indent}```ciel-grafik\n{indent}{grafik}\n{indent}```\n\n"
+                    f"2. Cek\n\n{indent}```ciel-kuis\n{kuis}\n{indent}```\n\nSelesai.")
+            with self.subTest(indent=repr(indent)):
+                segs = parse_answer(text)
+                self.assertEqual([type(s).__name__ for s in segs],
+                                 ["Markdown", "Visual", "Markdown", "Quiz", "Markdown"])
+                self.assertFalse([s for s in segs if isinstance(s, Markdown) and '"jenis"' in s.text])
+                self.assertEqual(segs[3].jawaban, 0)
+
     def test_math_is_tidied_in_markdown_segments(self):
         segs = parse_answer(r"Nilai \(x = 2,5\) ya.")
         self.assertEqual(segs[0].text, "Nilai $x = 2{,}5$ ya.")
@@ -174,8 +188,14 @@ class RobustnessTest(unittest.TestCase):
 class TidyMathTest(unittest.TestCase):
     def test_currency_dollars_are_escaped(self):
         self.assertEqual(tidy_math("harga $5 dan $10"), r"harga \$5 dan \$10")
-        for kept in ("$5x + 3 = 8$", "$x^2$", "$$\\frac{1}{2}$$", "`$5`"):
+        for kept in ("$5x + 3 = 8$", "$x^2$", "$$\\frac{1}{2}$$", "`$5`", "$x$ dan $y$"):
             self.assertEqual(tidy_math(kept), kept)
+
+    def test_currency_after_a_letter_or_before_a_digit_is_escaped(self):
+        self.assertEqual(tidy_math("harga US$5 dan US$10"), r"harga US\$5 dan US\$10")
+        self.assertEqual(tidy_math("kisaran $5-$10"), r"kisaran \$5-\$10")
+        for text in ("harga US$5 dan US$10", "kisaran $5-$10"):
+            self.assertEqual(tidy_math(tidy_math(text)), tidy_math(text))
 
     def test_stray_dollar_on_odd_line(self):
         self.assertEqual(tidy_math("biaya $x$ dan $"), r"biaya $x$ dan \$")
@@ -194,6 +214,18 @@ class TidyMathTest(unittest.TestCase):
 
     def test_multiline_display_math(self):
         self.assertEqual(tidy_math("$$\nx = 1,5\n$$"), "$$\nx = 1{,}5\n$$")
+
+    def test_unclosed_display_math_does_not_leak_into_later_text(self):
+        for text in ("$$x = 1,5\n\nParagraf lain 2,5 kg",
+                     "Awal $$x = 1,5\nlanjut 3,5\n\nParagraf lain 2,5 kg",
+                     "$$\nx = 1,5"):
+            with self.subTest(text=text):
+                out = tidy_math(text)
+                self.assertNotIn("{,}", out)
+                self.assertEqual(tidy_math(out), out)
+        self.assertTrue(tidy_math("$$x = 1,5\n\nParagraf lain 2,5 kg").endswith("Paragraf lain 2,5 kg"))
+        # a $$ span that does close keeps its comma fix, also after an unclosed one
+        self.assertEqual(tidy_math("$$a\n\n$$\nx = 1,5\n$$"), "\\$\\$a\n\n$$\nx = 1{,}5\n$$")
 
     def test_idempotent(self):
         once = tidy_math(r"harga $5 dan $10, \(x = 2,5\)")

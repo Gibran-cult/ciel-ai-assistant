@@ -20,9 +20,18 @@ class SafeExprTest(unittest.TestCase):
         self.assertAlmostEqual(compile_expression("log(100) + ln(e)")(np.array([0.0]))[0], 3.0)
         self.assertAlmostEqual(compile_expression("(x+1)(x-1)")(np.array([3.0]))[0], 8.0)
 
+    def test_written_like_a_textbook(self):
+        xs = np.array([0.5, 2.0])
+        for text, expected in (("y = x^2", xs ** 2), ("f(x) = x^2", xs ** 2), ("g (x)=x^2", xs ** 2),
+                               ("y=x²", xs ** 2), ("x²", xs ** 2), ("x³", xs ** 3), ("2·x", 2 * xs),
+                               ("sin(πx)", np.sin(np.pi * xs)), ("2π", np.full(2, 2 * np.pi))):
+            with self.subTest(text=text):
+                np.testing.assert_allclose(compile_expression(text)(xs), expected)
+
     def test_rejects_non_math(self):
         for text in ("__import__('os')", "x.__class__", "open('a')", "[x]", "x if x else 1",
-                     "lambda: 1", "y + 1", "x" * 121):
+                     "lambda: 1", "y + 1", "x" * 121, "y = __import__('os')", "f(x) = x.__class__",
+                     "y = x = 1", "z = x", "y == x", "ff(x) = x", "f(x) = ", "y = "):
             with self.subTest(text=text), self.assertRaises(ExpressionError):
                 compile_expression(text)
 

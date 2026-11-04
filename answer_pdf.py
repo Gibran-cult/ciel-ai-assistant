@@ -12,7 +12,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from answer_blocks import Broken, Markdown, Quiz, Visual, parse_answer
+from answer_blocks import Broken, Markdown, Quiz, Visual, parse_answer, tidy_math
 from chat_sources import answer_parts
 from riset_export import inline_runs
 
@@ -27,6 +27,7 @@ PNG_WIDTH_PX = 1080
 PNG_PAGE_MM = (120, 600)
 PNG_MARGIN_PX = 40
 VISUAL_MM = 150
+MAX_LIST_DEPTH = 6   # lebih dalam dari ini tidak menjorok lagi (fpdf kehabisan lebar)
 BODY_PT = 11
 INK = (28, 31, 38)
 MUTED = (107, 114, 128)
@@ -44,10 +45,19 @@ def wants_document(request):
     return bool(_DOCUMENT_WORDS.search(str(request or "")))
 
 
+_FENCE_LINE = re.compile(r"^\s*(```|~~~)")
+
+
 def document_title(content, request):
-    match = re.search(r"^#[ \t]+(.+?)\s*$", str(content or ""), re.MULTILINE)
-    if match:
-        return match.group(1).strip()
+    fence = None                              # "# komentar" di dalam blok kode bukan judul
+    for line in str(content or "").splitlines():
+        opener = _FENCE_LINE.match(line)
+        if opener:
+            fence = None if fence == opener.group(1) else (fence or opener.group(1))
+            continue
+        match = None if fence else re.match(r"^#[ \t]+(.+?)\s*$", line)
+        if match:
+            return match.group(1).strip()
     words = str(request or "").split()
     title = ""
     for word in words:
@@ -358,7 +368,7 @@ class _Writer:
 
     def list_item(self, depth, label, text):
         pdf = self.pdf
-        indent = self.base_left + 3 + depth * 6
+        indent = self.base_left + 3 + min(depth, MAX_LIST_DEPTH) * 6
         width = 7 if label != "•" else 5
         self._ensure(12)
         pdf.set_x(indent)
@@ -470,9 +480,9 @@ class _Writer:
         self._ensure(26)
         self.pdf.ln(1.5)
         self._runs([(f"Latihan {n}", True, False)], size=9.5, line=5, color=MUTED)
-        self._runs(_inline(quiz.soal))
+        self._runs(_inline(tidy_math(quiz.soal)))   # teks kuis dirapikan seperti di chat ($ mata uang)
         for index, option in enumerate(quiz.pilihan):
-            self.list_item(0, f"{chr(65 + index)}.", str(option))
+            self.list_item(0, f"{chr(65 + index)}.", tidy_math(str(option)))
         self.keys.append((n, quiz))
         self.pdf.ln(1.5)
 
@@ -525,10 +535,11 @@ class _Writer:
                 answer = f"{chr(65 + quiz.jawaban)}. {quiz.pilihan[quiz.jawaban]}"
             else:
                 answer = str(quiz.jawaban)
+            answer = tidy_math(answer)
             self.list_item(0, f"{n}.", f"**{answer}**" if "*" not in answer else answer)
             if quiz.pembahasan:
                 self.pdf.set_left_margin(self.base_left + 10)
-                self._runs(_inline(quiz.pembahasan), size=10, line=5, color=(55, 65, 81))
+                self._runs(_inline(tidy_math(quiz.pembahasan)), size=10, line=5, color=(55, 65, 81))
                 self.pdf.set_left_margin(self.base_left)
 
     def sources_section(self, sources):
