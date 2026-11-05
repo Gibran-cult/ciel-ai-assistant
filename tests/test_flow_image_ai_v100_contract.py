@@ -67,9 +67,10 @@ class ImageAIFlowContractTest(unittest.TestCase):
         self.assertEqual(self.component["field_order"], ["input_value", "api_key", "api_base", "model_name"])
 
     def test_snapshot_convention(self):
-        self.assertNotIn(b"\n", self.raw_bytes.replace(b"\r\n", b""))
+        # Same bytes as flow/v1.14.1: indent=2, ensure_ascii=False, LF, no trailing newline.
+        self.assertNotIn(b"\r", self.raw_bytes)
         self.assertFalse(self.raw_bytes.endswith(b"\n"))
-        self.assertEqual(json.dumps(self.flow, indent=2, ensure_ascii=False).replace("\n", "\r\n"), self.raw)
+        self.assertEqual(json.dumps(self.flow, indent=2, ensure_ascii=False), self.raw)
 
     def test_snapshot_contains_no_hardcoded_api_keys(self):
         self.assertIsNone(re.search(r"sk-[A-Za-z0-9_-]{16,}", self.raw))
