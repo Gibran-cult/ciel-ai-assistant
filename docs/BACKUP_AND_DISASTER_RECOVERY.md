@@ -6,14 +6,14 @@ This document defines what must be backed up and how to restore Ciel AI Master a
 
 ## What Git Restores, and What It Does Not
 
-The GitHub repository restores the **software state**: the Streamlit app, tests, documentation, CI, the main flow snapshots (`flow/v1.0.0/` … `flow/v1.5.1/`), and the custom component sources (`flow/components/`). Release tags `v1.0.0` … `v1.5.2` mark known-good states (see `RELEASE_CHECKLIST.md`).
+The GitHub repository restores the **software state**: the Streamlit app, tests, documentation, CI, the main flow snapshots (`flow/v1.0.0/` … `flow/v1.5.1/`), the Pro and helper flows (`flow/riset_skripsi/`, `flow/penulis/`, `flow/image_ai/`, `flow/memory_admin/`), and the custom component sources (`flow/components/`). Release tags `v1.0.0` … `v1.5.2` mark known-good states (see `RELEASE_CHECKLIST.md`).
 
 The following parts of production are **not in Git** and need their own protected backup:
 
 | Part | Where it lives | Notes |
 |---|---|---|
 | App secrets | Streamlit Cloud Secrets, local `.streamlit/secrets.toml` / `.env` | `NGROK_URL`, `NGROK_USER`, `NGROK_PASSWORD`, `LANGFLOW_API_KEY`, `FLOW_ID`, optional `[auth]` and rate limits |
-| Langflow global variables | Langflow database | At least `DEEPSEEK_API_KEY` (main Agent and the DeepSeek sub-flows), `EXA_API_KEY` (Web Research) and `GEMINI_API_KEY` (Vision Router, and the main Agent's fallback model since v1.13.0). Flows store only the variable names. |
+| Langflow global variables | Langflow database | At least `DEEPSEEK_API_KEY` (main Agent, the DeepSeek sub-flows, and the Pro flows Riset Skripsi, Ciel Penulis and Ciel Image AI), `EXA_API_KEY` (Web Research) and `GEMINI_API_KEY` (Vision Router, and the main Agent's fallback model since v1.13.0). Flows store only the variable names. |
 | Sub-flows | Langflow database | Math Tutor Agent and Knowledge Retriever, called by Run Flow; Web Research Assistant, kept as the rollback path for research. Verified Data Analyst was removed in v1.11.0 (a backup is in the flow backups). |
 | Built-in sales dataset | `~/.ciel_ai/builtin_datasets/200_sales_data.csv` on the Langflow host | Read by Ciel Table Analyst (`file_name=200_sales_data`). Copied from Langflow file storage (`200_sales_data (1).csv`, 200 rows); keep a copy with the flow backups. |
 | Knowledge base | `~/.langflow/knowledge_bases` on the Langflow host | Knowledge base `TITANIC_DATA_SCIENCE_SOLUTIONS`, used by Knowledge Retriever |

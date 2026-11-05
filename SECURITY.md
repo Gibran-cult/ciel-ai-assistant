@@ -37,7 +37,7 @@ The app then shows its error card; nothing on the host is reachable from the int
 |---|---|---|
 | `NGROK_PASSWORD` (and `NGROK_USER`) | `.env` on the host, Streamlit Secrets, the policy file | Generate a new value of at least 32 random characters, put it in `.env` and Streamlit Secrets, run `python tools/render_ngrok_policy.py`, restart ngrok (stop it; the watchdog starts it), then run `python tools/check_gateway.py`. |
 | `LANGFLOW_API_KEY` | `.env`, Streamlit Secrets | Langflow → Settings → API Keys: create a new key, update both places, then delete the old key. |
-| `DEEPSEEK_API_KEY`, `EXA_API_KEY`, `GEMINI_API_KEY` | Langflow global variables | Create a new key in the provider's dashboard, update the global variable, revoke the old key. |
+| `DEEPSEEK_API_KEY`, `EXA_API_KEY`, `GEMINI_API_KEY` | Langflow global variables | Create a new key in the provider's dashboard, update the global variable, revoke the old key. `DEEPSEEK_API_KEY` is also read by the Ciel Image AI flow (Edit AI and Ilustrasi), so one rotation covers it. |
 | `SUPABASE_SERVICE_KEY` | Streamlit Secrets | Supabase → Project Settings → API: roll the service key, update Streamlit Secrets. |
 | `[auth] client_secret`, `cookie_secret` | Streamlit Secrets | Google Cloud Console → Credentials for the client secret. A new `cookie_secret` signs everyone out. |
 | ngrok authtoken | ngrok agent config on the host | ngrok dashboard → Authtokens. |
