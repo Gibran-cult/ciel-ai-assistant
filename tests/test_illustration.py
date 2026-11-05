@@ -47,6 +47,18 @@ class IllustrationTest(unittest.TestCase):
             with self.assertRaises(IllustrationError):
                 clean_svg(bad)
 
+    def test_comments_are_dropped_but_doctype_still_rejected(self):
+        commented = GOOD.replace("<rect", "<!-- latar langit -->\n<rect", 1).replace(
+            "<circle", "<!-- matahari,\n pojok kanan atas -->\n<circle", 1)
+        out = clean_svg("Ini SVG-nya:\n```svg\n" + commented + "\n```")
+        self.assertNotIn("<!--", out)
+        self.assertNotIn("latar langit", out)
+        self.assertIn("Penguapan", out)
+        for bad in ('<svg><!-- a --><!DOCTYPE x><g/></svg>', '<svg><!-- tidak ditutup <g/></svg>',
+                    '<svg><![CDATA[x]]><!-- b --></svg>'):
+            with self.assertRaises(IllustrationError):
+                clean_svg(bad)
+
     def test_namespaced_input_missing_viewbox_and_bad_values(self):
         out = clean_svg('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300">'
                         '<rect width="10" height="10" fill="data:x" stroke="a&amp;b"/></svg>')
