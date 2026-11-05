@@ -1,0 +1,52 @@
+# Ciel's Streamlit app on its own VPS. Run from this directory
+# (/opt/ciel/deploy/app); Compose reads CIEL_APP_HOSTS from the .env next to
+# this file (see .env.example) and the app's secrets from secrets.toml.
+#
+#   internet -> caddy (TLS) -> app (streamlit, port 8501)
+#
+# Only caddy is public. The backend is not here: the app reaches it at
+# NGROK_URL from its secrets, exactly as on Streamlit Community Cloud.
+services:
+  caddy:
+    image: caddy:2.8.4
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CIEL_APP_HOSTS: ${CIEL_APP_HOSTS:?set CIEL_APP_HOSTS in .env}
+    volumes:
+      # A directory, not the file: git replaces a changed file with a new
+      # one, and a single-file bind mount would keep showing the old one.
+      - ./caddy:/etc/caddy:ro
+      - caddy_data:/data
+    depends_on:
+      - app
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  app:
+    build:
+      context: ../..
+      dockerfile: deploy/app/Dockerfile
+    image: ciel-app:local
+    restart: unless-stopped
+    volumes:
+      - ./secrets.toml:/app/.streamlit/secrets.toml:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+volumes:
+  caddy_data:

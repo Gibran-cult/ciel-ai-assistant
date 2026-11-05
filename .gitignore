@@ -17,3 +17,7 @@ deploy/vps/nginx/ciel.htpasswd
 
 # VPS secrets (deploy/vps/.env.example lists the names)
 deploy/vps/.env
+
+# App VPS secrets (deploy/app/README.md, step 5)
+deploy/app/.env
+deploy/app/secrets.toml

@@ -1,0 +1,22 @@
+# Build context of deploy/app/Dockerfile is the repository root.
+# Secrets must never be copied into the image (tests/test_app_deploy.py).
+.streamlit/secrets.toml
+deploy/app/secrets.toml
+deploy/app/.env
+.env
+
+# Not needed to run the app
+.git
+.github
+.claude
+.superpowers
+.impeccable
+tests
+docs
+landing
+flow
+deploy
+supabase
+tools
+**/__pycache__
+**/*.pyc

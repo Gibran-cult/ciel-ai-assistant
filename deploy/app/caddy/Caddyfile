@@ -1,0 +1,10 @@
+# TLS for the app hosts (Let's Encrypt over HTTP-01, automatic). Every host in
+# CIEL_APP_HOSTS (.env, comma-separated) must be a DNS-only (grey cloud) record
+# pointing at this VPS before it is listed here, or Caddy keeps failing to get
+# its certificate.
+#
+# No timeouts: a Riset Skripsi run keeps the websocket open for up to 420 s,
+# and Caddy's defaults never cut an open websocket.
+{$CIEL_APP_HOSTS} {
+	reverse_proxy app:8501
+}
