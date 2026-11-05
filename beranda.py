@@ -2,7 +2,8 @@
 
 Beranda menggantikan halaman chat kosong. Template biasa mengisi kotak tanya
 (bagian dalam kurung diganti mahasiswa sebelum dikirim); template Pro membuka
-dialog fitur yang sudah ada (Riset Skripsi, Kerangka). Rendering ada di app.py.
+dialog fitur yang sudah ada (Riset Skripsi, Kerangka). "Edit gambar" (gratis) dan
+"Ilustrasi" (Pro) juga membuka dialog. Rendering ada di app.py.
 """
 
 from dataclasses import dataclass
@@ -22,7 +23,7 @@ class Template:
     label: str
     text: str
     pro: bool
-    action: str  # "fill", "riset", atau "kerangka"
+    action: str  # "fill", "riset", "kerangka", "edit_gambar", atau "ilustrasi"
 
 
 TEMPLATES = (
@@ -32,11 +33,13 @@ TEMPLATES = (
     Template("cek_referensi", "Cek referensi", "Cek apakah referensi ini beneran ada: [tempel referensi]", False, "fill"),
     Template("ringkas_file", "Ringkas file proyek", "Ringkas file proyek ini dan tandai klaim yang belum ada sumbernya.", False, "fill"),
     Template("kerangka", "Kerangka Bab 1–3", "", True, "kerangka"),
+    Template("edit_gambar", "Edit gambar", "", False, "edit_gambar"),
+    Template("ilustrasi", "Ilustrasi", "", True, "ilustrasi"),
 )
 
 
-def templates_for(has_files, has_map, riset_enabled, writer_enabled):
-    """Template yang bisa dipakai di konteks ini, urutan tetap."""
+def templates_for(has_files, has_map, riset_enabled, writer_enabled, image_ai_enabled=False):
+    """Template yang bisa dipakai di konteks ini, urutan tetap. "Edit gambar" selalu ada."""
 
     hidden = set()
     if not riset_enabled:
@@ -45,6 +48,8 @@ def templates_for(has_files, has_map, riset_enabled, writer_enabled):
         hidden.add("ringkas_file")
     if not (has_map and writer_enabled):
         hidden.add("kerangka")
+    if not image_ai_enabled:
+        hidden.add("ilustrasi")
     return [template for template in TEMPLATES if template.key not in hidden]
 
 

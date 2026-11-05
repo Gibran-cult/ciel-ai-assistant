@@ -116,6 +116,27 @@ class BuildPolicyTest(unittest.TestCase):
         with self.assertRaises(policy_tool.PolicyError):
             policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, None, "penulis")
 
+    def test_image_flow_run_is_allowed_but_not_upload(self):
+        image = "0f0f0f0f-1111-2222-3333-444444444444"
+        with_image = policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, None, None, image.replace("-", ""))
+        deny = with_image["on_http_request"][2]["expressions"][0]
+        costly = with_image["on_http_request"][3]["expressions"][0]
+        for form in (image, image.replace("-", "")):
+            self.assertIn(f"(req.method == 'POST' && {path_check(f'/api/v1/run/{form}')})", deny)
+            self.assertIn(path_check(f"/api/v1/run/{form}"), costly)
+            # The photo travels inside the run JSON: no upload path for this flow.
+            self.assertNotIn(f"/api/v1/files/upload/{form}", deny)
+            self.assertNotIn(f"/api/v1/files/upload/{form}", costly)
+        self.assertEqual(with_image["on_http_request"][3]["actions"][0]["config"]["capacity"], 20)
+        with self.assertRaises(policy_tool.PolicyError):
+            policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, None, None, "image-ai")
+
+    def test_no_image_flow_keeps_policy_identical(self):
+        self.assertEqual(policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, None, None, None), policy())
+        self.assertEqual(policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, None, None, ""), policy())
+        self.assertEqual(json.dumps(policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, None, None, None)),
+                         json.dumps(policy()))
+
     def test_refuses_weak_or_missing_settings(self):
         cases = {
             "no user": ("", PASSWORD, FLOW, ADMIN),
@@ -183,6 +204,18 @@ class RenderMainTest(unittest.TestCase):
         self.assertEqual(
             json.loads(self.out.read_text(encoding="utf-8")),
             policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, None, writer),
+        )
+
+    def test_image_flow_id_comes_from_env(self):
+        image = "0f0f0f0f-1111-2222-3333-444444444444"
+        code, _ = self.render(
+            f"NGROK_USER={USER}\nNGROK_PASSWORD={PASSWORD}\nFLOW_ID={FLOW}\n"
+            f"MEMORY_ADMIN_FLOW_ID={ADMIN}\nIMAGE_FLOW_ID={image.upper()}\n"
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            json.loads(self.out.read_text(encoding="utf-8")),
+            policy_tool.build_policy(USER, PASSWORD, FLOW, ADMIN, None, None, image),
         )
 
     def test_nothing_is_written_when_a_setting_is_missing(self):

@@ -55,6 +55,8 @@ from pricing import PLANS, render_pricing, safe_contact_url
 from riset_export import report_docx, report_filename
 import visuals
 from writing import APPROACHES, KERANGKA_FOOTNOTE, MAX_OBJECT_CHARS, finish_kerangka, kerangka_payload
+from illustration import IllustrationError, clean_svg, svg_png
+from image_edit import MAX_EDIT_PX, EditError, apply_recipe, encode, load_for_edit, preview, validate_recipe
 from draft_check import MAX_DRAFT_CHARS, MIN_DRAFT_WORDS, check_report, clean_draft, draft_from_file, split_excerpts, word_count
 from privacy import render_privacy
 from terms import LEGAL_VERSION, render_terms
@@ -615,6 +617,14 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 .ciel-riset-lead { margin: 0 0 1rem; font-size: 0.92rem; line-height: 1.65; color: var(--c-muted); }
 .ciel-riset-lead b, .ciel-riset-lock b { font-weight: 600; color: var(--c-text); }
 .ciel-riset-lock { margin: 0 0 0.9rem; font-size: 0.92rem; color: var(--c-text); }
+/* Edit gambar: judul kelompok kontrol, pratinjau berbingkai, kotak edit AI. */
+.ciel-edit-h { margin: 0.9rem 0 0.35rem; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--c-muted); }
+[data-testid="stDialog"] .st-key-edit_controls .ciel-edit-h:first-child { margin-top: 0; }
+[data-testid="stDialog"] .st-key-edit_preview { padding: 0.5rem; border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-raised); }
+[data-testid="stDialog"] .st-key-edit_preview img { border-radius: var(--r-sm); }
+/* Ilustrasi: gambar di atas "kertas" putih (pengecualian token: ini gambar). */
+[data-testid="stDialog"] .st-key-ilustrasi_paper { padding: 0.5rem; border: 1px solid var(--c-line); border-radius: var(--r-md); background: #ffffff; }
+[data-testid="stDialog"] .st-key-edit_ai_box { margin-top: 0.6rem; padding: 0.2rem 0.8rem 0.8rem; border: 1px solid var(--c-line); border-radius: var(--r-md); }
 
 /* ---------- Buttons ---------- */
 :is(.stApp, [data-testid="stPopoverBody"], [data-testid="stDialog"]) .stButton > button,
@@ -1676,6 +1686,14 @@ WRITER_TIMEOUT = 240
 # yang dibutuhkan hanya Supabase untuk status Pro.
 CHECK_ENABLED = bool(CHAT_STORE)
 
+# Opsional: flow "Ciel Image AI" (Pro): Edit AI dan Ilustrasi lewat DeepSeek.
+# Tanpa IMAGE_FLOW_ID bagian AI disembunyikan; edit manual tetap jalan untuk
+# semua orang. Kuota AI_IMAGE_PER_DAY dibagi Edit AI dan Ilustrasi.
+IMAGE_FLOW_ID = get_config("IMAGE_FLOW_ID")
+IMAGE_AI_ENABLED = bool(IMAGE_FLOW_ID and CHAT_STORE)
+AI_IMAGE_PER_DAY = get_int_config("AI_IMAGE_PER_DAY", 3)
+IMAGE_AI_TIMEOUT = 90
+
 # Opsional: pembelian Pro (payments.py, docs/PRO.md). PAYMENT_PROVIDER memilih
 # "midtrans" (Snap, default) atau "mayar" (Single Payment Request). Key hanya
 # dipakai di server; *_PRODUCTION=true memakai akun produksi, selain itu
@@ -2308,6 +2326,7 @@ FEATURE_QUOTAS = {
     "riset": (RISET_SKRIPSI_PER_DAY, "Riset Skripsi bisa dipakai {limit} kali"),
     "kerangka": (KERANGKA_PER_DAY, "Kerangka Bab 1–3 bisa disusun {limit} kali"),
     "cek": (CEK_KUTIPAN_PER_DAY, "Cek kutipan & kemiripan bisa dipakai {limit} kali"),
+    "gambar": (AI_IMAGE_PER_DAY, "Edit AI & ilustrasi bisa dipakai {limit} kali"),
 }
 
 
@@ -2442,6 +2461,8 @@ def strip_markdown_images(text):
 # saat DeepSeek dan model cadangannya sama-sama gagal; Langflow menaruhnya di
 # detail HTTP 500.
 MODEL_UNAVAILABLE = "Ciel model unavailable"
+# Awal pesan error komponen Ciel Image AI (flow/components/ciel_image_ai.py).
+IMAGE_AI_UNAVAILABLE = "Ciel image AI unavailable"
 
 
 def ask_langflow(message, tweaks=None, session_id=None, flow_id=None, timeout=240):
@@ -2629,6 +2650,15 @@ def ask_langflow(message, tweaks=None, session_id=None, flow_id=None, timeout=24
                 f"HTTP Status: {status}\n"
                 f"Request ID: `{request_id}`\n"
                 "Penyebab: model AI utama dan cadangan gagal."
+            )
+
+        if status == 500 and IMAGE_AI_UNAVAILABLE in (getattr(response, "text", "") or ""):
+            return CielError(
+                "AI sedang tidak tersedia.\n\n"
+                "Silakan coba lagi sebentar lagi.\n\n"
+                f"HTTP Status: {status}\n"
+                f"Request ID: `{request_id}`\n"
+                f"Penyebab: {IMAGE_AI_UNAVAILABLE}."
             )
 
         if status == 500:
@@ -3438,18 +3468,18 @@ def file_extension(name):
     return str(name).rsplit(".", 1)[-1].lower() if "." in str(name) else ""
 
 
-def read_image(uploaded):
-    """Baca gambar unggahan. Kembalikan (data, error)."""
+UNREADABLE_IMAGE = "unreadable"
 
-    raw = uploaded.getvalue()
+
+def image_size_error(name, raw):
+    """
+    Batas ukuran unggahan gambar (byte dan megapiksel), dipakai lampiran chat
+    dan Edit gambar. None jika lolos, UNREADABLE_IMAGE jika header gambar tidak
+    terbaca, atau kalimat penjelasan untuk pengguna.
+    """
 
     if len(raw) > MAX_IMAGE_BYTES:
-        return None, (
-            f"{uploaded.name}: ukuran melebihi "
-            f"{MAX_IMAGE_BYTES // (1024 * 1024)} MB."
-        )
-
-    unreadable = f"{uploaded.name}: file ini bukan gambar yang bisa dibaca."
+        return f"{name}: ukuran melebihi {MAX_IMAGE_BYTES // (1024 * 1024)} MB."
 
     try:
         with Image.open(io.BytesIO(raw)) as img:
@@ -3458,14 +3488,31 @@ def read_image(uploaded):
         pixels = MAX_IMAGE_PIXELS + 1
     except Exception:
         security_event("image_rejected", reason="unreadable")
-        return None, unreadable
+        return UNREADABLE_IMAGE
 
     if pixels > MAX_IMAGE_PIXELS:
         security_event("image_rejected", reason="pixels")
-        return None, (
-            f"{uploaded.name}: resolusi gambar terlalu besar "
+        return (
+            f"{name}: resolusi gambar terlalu besar "
             f"(maks. {MAX_IMAGE_PIXELS // 1_000_000} megapiksel)."
         )
+
+    return None
+
+
+def read_image(uploaded):
+    """Baca gambar unggahan. Kembalikan (data, error)."""
+
+    raw = uploaded.getvalue()
+    unreadable = f"{uploaded.name}: file ini bukan gambar yang bisa dibaca."
+
+    error = image_size_error(uploaded.name, raw)
+
+    if error == UNREADABLE_IMAGE:
+        return None, unreadable
+
+    if error:
+        return None, error
 
     image = fit_for_vision({
         "name": uploaded.name,
@@ -4091,7 +4138,9 @@ def render_beranda():
 
     with st.container(key="templates", horizontal=True, gap="small"):
 
-        for template in templates_for(bool(project and project["files"]), riset is not None, RISET_ENABLED, WRITER_ENABLED):
+        for template in templates_for(
+            bool(project and project["files"]), riset is not None, RISET_ENABLED, WRITER_ENABLED, IMAGE_AI_ENABLED
+        ):
 
             label = f"{template.label} · Pro" if template.pro else template.label
 
@@ -4099,6 +4148,10 @@ def render_beranda():
                 st.button(label, key=f"tpl_{template.key}", on_click=fill_composer, args=(template.text,))
             elif template.action == "riset":
                 st.button(label, key=f"tpl_{template.key}", on_click=open_riset_dialog)
+            elif template.action == "edit_gambar":
+                st.button(label, key=f"tpl_{template.key}", on_click=open_edit_dialog)
+            elif template.action == "ilustrasi":
+                st.button(label, key=f"tpl_{template.key}", on_click=open_ilustrasi_dialog)
             else:
                 chat, index = riset
                 topic = chat["messages"][index].get("topic") or "Riset Skripsi"
@@ -4495,6 +4548,452 @@ def cek_dialog(topic, map_index):
 
         st.session_state.pending = make_cek_pending(topic, draft, map_index)
         st.rerun()
+
+
+# ------------------------------------------------------------
+# EDIT GAMBAR (GRATIS) DAN EDIT AI (PRO)
+# ------------------------------------------------------------
+
+# Kunci kind untuk security_event saat akun bukan Pro.
+IMAGE_AI_KIND = "image_ai"
+MAX_IMAGE_AI_CHARS = 300
+EDIT_UPLOAD_TYPES = ["jpg", "jpeg", "png", "webp", "gif"]
+EDIT_AI_PX = 1024
+IMAGE_AI_DOWN = "AI sedang tidak tersedia.\n\nEdit manual tetap bisa dipakai. Coba lagi sebentar lagi."
+AI_NOT_UNDERSTOOD = "AI belum menangkap maksudnya. Coba tulis lebih spesifik."
+EDIT_UNREADABLE = "Format ini belum bisa diedit. Pakai JPG atau PNG."
+
+# Posisi label: pojok kiri atas label, relatif ke area yang tersisa setelah
+# dipotong (anotasi digambar sebelum crop). Teks yang mentok dijepit di dalam
+# gambar oleh image_edit, jadi kolom kanan memakai 0.62, bukan 0.97.
+LABEL_POSITIONS = {
+    "Kiri atas": (0.03, 0.03), "Atas": (0.38, 0.03), "Kanan atas": (0.62, 0.03),
+    "Kiri": (0.03, 0.45), "Tengah": (0.38, 0.45), "Kanan": (0.62, 0.45),
+    "Kiri bawah": (0.03, 0.86), "Bawah": (0.38, 0.86), "Kanan bawah": (0.62, 0.86),
+}
+LABEL_SIZES = {"Kecil": 0.04, "Sedang": 0.07, "Besar": 0.11}
+EDIT_STATE_KEYS = ("edit_open", "edit_source", "edit_ai", "edit_ai_notice", "edit_rot")
+
+
+def image_ai_refusal():
+    """Pro dulu, baru kuota: akun gratis tidak pernah memakai kuota."""
+    return pro_refusal(IMAGE_AI_ENABLED, "Edit AI & ilustrasi", IMAGE_AI_KIND) or check_rate_limit("gambar")
+
+
+def ask_image_ai(mode, instruction, image=None):
+    """
+    Kirim satu permintaan ke flow Ciel Image AI. Kembalikan teks balasan atau
+    CielError. Untuk edit, foto dikirim sebagai JPEG 1024 px dengan ukuran
+    aslinya; koordinat balasan tetap 0-1 jadi berlaku di foto asli.
+    """
+
+    request = {"mode": mode, "instruction": instruction}
+
+    if image is not None:
+        rgba = image.convert("RGBA")
+        flat = Image.new("RGB", rgba.size, "white")
+        flat.paste(rgba, mask=rgba.getchannel("A"))
+        flat.thumbnail((EDIT_AI_PX, EDIT_AI_PX), Image.LANCZOS)
+        out = io.BytesIO()
+        flat.save(out, "JPEG", quality=85)
+        request.update(
+            image=base64.b64encode(out.getvalue()).decode("ascii"),
+            width=image.width,
+            height=image.height,
+        )
+
+    reply = ask_langflow(json.dumps(request), flow_id=IMAGE_FLOW_ID, timeout=IMAGE_AI_TIMEOUT)
+
+    if isinstance(reply, CielError):
+        # Detail teknis (request ID, status) sudah ada di log ask_langflow.
+        logger.warning("image_ai_failed mode=%s detail=%s", mode, " ".join(str(reply).split())[:160])
+        return CielError(IMAGE_AI_DOWN)
+
+    return reply
+
+
+def parse_edit_reply(reply):
+    """(op bersih, catatan) dari balasan Edit AI; balasan yang bukan JSON = nol op."""
+
+    try:
+        data = json.loads(reply)
+    except (TypeError, ValueError):
+        return [], ""
+
+    ops, _ = validate_recipe(data)
+    note = data.get("catatan") if isinstance(data, dict) else ""
+    return ops, " ".join(note.split())[:160] if isinstance(note, str) else ""
+
+
+def manual_edit_ops(values):
+    """Resep dari widget dialog Edit gambar (dict nilai widget). Urutan tidak penting."""
+
+    ops = []
+    left, top = values["crop_l"] / 100, values["crop_t"] / 100
+    right, bottom = 1 - values["crop_r"] / 100, 1 - values["crop_b"] / 100
+
+    tone = {
+        key: round(values[name], 2)
+        for key, name in (("brightness", "bright"), ("contrast", "contrast"), ("sharpness", "sharp"))
+        if abs(values[name] - 1.0) > 1e-6
+    }
+    if tone:
+        ops.append({"op": "adjust", **tone})
+    if values["doc"]:
+        ops.append({"op": "document"})
+    elif values["gray"]:
+        ops.append({"op": "grayscale"})
+
+    label = " ".join((values["label"] or "").split())
+    if label:
+        fx, fy = LABEL_POSITIONS.get(values["pos"], LABEL_POSITIONS["Kiri atas"])
+        ops.append({
+            "op": "text", "text": label,
+            "at": [left + fx * (right - left), top + fy * (bottom - top)],
+            "size": LABEL_SIZES.get(values["size"], LABEL_SIZES["Sedang"]),
+            "color": values["color"], "background": True,
+        })
+
+    if (left, top, right, bottom) != (0, 0, 1, 1):
+        ops.append({"op": "crop", "box": [left, top, right, bottom]})
+
+    rotation = values["rot"] % 360
+    if values["flip_h"] and values["flip_v"]:
+        rotation = (rotation + 180) % 360          # dua flip = putar 180
+    elif values["flip_h"] or values["flip_v"]:
+        ops.append({"op": "flip", "axis": "horizontal" if values["flip_h"] else "vertical"})
+    if rotation:
+        ops.append({"op": "rotate", "degrees": rotation})
+
+    if values["width"]:
+        ops.append({"op": "resize", "width": int(values["width"])})
+
+    return ops
+
+
+def open_edit_dialog():
+    st.session_state.edit_open = True
+
+
+def open_ilustrasi_dialog():
+    st.session_state.ilustrasi_open = True
+
+
+def close_edit_dialog():
+    """Hasil edit hanya hidup selama dialog terbuka (tidak disimpan di mana pun)."""
+    for key in EDIT_STATE_KEYS:
+        st.session_state.pop(key, None)
+
+
+def rotate_edit(step):
+    st.session_state.edit_rot = (st.session_state.get("edit_rot", 0) + step) % 360
+
+
+def clear_edit_ai():
+    st.session_state.edit_ai = None
+    st.session_state.edit_ai_notice = None
+
+
+def load_edit_source(uploaded):
+    """Foto unggahan -> session_state.edit_source (dimuat ulang hanya jika file berganti)."""
+
+    raw = uploaded.getvalue()
+    digest = hashlib.sha256(raw).hexdigest()
+    source = st.session_state.get("edit_source")
+
+    if source and source["sha"] == digest:
+        return source
+
+    clear_edit_ai()
+    error = image_size_error(uploaded.name, raw)
+
+    if error == UNREADABLE_IMAGE:
+        error = EDIT_UNREADABLE
+
+    image = None
+
+    if not error:
+        try:
+            image = load_for_edit(raw)
+        except EditError as exc:
+            error = str(exc)
+
+    source = {
+        "sha": digest,
+        "stem": (uploaded.name.rsplit(".", 1)[0] or "Foto")[:80],
+        "image": image,
+        "error": error,
+    }
+    st.session_state.edit_source = source
+    return source
+
+
+def render_edit_ai(image, sha):
+    """Bagian "Minta AI · Pro" di dialog Edit gambar."""
+
+    st.markdown('<p class="ciel-edit-h">Minta AI · Pro</p>', unsafe_allow_html=True)
+
+    if not is_pro():
+        st.markdown('<p class="ciel-riset-lock">Edit dengan AI khusus <b>Ciel Pro</b>.</p>', unsafe_allow_html=True)
+
+        if st.button("Lihat paket Pro", key="edit_pro", icon=":material/sell:"):
+            close_edit_dialog()
+            show_pricing()
+            st.rerun()
+
+        return
+
+    instruction = st.text_input(
+        "Instruksi untuk AI",
+        key="edit_ai_text",
+        max_chars=MAX_IMAGE_AI_CHARS,
+        placeholder="Contoh: potong soal nomor 3, lalu lingkari jawabannya",
+        label_visibility="collapsed",
+    )
+
+    apply = st.button("Terapkan", key="edit_ai_go", type="primary", icon=":material/auto_fix_high:")
+
+    if apply:
+        instruction = " ".join((instruction or "").split())[:MAX_IMAGE_AI_CHARS]
+
+        if not instruction:
+            st.session_state.edit_ai_notice = ("error", "Tulis dulu apa yang mau diedit.")
+        else:
+            refusal = image_ai_refusal()
+
+            if refusal:
+                st.session_state.edit_ai_notice = ("error", str(refusal))
+            else:
+                with st.spinner("AI sedang melihat fotomu..."):
+                    reply = ask_image_ai("edit", instruction, image)
+
+                if isinstance(reply, CielError):
+                    st.session_state.edit_ai_notice = ("error", str(reply))
+                else:
+                    ops, note = parse_edit_reply(reply)
+
+                    if ops:
+                        st.session_state.edit_ai = {"sha": sha, "ops": ops, "catatan": note}
+                        st.session_state.edit_ai_notice = None
+                    else:
+                        # Nol op yang lolos: catatan AI (mis. "latar belum bisa dihapus") kalau ada.
+                        st.session_state.edit_ai = None
+                        st.session_state.edit_ai_notice = ("info", note or AI_NOT_UNDERSTOOD)
+
+    notice = st.session_state.get("edit_ai_notice")
+    current = st.session_state.get("edit_ai")
+
+    if notice:
+        (st.error if notice[0] == "error" else st.info)(notice[1])
+
+    if current and current["sha"] == sha:
+        if current.get("catatan") and not notice:
+            st.caption(current["catatan"])
+        st.button("Hapus edit AI", key="edit_ai_clear", icon=":material/undo:", on_click=clear_edit_ai)
+
+
+@st.dialog("Edit gambar", width="large", on_dismiss=close_edit_dialog)
+def edit_dialog():
+
+    uploaded = st.file_uploader("Foto", type=EDIT_UPLOAD_TYPES, key="edit_upload")
+
+    if uploaded is None:
+        st.caption("Potong, putar, rapikan foto catatan, atau beri label. Gratis, diproses di server Ciel.")
+        return
+
+    source = load_edit_source(uploaded)
+
+    if source["error"]:
+        st.error(source["error"])
+        return
+
+    image = source["image"]
+    view, controls = st.columns([3, 2], gap="medium")
+
+    with controls:
+        with st.container(key="edit_controls"):
+            st.markdown('<p class="ciel-edit-h">Putar &amp; potong</p>', unsafe_allow_html=True)
+            with st.container(horizontal=True, gap="small"):
+                st.button("Putar kiri", key="edit_rot_left", icon=":material/rotate_left:", on_click=rotate_edit, args=(270,))
+                st.button("Putar kanan", key="edit_rot_right", icon=":material/rotate_right:", on_click=rotate_edit, args=(90,))
+            flip_h = st.toggle("Balik kiri-kanan", key="edit_flip_h")
+            flip_v = st.toggle("Balik atas-bawah", key="edit_flip_v")
+            crop = {}
+            for side, label in (("l", "Potong kiri"), ("t", "Potong atas"), ("r", "Potong kanan"), ("b", "Potong bawah")):
+                crop[side] = st.slider(f"{label} (%)", 0, 45, 0, key=f"edit_crop_{side}")
+
+            st.markdown('<p class="ciel-edit-h">Warna</p>', unsafe_allow_html=True)
+            bright = st.slider("Kecerahan", 0.5, 1.8, 1.0, 0.05, key="edit_bright")
+            contrast = st.slider("Kontras", 0.5, 1.8, 1.0, 0.05, key="edit_contrast")
+            sharp = st.slider("Ketajaman", 0.5, 2.5, 1.0, 0.1, key="edit_sharp")
+            gray = st.toggle("Hitam-putih", key="edit_gray")
+            doc = st.toggle("Rapikan dokumen", key="edit_doc", help="Untuk foto kertas: hitam-putih, kontras, dipertajam.")
+
+            st.markdown('<p class="ciel-edit-h">Teks</p>', unsafe_allow_html=True)
+            label = st.text_input("Label", key="edit_label", max_chars=80, placeholder="Contoh: Soal 3")
+            pos = st.selectbox("Posisi", list(LABEL_POSITIONS), key="edit_pos")
+            with st.container(horizontal=True, gap="small"):
+                size = st.selectbox("Ukuran huruf", list(LABEL_SIZES), index=1, key="edit_size")
+                color = st.color_picker("Warna", "#e53935", key="edit_color")
+
+            st.markdown('<p class="ciel-edit-h">Ukuran</p>', unsafe_allow_html=True)
+            width = st.number_input(
+                "Lebar (px)", min_value=0, max_value=MAX_EDIT_PX, value=0, step=50, key="edit_width",
+                help="0 = ukuran asli.",
+            )
+
+        if IMAGE_AI_ENABLED:
+            with st.container(key="edit_ai_box"):
+                render_edit_ai(image, source["sha"])
+
+    manual = manual_edit_ops({
+        "rot": st.session_state.get("edit_rot", 0), "flip_h": flip_h, "flip_v": flip_v,
+        "crop_l": crop["l"], "crop_t": crop["t"], "crop_r": crop["r"], "crop_b": crop["b"],
+        "bright": bright, "contrast": contrast, "sharp": sharp, "gray": gray, "doc": doc,
+        "label": label, "pos": pos, "size": size, "color": color, "width": width,
+    })
+    ai = st.session_state.get("edit_ai")
+    ai_ops = ai["ops"] if ai and ai["sha"] == source["sha"] else []
+    # AI dulu, manual sesudahnya: op sekali-pakai yang terakhir menang, jadi slider menang.
+    ops, _ = validate_recipe(ai_ops + manual)
+
+    with view:
+        with st.container(key="edit_preview"):
+            # Pratinjau di salinan kecil (koordinat 0-1 tetap berlaku); resize hanya untuk unduhan.
+            st.image(apply_recipe(preview(image), [op for op in ops if op["op"] != "resize"]), width="stretch")
+
+        with st.container(horizontal=True, gap="small", vertical_alignment="bottom"):
+            fmt = st.segmented_control("Format", ["PNG", "JPG"], default="PNG", key="edit_fmt") or "PNG"
+            ext = fmt.lower()
+            st.download_button(
+                "Unduh",
+                # Dibuat dari foto ukuran penuh hanya saat diklik; tidak disimpan di sesi.
+                data=lambda: encode(apply_recipe(image, ops), ext),
+                file_name=f"{source['stem']} - edit.{ext}",
+                mime="image/png" if ext == "png" else "image/jpeg",
+                key="edit_download",
+                icon=":material/download:",
+                type="primary",
+            )
+
+
+# ------------------------------------------------------------
+# ILUSTRASI (PRO)
+# ------------------------------------------------------------
+
+ILUSTRASI_STATE_KEYS = ("ilustrasi_open", "ilustrasi_last", "ilustrasi_notice")
+ILUSTRASI_FAILED = "Ilustrasinya gagal digambar. Coba lagi dengan deskripsi lain."
+REFUSAL_PREFIX = "TOLAK:"
+
+
+def close_ilustrasi_dialog():
+    """Hasil terakhir hanya hidup selama dialog terbuka."""
+    for key in ILUSTRASI_STATE_KEYS:
+        st.session_state.pop(key, None)
+
+
+def illustration_name(description):
+    """'Ilustrasi - <lima kata pertama>' tanpa karakter yang mengganggu nama file."""
+    words = re.sub(r"[^\w\s-]", " ", description).split()[:5]
+    return f"Ilustrasi - {' '.join(words)}"[:80].strip() if words else "Ilustrasi"
+
+
+def make_illustration(description):
+    """Satu ilustrasi: gerbang Pro + kuota, panggil AI, bersihkan SVG, gambar PNG."""
+
+    refusal = image_ai_refusal()
+
+    if refusal:
+        st.session_state.ilustrasi_notice = ("error", str(refusal))
+        return
+
+    with st.spinner("Ciel sedang menggambar..."):
+        reply = ask_image_ai("ilustrasi", description)
+
+        if isinstance(reply, CielError):
+            st.session_state.ilustrasi_notice = ("error", str(reply))
+            return
+
+        reply = reply.strip()
+
+        if reply.startswith(REFUSAL_PREFIX):
+            # Tetap dihitung kuota: AI sudah dipanggil.
+            reason = reply[len(REFUSAL_PREFIX):].strip()[:300] or "Permintaan ini tidak bisa digambar."
+            st.session_state.ilustrasi_notice = ("info", reason)
+            return
+
+        try:
+            svg = clean_svg(reply)
+            png = svg_png(svg)
+        except IllustrationError as exc:
+            # Alasan saja, tanpa isi SVG dari model.
+            logger.warning("illustration_failed reason=%s", exc)
+            st.session_state.ilustrasi_notice = ("error", ILUSTRASI_FAILED)
+            return
+
+    st.session_state.ilustrasi_last = {"name": illustration_name(description), "svg": svg, "png": png}
+    st.session_state.ilustrasi_notice = None
+
+
+@st.dialog("Ilustrasi", on_dismiss=close_ilustrasi_dialog)
+def illustration_dialog():
+
+    st.markdown(
+        '<p class="ciel-riset-lead">Ciel menggambar <b>diagram berlabel</b> untuk materi '
+        "belajarmu, misalnya siklus, bagian sel, atau alur proses.</p>",
+        unsafe_allow_html=True,
+    )
+
+    if not is_pro():
+
+        st.markdown(
+            '<p class="ciel-riset-lock">Fitur ini khusus <b>Ciel Pro</b>.</p>',
+            unsafe_allow_html=True,
+        )
+
+        if st.button("Lihat paket Pro", type="primary", icon=":material/sell:", key="ilustrasi_pro"):
+            close_ilustrasi_dialog()
+            show_pricing()
+            st.rerun()
+
+        return
+
+    description = st.text_area(
+        "Mau ilustrasi apa?",
+        key="ilustrasi_text",
+        max_chars=MAX_IMAGE_AI_CHARS,
+        placeholder="Contoh: siklus air lengkap dengan label penguapan, kondensasi, presipitasi",
+    )
+
+    st.caption(f"Gambar diagram dengan label, bukan foto. Kuota {AI_IMAGE_PER_DAY} per hari.")
+
+    if st.button("Buat ilustrasi", key="ilustrasi_go", type="primary", icon=":material/draw:"):
+        description = " ".join((description or "").split())[:MAX_IMAGE_AI_CHARS]
+
+        if description:
+            make_illustration(description)
+        else:
+            st.session_state.ilustrasi_notice = ("error", "Tulis dulu ilustrasi yang kamu mau.")
+
+    notice = st.session_state.get("ilustrasi_notice")
+
+    if notice:
+        (st.error if notice[0] == "error" else st.info)(notice[1])
+
+    last = st.session_state.get("ilustrasi_last")
+
+    if not last:
+        return
+
+    with st.container(key="ilustrasi_paper"):
+        # Hanya PNG yang tampil; SVG model tidak pernah masuk ke DOM halaman.
+        st.image(last["png"], width="stretch")
+
+    with st.container(horizontal=True, gap="small"):
+        st.download_button("Unduh PNG", data=last["png"], file_name=f"{last['name']}.png", mime="image/png",
+                           key="ilustrasi_png", icon=":material/download:", type="primary")
+        st.download_button("Unduh SVG", data=last["svg"], file_name=f"{last['name']}.svg", mime="image/svg+xml",
+                           key="ilustrasi_svg", icon=":material/download:")
 
 
 def retry_last():
@@ -5170,6 +5669,15 @@ cek_target = st.session_state.pop("open_cek", None)
 
 if cek_target and CHECK_ENABLED:
     cek_dialog(cek_target["topic"], cek_target["map_index"])
+
+# Dialog Edit gambar (template Beranda), untuk semua orang. Tetap terbuka
+# sampai ditutup (on_dismiss), juga jika seluruh halaman dijalankan ulang.
+if st.session_state.get("edit_open"):
+    edit_dialog()
+
+# Dialog Ilustrasi (template Beranda, Pro). Sama: terbuka sampai ditutup.
+if st.session_state.get("ilustrasi_open") and IMAGE_AI_ENABLED:
+    illustration_dialog()
 
 
 # ============================================================

@@ -74,6 +74,7 @@ jobs:
             tests.test_flow_v1130_contract \
             tests.test_flow_v1140_contract \
             tests.test_flow_v1141_contract \
+            tests.test_flow_v1142_contract \
             tests.test_flow_riset_v100_contract \
             tests.test_flow_riset_v110_contract \
             tests.test_riset_components \
@@ -127,6 +128,11 @@ jobs:
             tests.test_backend_health \
             tests.test_safe_expr \
             tests.test_answer_blocks \
+            tests.test_image_edit \
+            tests.test_illustration \
+            tests.test_image_ai_component \
+            tests.test_flow_image_ai_v100_contract \
+            tests.test_image_edit_app \
             tests.test_ci_coverage
 
       # Node that comes with the runner (no extra setup): the Edge Function's

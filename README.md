@@ -74,6 +74,7 @@ schtasks /Create /TN "Ciel prune chat history" /SC DAILY /ST 03:00 /TR "cmd /c c
 ├── flow/
 │   ├── v1.0.0/ … v1.7.0/        main flow snapshots (latest: v1.7.0)
 │   ├── memory_admin/            Ciel Memory Admin flow ("Data saya")
+│   ├── image_ai/                Ciel Image AI flow (Pro: Edit AI and Ilustrasi)
 │   └── components/              custom component sources embedded in the flow
 ├── tests/                       offline tests, live quality scripts, results
 ├── tools/
@@ -119,6 +120,7 @@ Optional:
 - `[auth]` block (Google OAuth client): enables "Masuk dengan Google". Long-term memory is only available to signed-in users and is private to each account; without `[auth]` memory is disabled.
 - `MEMORY_SEARCH_ID`, `MEMORY_STORE_ID` (defaults match `flow/v1.3.0` and later) `TABLE_ANALYST_ID` (default matches `flow/v1.5.0` and later) `ML_ANALYST_ID` (default matches `flow/v1.6.0` and later) and `DATASET_STORE_ID` (default matches `flow/v1.7.0` and later): component IDs the app sends tweaks to. Langflow ignores tweaks for nodes or fields a flow does not have.
 - `MEMORY_ADMIN_FLOW_ID` (and `MEMORY_ADMIN_NODE_ID`, default `CielMemoryAdmin-adm1n`): the Ciel Memory Admin flow behind the "Data saya" panel. Without it, signed-in users cannot view or delete their data from the app, and the privacy page says so.
+- `IMAGE_FLOW_ID`: the Ciel Image AI flow (`flow/image_ai/v1.0.0`) behind Edit AI and Ilustrasi (Ciel Pro). Without it those are hidden; manual photo editing in "Edit gambar" still works. `AI_IMAGE_PER_DAY` (default 3) is their shared daily quota per Pro account.
 - `CHAT_RETENTION_DAYS` (default 30): how long server-side chat history is kept, as stated on the privacy page. Use the same value for `tools/prune_chat_history.py`.
 
 A template is provided in `.streamlit/secrets.toml.example`. For local runs copy it to `.streamlit/secrets.toml` (git-ignored) or use a `.env` file.

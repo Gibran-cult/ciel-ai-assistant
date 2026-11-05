@@ -31,10 +31,11 @@ def load():
         )), "MAX_IMAGE_BYTES", "eval")),
         "IMAGE_MIME": app_constant("IMAGE_MIME"),
         "MAX_IMAGE_PIXELS": app_constant("MAX_IMAGE_PIXELS"),
+        "UNREADABLE_IMAGE": app_constant("UNREADABLE_IMAGE"),
         "security_event": lambda kind, **fields: SECURITY_EVENTS.append((kind, fields)),
     }
     for node in ast.parse(SOURCE).body:
-        if isinstance(node, ast.FunctionDef) and node.name in ("read_image", "fit_for_vision", "file_extension"):
+        if isinstance(node, ast.FunctionDef) and node.name in ("read_image", "image_size_error", "fit_for_vision", "file_extension"):
             exec(compile(ast.Module(body=[node], type_ignores=[]), str(APP_PATH), "exec"), namespace)
     return namespace
 
