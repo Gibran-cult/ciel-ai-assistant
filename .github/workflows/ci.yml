@@ -132,6 +132,7 @@ jobs:
             tests.test_illustration \
             tests.test_image_ai_component \
             tests.test_flow_image_ai_v100_contract \
+            tests.test_image_edit_app \
             tests.test_ci_coverage
 
       # Node that comes with the runner (no extra setup): the Edge Function's

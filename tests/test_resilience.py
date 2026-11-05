@@ -23,7 +23,8 @@ def load_app_functions():
                               "security_event"))
         or (isinstance(node, ast.ClassDef) and node.name == "CielError")
         or (isinstance(node, ast.Assign)
-            and getattr(node.targets[0], "id", None) in ("MARKDOWN_IMAGE", "IMAGE_REMOVED", "MODEL_UNAVAILABLE"))
+            and getattr(node.targets[0], "id", None) in ("MARKDOWN_IMAGE", "IMAGE_REMOVED", "MODEL_UNAVAILABLE",
+                                                            "IMAGE_AI_UNAVAILABLE"))
     ]
 
     namespace = {
