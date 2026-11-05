@@ -20,6 +20,13 @@ from tests.test_chat_store import CONSENTED, ENV, SIGNED_IN, Response  # noqa: E
 IMAGE_FLOW = "image-flow-id"
 DATABASE = {"SUPABASE_URL": "https://db.example.invalid", "SUPABASE_SERVICE_KEY": "service-key"}
 PRO = "2999-01-01T00:00:00+00:00"
+SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" onload="alert(1)">'
+    '<rect x="0" y="0" width="800" height="600" fill="#e3f2fd"/>'
+    '<circle cx="680" cy="110" r="60" fill="#fbc02d"/>'
+    '<text x="60" y="80" font-size="28">Penguapan</text>'
+    '<script>alert(1)</script></svg>'
+)
 AI_HEADING = '<p class="ciel-edit-h">Minta AI · Pro</p>'
 
 
@@ -205,6 +212,80 @@ class ImageAppTest(unittest.TestCase):
         at.file_uploader(key="edit_upload").set_value(("scan.png", b"not an image", "image/png")).run()
         self.assertFalse(at.exception)
         self.assertIn("Format ini belum bisa diedit. Pakai JPG atau PNG.", self.text(at))
+        self.assertFalse(self.images(at))
+
+    # ---------------------------------------------------------------- Ilustrasi
+
+    def open_ilustrasi(self, at):
+        at.button(key="tpl_ilustrasi").click().run()
+        self.assertFalse(at.exception)
+        return at
+
+    def ask_illustration(self, at, description="siklus air dengan label"):
+        at.text_area(key="ilustrasi_text").input(description)
+        at.button(key="ilustrasi_go").click().run()
+        self.assertFalse(at.exception)
+        return at
+
+    def test_illustration_is_pro_only_and_uses_the_quota(self):
+        at = self.open_ilustrasi(self.start(user=SIGNED_IN))
+        self.assertIn("khusus <b>Ciel Pro</b>", self.text(at))
+        self.assertIn("Lihat paket Pro", [b.label for b in at.button])
+        self.assertFalse([w for w in at.text_area if w.key == "ilustrasi_text"])
+        self.assertEqual(self.runs(), [])
+
+        at = self.open_ilustrasi(self.start(user=SIGNED_IN, pro_until=PRO, quota_full=True))
+        self.assertIn("Kuota 3 per hari", self.text(at))
+        self.ask_illustration(at)
+        self.assertIn("Edit AI & ilustrasi bisa dipakai 3 kali", self.text(at))
+        self.assertEqual(self.runs(), [])
+
+        at = self.open_ilustrasi(self.start(user=SIGNED_IN, pro_until=PRO, ai_reply=langflow(SVG)))
+        self.ask_illustration(at)
+        runs = self.runs()
+        self.assertEqual(len(runs), 1)
+        self.assertTrue(runs[0].args[0].endswith(f"/api/v1/run/{IMAGE_FLOW}"))
+        self.assertEqual(json.loads(runs[0].kwargs["json"]["input_value"]),
+                         {"mode": "ilustrasi", "instruction": "siklus air dengan label"})
+
+    def test_illustration_shows_png_never_raw_svg(self):
+        at = self.open_ilustrasi(self.start(user=SIGNED_IN, pro_until=PRO, ai_reply=langflow(SVG)))
+        self.ask_illustration(at)
+        self.assertEqual(len(self.images(at)), 1)
+        # The app's own logo is inline SVG; the model's SVG must never reach the page.
+        for element in list(at.markdown) + list(at.get("html")):
+            shown = str(getattr(element, "value", "") or getattr(element, "proto", ""))
+            for needle in ("Penguapan", "#fbc02d", "#e3f2fd"):
+                self.assertNotIn(needle, shown)
+        downloads = {b.proto.label: b for b in at.get("download_button")}
+        self.assertEqual(set(downloads), {"Unduh PNG", "Unduh SVG"})
+        last = at.session_state["ilustrasi_last"]
+        self.assertTrue(last["png"].startswith(b"\x89PNG"))
+        self.assertNotIn("onload", last["svg"])
+        self.assertEqual(last["name"], "Ilustrasi - siklus air dengan label")
+
+    def test_refusal_reason_is_shown(self):
+        reply = langflow("TOLAK: Ciel tidak menggambar wajah orang sungguhan.")
+        at = self.open_ilustrasi(self.start(user=SIGNED_IN, pro_until=PRO, ai_reply=reply))
+        self.ask_illustration(at, "wajah presiden")
+        self.assertIn("Ciel tidak menggambar wajah orang sungguhan.", self.text(at))
+        self.assertNotIn("TOLAK:", self.text(at))
+        self.assertFalse(self.images(at))
+
+    def test_broken_svg_shows_friendly_error(self):
+        at = self.open_ilustrasi(self.start(user=SIGNED_IN, pro_until=PRO, ai_reply=langflow("Maaf, ini gambarnya: <svg")))
+        with self.assertLogs("ciel_ai", level="WARNING") as logs:
+            self.ask_illustration(at)
+        self.assertIn("Ilustrasinya gagal digambar. Coba lagi dengan deskripsi lain.", self.text(at))
+        self.assertFalse(self.images(at))
+        self.assertTrue(any("illustration_failed" in line for line in logs.output))
+        self.assertFalse(any("<svg" in line for line in logs.output))
+
+    def test_illustration_ai_failure_is_a_friendly_card(self):
+        failure = ErrorResponse('{"detail": "ValueError: Ciel image AI unavailable: DeepSeek terlalu lama"}')
+        at = self.open_ilustrasi(self.start(user=SIGNED_IN, pro_until=PRO, ai_reply=failure))
+        self.ask_illustration(at)
+        self.assertIn("AI sedang tidak tersedia", self.text(at))
         self.assertFalse(self.images(at))
 
 

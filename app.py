@@ -55,6 +55,7 @@ from pricing import PLANS, render_pricing, safe_contact_url
 from riset_export import report_docx, report_filename
 import visuals
 from writing import APPROACHES, KERANGKA_FOOTNOTE, MAX_OBJECT_CHARS, finish_kerangka, kerangka_payload
+from illustration import IllustrationError, clean_svg, svg_png
 from image_edit import MAX_EDIT_PX, EditError, apply_recipe, encode, load_for_edit, preview, validate_recipe
 from draft_check import MAX_DRAFT_CHARS, MIN_DRAFT_WORDS, check_report, clean_draft, draft_from_file, split_excerpts, word_count
 from privacy import render_privacy
@@ -621,6 +622,8 @@ body[data-ciel-nav="hidden"] [data-testid="stLayoutWrapper"]:has(> .st-key-topba
 [data-testid="stDialog"] .st-key-edit_controls .ciel-edit-h:first-child { margin-top: 0; }
 [data-testid="stDialog"] .st-key-edit_preview { padding: 0.5rem; border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-raised); }
 [data-testid="stDialog"] .st-key-edit_preview img { border-radius: var(--r-sm); }
+/* Ilustrasi: gambar di atas "kertas" putih (pengecualian token: ini gambar). */
+[data-testid="stDialog"] .st-key-ilustrasi_paper { padding: 0.5rem; border: 1px solid var(--c-line); border-radius: var(--r-md); background: #ffffff; }
 [data-testid="stDialog"] .st-key-edit_ai_box { margin-top: 0.6rem; padding: 0.2rem 0.8rem 0.8rem; border: 1px solid var(--c-line); border-radius: var(--r-md); }
 
 /* ---------- Buttons ---------- */
@@ -4673,7 +4676,7 @@ def open_edit_dialog():
 
 
 def open_ilustrasi_dialog():
-    st.session_state.open_ilustrasi = True
+    st.session_state.ilustrasi_open = True
 
 
 def close_edit_dialog():
@@ -4872,6 +4875,125 @@ def edit_dialog():
                 icon=":material/download:",
                 type="primary",
             )
+
+
+# ------------------------------------------------------------
+# ILUSTRASI (PRO)
+# ------------------------------------------------------------
+
+ILUSTRASI_STATE_KEYS = ("ilustrasi_open", "ilustrasi_last", "ilustrasi_notice")
+ILUSTRASI_FAILED = "Ilustrasinya gagal digambar. Coba lagi dengan deskripsi lain."
+REFUSAL_PREFIX = "TOLAK:"
+
+
+def close_ilustrasi_dialog():
+    """Hasil terakhir hanya hidup selama dialog terbuka."""
+    for key in ILUSTRASI_STATE_KEYS:
+        st.session_state.pop(key, None)
+
+
+def illustration_name(description):
+    """'Ilustrasi - <lima kata pertama>' tanpa karakter yang mengganggu nama file."""
+    words = re.sub(r"[^\w\s-]", " ", description).split()[:5]
+    return f"Ilustrasi - {' '.join(words)}"[:80].strip() if words else "Ilustrasi"
+
+
+def make_illustration(description):
+    """Satu ilustrasi: gerbang Pro + kuota, panggil AI, bersihkan SVG, gambar PNG."""
+
+    refusal = image_ai_refusal()
+
+    if refusal:
+        st.session_state.ilustrasi_notice = ("error", str(refusal))
+        return
+
+    with st.spinner("Ciel sedang menggambar..."):
+        reply = ask_image_ai("ilustrasi", description)
+
+        if isinstance(reply, CielError):
+            st.session_state.ilustrasi_notice = ("error", str(reply))
+            return
+
+        reply = reply.strip()
+
+        if reply.startswith(REFUSAL_PREFIX):
+            # Tetap dihitung kuota: AI sudah dipanggil.
+            reason = reply[len(REFUSAL_PREFIX):].strip()[:300] or "Permintaan ini tidak bisa digambar."
+            st.session_state.ilustrasi_notice = ("info", reason)
+            return
+
+        try:
+            svg = clean_svg(reply)
+            png = svg_png(svg)
+        except IllustrationError as exc:
+            # Alasan saja, tanpa isi SVG dari model.
+            logger.warning("illustration_failed reason=%s", exc)
+            st.session_state.ilustrasi_notice = ("error", ILUSTRASI_FAILED)
+            return
+
+    st.session_state.ilustrasi_last = {"name": illustration_name(description), "svg": svg, "png": png}
+    st.session_state.ilustrasi_notice = None
+
+
+@st.dialog("Ilustrasi", on_dismiss=close_ilustrasi_dialog)
+def illustration_dialog():
+
+    st.markdown(
+        '<p class="ciel-riset-lead">Ciel menggambar <b>diagram berlabel</b> untuk materi '
+        "belajarmu, misalnya siklus, bagian sel, atau alur proses.</p>",
+        unsafe_allow_html=True,
+    )
+
+    if not is_pro():
+
+        st.markdown(
+            '<p class="ciel-riset-lock">Fitur ini khusus <b>Ciel Pro</b>.</p>',
+            unsafe_allow_html=True,
+        )
+
+        if st.button("Lihat paket Pro", type="primary", icon=":material/sell:", key="ilustrasi_pro"):
+            close_ilustrasi_dialog()
+            show_pricing()
+            st.rerun()
+
+        return
+
+    description = st.text_area(
+        "Mau ilustrasi apa?",
+        key="ilustrasi_text",
+        max_chars=MAX_IMAGE_AI_CHARS,
+        placeholder="Contoh: siklus air lengkap dengan label penguapan, kondensasi, presipitasi",
+    )
+
+    st.caption(f"Gambar diagram dengan label, bukan foto. Kuota {AI_IMAGE_PER_DAY} per hari.")
+
+    if st.button("Buat ilustrasi", key="ilustrasi_go", type="primary", icon=":material/draw:"):
+        description = " ".join((description or "").split())[:MAX_IMAGE_AI_CHARS]
+
+        if description:
+            make_illustration(description)
+        else:
+            st.session_state.ilustrasi_notice = ("error", "Tulis dulu ilustrasi yang kamu mau.")
+
+    notice = st.session_state.get("ilustrasi_notice")
+
+    if notice:
+        (st.error if notice[0] == "error" else st.info)(notice[1])
+
+    last = st.session_state.get("ilustrasi_last")
+
+    if not last:
+        return
+
+    with st.container(key="ilustrasi_paper"):
+        # Hanya PNG yang tampil; SVG model tidak pernah masuk ke DOM halaman.
+        st.image(last["png"], width="stretch")
+
+    with st.container(horizontal=True, gap="small"):
+        st.download_button("Unduh PNG", data=last["png"], file_name=f"{last['name']}.png", mime="image/png",
+                           key="ilustrasi_png", icon=":material/download:", type="primary")
+        st.download_button("Unduh SVG", data=last["svg"], file_name=f"{last['name']}.svg", mime="image/svg+xml",
+                           key="ilustrasi_svg", icon=":material/download:")
 
 
 def retry_last():
@@ -5552,6 +5674,10 @@ if cek_target and CHECK_ENABLED:
 # sampai ditutup (on_dismiss), juga jika seluruh halaman dijalankan ulang.
 if st.session_state.get("edit_open"):
     edit_dialog()
+
+# Dialog Ilustrasi (template Beranda, Pro). Sama: terbuka sampai ditutup.
+if st.session_state.get("ilustrasi_open") and IMAGE_AI_ENABLED:
+    illustration_dialog()
 
 
 # ============================================================
