@@ -18,7 +18,7 @@ import streamlit as st
 
 
 # Ubah tanggal ini setiap kali isi halaman berubah (Pasal 21 ayat 2).
-PRIVACY_UPDATED = "4 November 2026"
+PRIVACY_UPDATED = "5 November 2026"
 
 
 # Layanan pihak ketiga yang menerima data pengguna: (nama, tugasnya untuk
@@ -264,7 +264,7 @@ def privacy_sections(retention_days, memory_enabled, data_controls, contact_url=
         "sebelum berlaku.",
         "Perubahan 3 November 2026: Google (Gemini API) juga menjadi model AI "
         "cadangan yang menyusun jawaban saat DeepSeek sedang sibuk atau tidak tersedia.",
-        "Perubahan 4 November 2026: foto yang kamu pilih untuk Edit AI dikirim ke DeepSeek.",
+        "Perubahan 5 November 2026: foto yang kamu pilih untuk Edit AI dikirim ke DeepSeek.",
     ]
 
     advice = [

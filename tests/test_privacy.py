@@ -423,8 +423,8 @@ class PrivacyPageTest(unittest.TestCase):
         recipients = " ".join(sections["Pihak ketiga yang menerima datamu"])
         self.assertIn("model AI yang menyusun jawaban, memahami foto untuk Edit AI, dan menggambar ilustrasi", recipients)
         notice = " ".join(sections["Kebocoran data dan perubahan halaman ini"])
-        self.assertIn("Perubahan 4 November 2026: foto yang kamu pilih untuk Edit AI dikirim ke DeepSeek.", notice)
-        self.assertEqual(__import__("privacy").PRIVACY_UPDATED, "4 November 2026")
+        self.assertIn("Perubahan 5 November 2026: foto yang kamu pilih untuk Edit AI dikirim ke DeepSeek.", notice)
+        self.assertEqual(__import__("privacy").PRIVACY_UPDATED, "5 November 2026")
 
     def test_app_passes_the_operator_name(self):
         self.assertIn("operator=OPERATOR_NAME", APP_PATH.read_text(encoding="utf-8"))
