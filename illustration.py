@@ -88,6 +88,7 @@ def _extract(text):
 
 
 MAX_DEPTH = 50
+_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 MAX_ASPECT = 4.0
 
 
@@ -137,7 +138,9 @@ def _too_deep(root):
 
 def clean_svg(text):
     """Teks model -> SVG bersih ber-allowlist. IllustrationError kalau tidak layak."""
-    raw = _extract(text)
+    # Komentar <!-- ... --> sering ditulis model dan tidak dipakai; dibuang dulu
+    # supaya cek "<!" di bawah tetap menolak DOCTYPE, ENTITY dan CDATA saja.
+    raw = _COMMENT.sub("", _extract(text))
     if "<!" in raw:
         raise IllustrationError("DOCTYPE, ENTITY dan CDATA tidak diizinkan")
     try:
