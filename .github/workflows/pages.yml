@@ -1,15 +1,17 @@
-name: Publish landing page
+name: Publish website
 
-# Publishes landing/ to GitHub Pages at https://ciel-ai.web.id/ (custom domain;
-# gibran-cult.github.io/ciel-ai-assistant/ redirects there).
-# Needs Pages turned on in the repository settings with "GitHub Actions" as
-# the source; until then the deploy step fails and nothing is published.
+# Builds website/ (Next.js static export) and publishes it to GitHub Pages at
+# https://ciel-ai.web.id/ (custom domain; gibran-cult.github.io/ciel-ai-assistant/
+# redirects there). The old landing/ stays in the repo but is no longer published.
+# Needs Pages turned on in the repository settings with "GitHub Actions" as the
+# source; until then the deploy step fails and nothing is published.
 
 on:
   push:
     branches: [main]
     paths:
-      - landing/**
+      - website/**
+      - .github/workflows/pages.yml
   workflow_dispatch:
 
 permissions:
@@ -33,13 +35,30 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: website
+        run: npm ci --ignore-scripts
+
+      - name: Build the static site
+        working-directory: website
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npm run build
+
       - name: Configure Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
-      - name: Upload the landing folder
+      - name: Upload the built site
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: landing
+          path: website/out
 
       - name: Deploy
         id: deployment
