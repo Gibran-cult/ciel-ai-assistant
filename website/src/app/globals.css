@@ -1,0 +1,302 @@
+@import "tailwindcss";
+
+/* Palette tokens, pinned by the owner (PRODUCT.md). Components never use raw hex values. */
+:root {
+  --bg: #141311;
+  --surface: #1f1d1a;
+  --surface-2: #2a2824;
+  --text: #ececea;
+  --muted: #b4b3ad;
+  --blue-text: #9db3e8;
+  --blue-hi: #b4c5ef;
+  --blue-fill: #2b4886;
+  --blue-fill-hi: #34558f;
+  --yellow: #e9d06a;
+  --yellow-hi: #f1df90;
+  --gutter: clamp(16px, 4.4vw, 64px);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* The phone robot block: about 42% of the screen, but never so short that the bust's head
+     rises out of it above the route strip (Hero.tsx; the strip is 128/360 of its width). */
+  --hero-media-h: max(min(42svh, 340px), calc(min(100vw - 2 * var(--gutter), 26rem) * 0.8));
+  --nav-h: 72px;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-link: var(--blue-text);
+  --color-link-hi: var(--blue-hi);
+  --color-blue: var(--blue-fill);
+  --color-gold: var(--yellow);
+  --color-gold-hi: var(--yellow-hi);
+  --font-display: var(--font-alegreya), Georgia, serif;
+  --font-sans: var(--font-alegreya-sans), system-ui, sans-serif;
+  --font-mark: var(--font-fraunces), Georgia, serif;
+  --ease-out-expo: var(--ease-out);
+}
+
+/* Base and component styles live in layers so Tailwind utilities on an element can override them. */
+@layer base {
+html {
+  background: var(--bg);
+  color: var(--text);
+  color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
+  scrollbar-color: var(--surface-2) var(--bg);
+  scrollbar-width: thin;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1.125rem;
+  line-height: 1.55;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+}
+
+/* Browser surfaces carry the palette too. */
+::selection {
+  background: var(--blue-fill);
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Sections and the page wrapper take focus only so an in-page link can move the keyboard's place
+   there (Motion.tsx); they are not controls, so they get no ring. */
+[tabindex="-1"]:focus-visible {
+  outline: none;
+}
+
+a {
+  color: var(--blue-text);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  transition: color 160ms var(--ease-out);
+}
+
+a:hover {
+  color: var(--blue-hi);
+}
+
+a[href],
+button,
+summary,
+label[for],
+[role="button"] {
+  cursor: pointer;
+}
+
+:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+}
+
+@layer components {
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+
+.measure {
+  max-width: 66ch;
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--gutter);
+  top: -100px;
+  z-index: 60;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--yellow);
+  color: var(--bg);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.skip-link:focus-visible {
+  top: 12px;
+}
+
+/* The one primary action: yellow is reserved for it, the focus ring and the map route. */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  background: var(--yellow);
+  color: var(--bg);
+  font-weight: 700;
+  font-size: 1.0625rem;
+  text-decoration: none;
+  transition: background-color 160ms var(--ease-out), transform 160ms var(--ease-out);
+}
+
+.btn-primary:hover {
+  background: var(--yellow-hi);
+  color: var(--bg);
+}
+
+.btn-primary:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: var(--blue-fill);
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+  transition: background-color 160ms var(--ease-out), transform 160ms var(--ease-out);
+}
+
+.btn-secondary:hover {
+  background: var(--blue-fill-hi);
+  color: var(--text);
+}
+
+.btn-secondary:active {
+  transform: translateY(1px);
+}
+
+.link-quiet {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 500;
+}
+
+/* Footer links: a hairline draws under the label on hover or keyboard focus. */
+.ink-link > span:first-child {
+  background: linear-gradient(currentColor, currentColor) 0 100% / 0% 1px no-repeat;
+  transition: background-size 300ms var(--ease-out);
+}
+
+.ink-link:is(:hover, :focus-visible) > span:first-child {
+  background-size: 100% 1px;
+}
+
+/* While "Kembali ke atas" is hovered or focused, the footer's route brightens like the hero's lit
+   route and its dashes step back one period, toward where the route came from. */
+.footer-route {
+  transition: stroke 600ms var(--ease-out), stroke-dashoffset 600ms var(--ease-out);
+}
+
+.footer-sheet:has([data-back]:is(:hover, :focus-visible)) .footer-route {
+  stroke: var(--yellow-hi);
+  stroke-dashoffset: 13;
+}
+}
+
+/* The hero's still bust and the 3D robot share one box (RobotBust, RobotStage), so the hand-off
+   is a cross-fade in place. */
+.robot-bust img {
+  transition: opacity 700ms var(--ease-out);
+}
+
+html[data-robot="live"] .robot-bust img {
+  opacity: 0;
+}
+
+/* The closing bust is lazy; while the live robot stands in its box it is never fetched. */
+html[data-robot="live"] [data-robot-anchor="closing"] img {
+  display: none;
+}
+
+.robot-still {
+  display: none;
+}
+
+@media (min-width: 64rem) {
+  .robot-still {
+    display: block;
+  }
+}
+
+html[data-robot="live"] .robot-still {
+  display: none;
+}
+
+.robot-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 700ms var(--ease-out);
+}
+
+.robot-layer[data-live="true"] {
+  opacity: 1;
+}
+
+/* Phones and tablets: the robot gets its own block under the nav instead of standing behind text. */
+@media (width < 64rem) {
+  .robot-layer[data-mode="mobile"] {
+    position: absolute;
+    inset: var(--nav-h) 0 auto 0;
+    height: var(--hero-media-h);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* The footer's route draws itself in as the footer arrives, following the reader's own scroll. No
+   script, nothing that plays by itself; without scroll-driven animations (or with reduced motion)
+   the route is simply drawn. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .footer-grid {
+      view-timeline: --footer-sheet block;
+    }
+
+    .footer-route-draw {
+      animation: footer-route-draw linear both;
+      animation-timeline: --footer-sheet;
+      animation-range: entry 0% entry 45%;
+    }
+  }
+}
+
+@keyframes footer-route-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
