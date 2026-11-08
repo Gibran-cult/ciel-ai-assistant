@@ -1,6 +1,6 @@
 # Ciel AI website
 
-The new landing page for Ciel AI, built as a static Next.js site. It sits next to the live landing in `../landing/`, which still serves https://ciel-ai.web.id/ until the owner decides to switch.
+The landing page for Ciel AI at https://ciel-ai.web.id/, built as a static Next.js site. `.github/workflows/pages.yml` builds it and publishes `out/` to GitHub Pages on every push to main that touches `website/`. The old landing in `../landing/` stays in the repo but is no longer published.
 
 The page is drawn as a night investigation map: each real test case from the app (20 Oktober 2026) is a route to its sources, and the fake-journal case runs into open water and is struck out. An original 3D robot, built from code with React Three Fiber, follows the pointer and changes pose as the visitor scrolls.
 
@@ -63,6 +63,5 @@ These numbers do not include the 3D scene, which loads after the first interacti
 
 ## Not done yet
 
-- ciel-ai.web.id still points at `../landing/`. Switching means building this site in `.github/workflows/pages.yml` instead of uploading `landing/`.
-- The owner has not yet confirmed the robot model as final, and it has not been tested on a phone with a real GPU.
+- The robot has not been tested on a phone with a real GPU.
 - The map labels are hidden from screen readers on purpose, because every fact on the map is repeated in the HTML next to it.
