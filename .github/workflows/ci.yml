@@ -102,6 +102,7 @@ jobs:
             tests.test_rate_limit \
             tests.test_project_context \
             tests.test_live_scripts \
+            tests.test_website \
             tests.test_app_hygiene \
             tests.test_performance_snapshot \
             tests.test_pricing \
