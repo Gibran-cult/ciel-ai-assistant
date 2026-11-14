@@ -137,6 +137,7 @@ jobs:
             tests.test_guard_domains \
             tests.test_guard_registry \
             tests.test_guard_stores \
+            tests.test_guard_risk \
             tests.test_ci_coverage
 
       # Node that comes with the runner (no extra setup): the Edge Function's
