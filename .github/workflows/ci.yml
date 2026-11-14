@@ -140,6 +140,7 @@ jobs:
             tests.test_guard_risk \
             tests.test_guard_scope \
             tests.test_guard_limits \
+            tests.test_guard_purchase \
             tests.test_ci_coverage
 
       # Node that comes with the runner (no extra setup): the Edge Function's
