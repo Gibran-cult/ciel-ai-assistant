@@ -1,7 +1,7 @@
 streamlit[auth]>=1.54
 requests
 python-dotenv
-pypdf>=6.21.4
+pypdf>=7.0.1
 python-docx>=1.1
 matplotlib
 fpdf2
