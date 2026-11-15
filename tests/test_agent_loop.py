@@ -2,15 +2,17 @@ import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from agent_api.limits import AgentConfig  # noqa: E402
 from agent_api.loop import Account, ConfirmPrompt, TaskResult, run_task  # noqa: E402
 from agent_api.model import ModelReply, ScriptedModel  # noqa: E402
-from agent_api.tools import Control, Observation  # noqa: E402
+from agent_api.tools import Bound, Control, Observation, bind  # noqa: E402
 from guard.audit import AuditEvent, verify_chain  # noqa: E402
 from guard.limits import SpendLimits  # noqa: E402
+from guard.risk import Action  # noqa: E402
 from tests.agent_fakes import FakeClient, MemoryStore  # noqa: E402
 
 KEY = b"kunci-rantai-uji-0123456789"
@@ -236,6 +238,39 @@ class GateTest(unittest.TestCase):
         _, _, client, _ = run([OPEN, call("tab_click", ref=6), finish()], client=FakeClient(page=page))
         self.assertEqual((client.prompts, len(client.handovers), tools_run(client)), ([], 1, ["tab_open"]))
 
+    def test_each_scope_expansion_gets_its_own_question(self):
+        # Tab dialihkan ke situs lain, dan tombolnya mengirim formulir: dua hal di luar rencana.
+        page = shop(host="evil.example", r3=Control(effect="form_submit"))
+        calls = [OPEN, call("tab_click", ref=3), finish()]
+
+        _, _, client, store = run(calls, client=FakeClient(page=page))
+        self.assertEqual([(prompt.reason, prompt.widens) for prompt in client.prompts],
+                         [("scope_kind", "form_submit"), ("scope_host", "evil.example")])
+        self.assertEqual(tools_run(client), ["tab_open", "tab_click"])
+        self.assertEqual(store.load_task(ALICE, TASK)["scope"]["hosts"], ["evil.example", "shopee.co.id"])
+
+        class OnlyFirst(FakeClient):
+            def confirm(self, prompt):
+                self.prompts.append(prompt)
+                return len(self.prompts) == 1
+
+        _, _, client, store = run(calls, client=OnlyFirst(page=page))
+        self.assertEqual(len(client.prompts), 2)
+        self.assertEqual(tools_run(client), ["tab_open"])
+        self.assertEqual(store.load_task(ALICE, TASK)["scope"]["hosts"], ["shopee.co.id"])
+
+    def test_an_expansion_nobody_can_approve_is_blocked_without_asking(self):
+        # Folder dan aplikasi belum bisa ditambahkan ke lingkup di fase ini. Tool
+        # file belum ada, jadi aksinya disuntikkan lewat bind.
+        outside = Bound("file_write", {}, Action(kind="file_write", path="C:/Users/nadia/Desktop/x.txt"))
+        plan = {**PLAN, "kinds": PLAN["kinds"] + ["file_write"]}
+
+        with patch("agent_api.loop.bind", side_effect=[outside, bind(finish(), None)]):
+            result, _, client, store = run([OPEN, finish()], plan=plan)
+
+        self.assertEqual((client.prompts, client.ran, result.status), ([], [], "done"))
+        self.assertEqual((rows(store)[0]["decision"], rows(store)[0]["reason"]), ("block", "scope_path"))
+
     def test_always_denied_targets_are_blocked_without_asking(self):
         _, _, client, store = run([call("tab_open", url="https://ibank.klikbca.com/"), finish()])
         self.assertEqual((client.prompts, client.handovers, client.ran), ([], [], []))
@@ -347,6 +382,14 @@ class StopAndFailureTest(unittest.TestCase):
                 # Tanpa halaman yang terbaca, tab_read ditolak sebelum sampai ke klien.
                 self.assertEqual(log[2], ("tab_read", "block", "no_page", None))
                 self.assertEqual(tools_run(client), ["tab_open"])
+
+    def test_a_failed_action_makes_the_last_page_stale(self):
+        # Halaman terbaca, lalu satu aksi gagal: nomor kontrol lama tidak boleh dipakai lagi.
+        page = shop(r5=Control())
+        client = FakeClient(page=page, pages={"tab_read": ConnectionError("putus")})
+        _, _, client, store = run([OPEN, READ, call("tab_click", ref=5), finish()], client=client)
+        self.assertEqual(tools_run(client), ["tab_open", "tab_read"])
+        self.assertIn(("tab_click", "block", "no_page"), [(row["kind"], row["decision"], row["reason"]) for row in rows(store)])
 
     def test_client_dialog_errors_count_as_no(self):
         class Rude(FakeClient):

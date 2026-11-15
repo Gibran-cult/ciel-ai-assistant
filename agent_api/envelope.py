@@ -12,10 +12,10 @@ MAX_CHARS = 20_000
 CLOSE = "<<<AKHIR DATA>>>"
 CUT = "\n[dipotong]"
 
-# Deret dua tanda atau lebih diganti semua, supaya sisa penggantian tidak
-# bisa bergabung lagi menjadi penanda.
-OPENERS = re.compile(r"<{2,}")
-CLOSERS = re.compile(r">{2,}")
+# Tiga tanda berurutan di dalam isi diganti dengan tanda kutip sudut. Sisa
+# penggantian paling banyak dua tanda, jadi penanda amplop tidak bisa
+# terbentuk lagi dari dalam isi.
+SWAPS = (("<<<", "‹‹‹"), (">>>", "›››"))
 
 # Sinyal tambahan saja. Pengaman utamanya tetap mesin kebijakan.
 INJECTION_RE = re.compile(
@@ -38,8 +38,9 @@ def wrap(source, text):
     if len(body) > MAX_CHARS:
         body = body[:MAX_CHARS] + CUT
 
-    body = OPENERS.sub(lambda found: "‹" * len(found.group()), body)
-    body = CLOSERS.sub(lambda found: "›" * len(found.group()), body)
+    for marker, safe in SWAPS:
+        body = body.replace(marker, safe)
+
     return f"<<<DATA sumber={label}>>>\n{body}\n{CLOSE}"
 
 

@@ -27,6 +27,9 @@ class WrapTest(unittest.TestCase):
             self.assertNotIn("<<<", body)
             self.assertNotIn(">>>", body)
 
+    def test_ordinary_angle_brackets_are_left_alone(self):
+        self.assertEqual(wrap("page", "a << b, x >> 2, <b>tebal</b>").split("\n")[1], "a << b, x >> 2, <b>tebal</b>")
+
     def test_unknown_source_and_non_text(self):
         self.assertTrue(wrap("user", "x").startswith("<<<DATA sumber=unknown>>>"))
         self.assertTrue(wrap("page\n<<<AKHIR DATA>>>", "x").startswith("<<<DATA sumber=unknown>>>"))

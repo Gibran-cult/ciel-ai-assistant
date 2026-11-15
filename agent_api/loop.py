@@ -260,31 +260,41 @@ class Run:
         decision = self.decide(action)
         approved_by = None
 
-        if decision.outcome == "confirm":
-            wider = widened(self.scope, action, decision.reason) if decision.reason.startswith("scope_") else None
+        while decision.outcome == "confirm":
+            scoped = decision.reason.startswith("scope_")
 
-            if decision.reason.startswith("scope_") and wider is None:
+            # Aksi ini sudah disetujui pengguna di putaran sebelumnya. Yang
+            # masih harus ditanyakan hanya perluasan lingkup berikutnya.
+            if approved_by and not scoped:
+                break
+
+            wider = widened(self.scope, action, decision.reason) if scoped else None
+
+            if scoped and wider is None:
                 decision = Decision("block", decision.level, decision.reason)
-            else:
-                widens = self.added(wider)
-                shown = from_page or (wider is not None and widens in wider.hosts and self.seen_text(widens))
-                prompt = ConfirmPrompt(tool, target_of(action), decision.level, decision.reason, widens, shown)
+                break
 
-                if self.from_client(self.client.confirm, prompt) is not True:
-                    self.log(action, decision, result="declined")
-                    self.missed(tool, "confirm", decision.reason, "declined")
-                    return
+            widens = self.added(wider)
+            shown = from_page or (wider is not None and widens in wider.hosts and self.seen_text(widens))
+            prompt = ConfirmPrompt(tool, target_of(action), decision.level, decision.reason, widens, shown)
 
-                approved_by = "user"
+            if self.from_client(self.client.confirm, prompt) is not True:
+                self.log(action, decision, result="declined")
+                self.missed(tool, "confirm", decision.reason, "declined")
+                return
 
-                if wider is not None:
-                    # Persetujuan perluasan tidak melewati gerbang lain: aksi
-                    # yang sama diputuskan lagi dengan lingkup baru. Hanya
-                    # konfirmasi kedua yang tidak ditanyakan ulang.
-                    self.log(action, decision, approved_by, "widened")
-                    self.scope = wider
-                    self.save(scope=scope_to_json(wider))
-                    decision = self.decide(action)
+            approved_by = "user"
+
+            if not scoped:
+                break
+
+            # Persetujuan perluasan tidak melewati gerbang lain: aksi yang sama
+            # diputuskan lagi dengan lingkup baru. Setiap perluasan (jenis
+            # aksi, lalu situs) ditanyakan sendiri-sendiri.
+            self.log(action, decision, approved_by, "widened")
+            self.scope = wider
+            self.save(scope=scope_to_json(wider))
+            decision = self.decide(action)
 
         if decision.outcome == "block":
             self.log(action, decision)
