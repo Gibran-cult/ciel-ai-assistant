@@ -134,6 +134,16 @@ jobs:
             tests.test_image_ai_component \
             tests.test_flow_image_ai_v100_contract \
             tests.test_image_edit_app \
+            tests.test_guard_domains \
+            tests.test_guard_registry \
+            tests.test_guard_stores \
+            tests.test_guard_risk \
+            tests.test_guard_scope \
+            tests.test_guard_limits \
+            tests.test_guard_purchase \
+            tests.test_guard_audit \
+            tests.test_guard_decide \
+            tests.test_guard_redteam \
             tests.test_ci_coverage
 
       # Node that comes with the runner (no extra setup): the Edge Function's

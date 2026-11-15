@@ -223,3 +223,71 @@ $$;
 
 -- Hanya service key (app) yang boleh memanggilnya.
 revoke execute on function public.ciel_rate_limit_hit(jsonb, double precision) from public, anon, authenticated;
+
+-- ============================================================
+-- Ciel Agent (docs/security.md). Tabel di bawah belum dipakai app;
+-- pengisinya adalah Ciel Agent API (docs/roadmap.md Fase 2).
+-- ============================================================
+
+-- Log aksi agent. Hanya ditambah; setiap baris memuat hash baris sebelumnya
+-- (guard/audit.py), jadi baris yang diubah atau dihapus akan ketahuan.
+create table if not exists public.agent_actions (
+    owner text not null,
+    task text not null,
+    seq integer not null,
+    device text not null,
+    kind text not null,
+    target text not null,
+    level text not null,
+    decision text not null,
+    reason text,
+    approved_by text,
+    result text,
+    -- Teks yang sama persis dengan yang ikut di-hash. Kalau disimpan sebagai
+    -- timestamptz, Postgres mencetaknya ulang dengan format lain dan rantai
+    -- hash terbaca rusak. Tanpa nilai bawaan: waktunya ditentukan penulis log.
+    at text not null,
+    prev_hash text not null,
+    hash text not null,
+    primary key (owner, task, seq)
+);
+
+alter table public.agent_actions enable row level security;
+
+-- Batas belanja per akun. 0 berarti fitur pembelian mati.
+create table if not exists public.spend_limits (
+    owner text primary key,
+    per_tx bigint not null default 0,
+    per_month bigint not null default 0,
+    updated_at timestamptz not null default now()
+);
+
+alter table public.spend_limits enable row level security;
+
+-- Konfirmasi pembelian sekali pakai (guard/purchase.py). month memakai
+-- zona Asia/Jakarta, sama dengan guard/limits.py.
+create table if not exists public.purchase_confirmations (
+    nonce text primary key,
+    owner text not null,
+    digest text not null,
+    total bigint not null,
+    month text not null,
+    expires_at timestamptz not null,
+    used_at timestamptz,
+    paid_at timestamptz
+);
+
+alter table public.purchase_confirmations enable row level security;
+
+-- Riwayat persetujuan dan penarikannya (docs/privacy-consent.md). Hanya ditambah.
+create table if not exists public.consent_events (
+    id bigint generated always as identity primary key,
+    owner text not null,
+    kind text not null,
+    choice jsonb not null,
+    version text not null,
+    surface text not null,
+    created_at timestamptz not null default now()
+);
+
+alter table public.consent_events enable row level security;
