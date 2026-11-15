@@ -94,6 +94,21 @@ class ConfirmationTest(unittest.TestCase):
         self.assertEqual(self.check(owner=None), (False, "mismatch"))
         self.assertEqual(self.check(secret=None), (False, "mismatch"))
 
+    def test_hostile_tokens_never_raise(self):
+        # Temuan I7: token datang dari klien.
+        exp, nonce, mac = self.token.split(".")
+        for token in ("9" * 5000 + f".{nonce}.{mac}", f"{exp}.\ud800.{mac}", f"{exp}.{nonce}.\ud800" + mac[1:],
+                      f"{exp}.{nonce}.abc", f"{exp}.{nonce}.{mac.upper()}", f"{exp}.{nonce}.{mac}0"):
+            with self.subTest(token=token[:40]):
+                self.assertEqual(self.check(token=token), (False, "malformed"))
+
+    def test_time_without_a_zone_is_refused(self):
+        naive = datetime(2026, 11, 14, 3, 42)
+        self.assertIsNone(issue_confirmation(SUMMARY, "owner-a", naive, SECRET, "n"))
+        self.assertEqual(self.check(now=naive), (False, "malformed"))
+        self.assertIsNone(issue_confirmation(SUMMARY, "owner-a", None, SECRET, "n"))
+        self.assertEqual(self.check(now=None), (False, "malformed"))
+
     def test_no_token_for_inconsistent_summary(self):
         self.assertIsNone(issue_confirmation(replace(SUMMARY, total=1), "owner-a", NOW, SECRET, "n"))
 

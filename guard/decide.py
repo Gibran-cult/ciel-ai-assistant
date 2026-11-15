@@ -18,7 +18,8 @@ melewati urutan ini, dan apa pun yang tidak terduga berakhir sebagai blokir.
 
 from dataclasses import dataclass
 
-from guard.limits import SpendLimits, check_spend
+from guard.domains import match_allowed, normalize_host
+from guard.limits import SpendLimits, check_spend, purchases_on
 from guard.risk import R0, R1, R2, R3, classify
 from guard.scope import TaskScope, in_scope
 from guard.stores import StoreVerdict
@@ -65,6 +66,19 @@ def decide(action, ctx):
         return INTERNAL_ERROR
 
 
+def target_outside(action, scope):
+    """Benar kalau aksi menyebut situs atau aplikasi yang tidak ada di lingkup tugas."""
+
+    if isinstance(action.host, str):
+        host = normalize_host(action.host)
+        return host is None or not match_allowed(host, scope.hosts)
+
+    if isinstance(action.app, str):
+        return action.app.lower() not in scope.apps
+
+    return False
+
+
 def decide_checked(action, ctx, risk):
     level = risk.level
 
@@ -76,8 +90,11 @@ def decide_checked(action, ctx, risk):
         return Decision("block", level, "bad_ticket")
 
     if level == R3:
-        outcome = "handover" if risk.reason in HANDOVER_REASONS else "block"
-        return Decision(outcome, level, risk.reason)
+        # Serah terima hanya untuk target yang memang bagian dari tugas.
+        # Meminta pengguna mengisi kata sandi di halaman lain sama saja
+        # dengan membantu halaman itu memancing data.
+        handover = risk.reason in HANDOVER_REASONS and not target_outside(action, ctx.scope)
+        return Decision("handover" if handover else "block", level, risk.reason)
 
     scope = in_scope(action, ctx.scope)
 
@@ -96,6 +113,16 @@ def decide_checked(action, ctx, risk):
         if store is None or store.official is not True:
             reason = store.reason if store is not None and store.reason else "not_listed"
             return Decision("block", level, reason)
+
+        # Status resmi berlaku untuk toko yang diperiksa, tidak untuk situs lain.
+        host = normalize_host(action.host)
+
+        if host is None or not isinstance(store.domain, str) or not match_allowed(host, (store.domain,)):
+            return Decision("block", level, "not_listed")
+
+        # Membatalkan pesanan tetap boleh saat pembelian dimatikan.
+        if action.kind != "order_cancel" and not purchases_on(ctx.limits, ctx.scope.spend_cap):
+            return Decision("block", level, "purchases_off")
 
         if action.kind in SPEND_CHECKED:
             spend = check_spend(ctx.purchase_total, ctx.limits, ctx.spent_this_month, ctx.scope.spend_cap)

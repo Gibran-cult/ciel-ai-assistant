@@ -41,6 +41,16 @@ def rupiah(value, minimum):
     return value if type(value) is int and value >= minimum else None
 
 
+def purchases_on(limits, task_cap):
+    """Benar kalau pengguna sudah mengisi kedua batas dan tugas ini boleh belanja."""
+
+    return (
+        rupiah(limits.per_tx, 1) is not None
+        and rupiah(limits.per_month, 1) is not None
+        and rupiah(task_cap, 1) is not None
+    )
+
+
 def check_spend(total, limits, spent_this_month, task_cap):
     per_tx = rupiah(limits.per_tx, 1)
     per_month = rupiah(limits.per_month, 1)

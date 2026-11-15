@@ -13,7 +13,7 @@ import posixpath
 import re
 from dataclasses import dataclass
 
-from guard.domains import match_allowed
+from guard.domains import match_allowed, normalize_host
 
 
 @dataclass(frozen=True)
@@ -48,6 +48,8 @@ DENIED_PARTS = frozenset({
 })
 
 WINDOWS_STYLE = re.compile(r"^[A-Za-z]:|\\")
+DRIVE = re.compile(r"[a-z]:")
+SHORT_NAME = re.compile(r"~\d")
 
 
 def normalized(path):
@@ -98,8 +100,22 @@ def denied(path):
     if result is None:
         return False
 
-    parts = re.split(r"[\\/]", result[1].casefold())
-    return any(part in DENIED_PARTS for part in parts)
+    parts = [part for part in re.split(r"[\\/]", result[1].casefold()) if part]
+
+    for index, part in enumerate(parts):
+        if index == 0 and DRIVE.fullmatch(part):
+            continue
+
+        # Windows membuka folder yang sama lewat beberapa ejaan: titik atau
+        # spasi di akhir (".ssh."), nama pendek ("SSH~1"), dan alur data
+        # (".ssh::$INDEX_ALLOCATION"). Ejaan seperti itu selalu ditolak,
+        # karena teks jalurnya tidak lagi menunjukkan folder yang sebenarnya.
+        cleaned = part.rstrip(". ")
+
+        if cleaned != part or ":" in part or SHORT_NAME.search(part) or cleaned in DENIED_PARTS:
+            return True
+
+    return False
 
 
 def in_scope(action, scope):
@@ -112,9 +128,9 @@ def in_scope(action, scope):
         return ScopeVerdict(False, "kind")
 
     if kind.startswith(HOST_PREFIXES):
-        host = action.host
+        host = normalize_host(action.host)
 
-        if not isinstance(host, str) or not match_allowed(host.lower(), scope.hosts):
+        if host is None or not match_allowed(host, scope.hosts):
             return ScopeVerdict(False, "host")
 
     elif kind.startswith(APP_PREFIXES):

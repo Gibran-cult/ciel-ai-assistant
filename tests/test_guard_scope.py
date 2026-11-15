@@ -108,5 +108,41 @@ class InScopeTest(unittest.TestCase):
         self.assertEqual(in_scope(Action(kind="tab_read", host="shopee.co.id"), empty), ScopeVerdict(False, "kind"))
 
 
+HOME = TaskScope(
+    hosts=frozenset({"shopee.co.id"}), writable_folders=("C:/Users/nadia",),
+    kinds=frozenset({"tab_read", "tab_open", "file_read", "file_write"}),
+)
+
+
+class FinalReviewTest(unittest.TestCase):
+    """Uji untuk temuan tinjauan akhir C2 dan I1."""
+
+    def test_host_forms_a_browser_reports_are_inside(self):
+        for host in ("shopee.co.id.", "Mall.Shopee.co.id", "shopee.co.id:443"):
+            with self.subTest(host=host):
+                self.assertTrue(in_scope(Action(kind="tab_read", host=host), HOME).inside)
+
+    def test_hosts_that_only_end_with_an_allowed_domain_are_outside(self):
+        for host in ("evil.com/.shopee.co.id", "evil.com\\.shopee.co.id", "evil.com#.shopee.co.id",
+                     "user@evil.com/a.shopee.co.id", "https://evil.com/?.shopee.co.id"):
+            with self.subTest(host=host):
+                self.assertEqual(in_scope(Action(kind="tab_open", host=host), HOME), ScopeVerdict(False, "host"))
+
+    def test_windows_spellings_of_denied_folders(self):
+        for path in (
+            "C:/Users/nadia/.ssh./id_rsa", "C:/Users/nadia/.ssh /id_rsa", "C:/Users/nadia/SSH~1/id_rsa",
+            "C:/Users/nadia/.ssh::$INDEX_ALLOCATION/id_rsa", "C:/Users/nadia/AppData./Local/x",
+            "C:/Users/nadia/APPDAT~1/Local/x", "C:/Users/nadia/a.txt::$DATA", "C:/Users/nadia/Dokumen/.. /x",
+        ):
+            for kind in ("file_read", "file_write"):
+                with self.subTest(path=path, kind=kind):
+                    self.assertEqual(in_scope(Action(kind=kind, path=path), HOME), ScopeVerdict(False, "path_denied"))
+
+    def test_ordinary_paths_still_pass(self):
+        for path in ("C:/Users/nadia/Dokumen/a.txt", "C:/Users/nadia/Dokumen/Bab 1/draf v1.0.docx", "C:/Users/nadia/~$draf.docx"):
+            with self.subTest(path=path):
+                self.assertTrue(in_scope(Action(kind="file_write", path=path), HOME).inside)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -243,7 +243,10 @@ create table if not exists public.agent_actions (
     reason text,
     approved_by text,
     result text,
-    at timestamptz not null default now(),
+    -- Teks yang sama persis dengan yang ikut di-hash. Kalau disimpan sebagai
+    -- timestamptz, Postgres mencetaknya ulang dengan format lain dan rantai
+    -- hash terbaca rusak. Tanpa nilai bawaan: waktunya ditentukan penulis log.
+    at text not null,
     prev_hash text not null,
     hash text not null,
     primary key (owner, task, seq)

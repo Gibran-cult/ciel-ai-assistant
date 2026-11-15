@@ -26,5 +26,9 @@
   {"url": "https://shopee.co.id/toko", "nav_origin": "external", "badge_text": "Shopee Mall", "expect": "untrusted_navigation"},
   {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "", "expect": "no_official_badge"},
   {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Mall", "expect": "no_official_badge"},
-  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall Indonesia Resmi", "expect": "no_official_badge"}
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall Indonesia Resmi", "expect": "no_official_badge"},
+  {"url": "https://evil.com\\.shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "expect": "not_listed"},
+  {"url": "https://evil.com%2f.shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "expect": "not_listed"},
+  {"url": "https://evil.com .shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "expect": "not_listed"},
+  {"url": "https://.shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "expect": "not_listed"}
 ]

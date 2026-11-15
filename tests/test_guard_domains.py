@@ -2,7 +2,7 @@
 
 import unittest
 
-from guard.domains import HostCheck, check_url, lookalike_of, match_allowed
+from guard.domains import HostCheck, check_url, lookalike_of, match_allowed, normalize_host
 
 ALLOWED = ("shopee.co.id", "tokopedia.com")
 
@@ -59,6 +59,44 @@ class LookalikeTest(unittest.TestCase):
     def test_leaves_real_and_unrelated_hosts(self):
         self.assertIsNone(lookalike_of("mall.shopee.co.id", ALLOWED))
         self.assertIsNone(lookalike_of("example.org", ALLOWED))
+
+
+class StrictHostTest(unittest.TestCase):
+    """Temuan tinjauan akhir C1 dan C2: host hanya boleh berisi karakter nama host."""
+
+    def test_urls_with_non_hostname_characters_are_malformed(self):
+        for url in (
+            "https://evil.com\\.shopee.co.id/toko",
+            "https://evil.com%2f.shopee.co.id/",
+            "https://evil.com .shopee.co.id/",
+            "https://.shopee.co.id/",
+            "https://shopee_mall.co.id/",
+            "https://-shopee.co.id/",
+            "https://" + "a" * 64 + ".co.id/",
+            "https://" + ".".join(["abcdefgh"] * 40) + "/",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(check_url(url), HostCheck(None, "malformed"))
+
+    def test_normalize_host_accepts_what_a_browser_reports(self):
+        cases = {
+            "Shopee.co.id.": "shopee.co.id",
+            "ibank.klikbca.com:443": "ibank.klikbca.com",
+            "shopee.co.id.:443": "shopee.co.id",
+            "mall.shopee.co.id": "mall.shopee.co.id",
+        }
+        for raw, expected in cases.items():
+            with self.subTest(raw=raw):
+                self.assertEqual(normalize_host(raw), expected)
+
+    def test_normalize_host_refuses_everything_else(self):
+        for raw in (
+            "ibank.klikbca.com/login", "ibank.klikbca.com ", "evil.com/.shopee.co.id", "evil.com\\.shopee.co.id",
+            "evil.com#.shopee.co.id", "user@evil.com", "https://shopee.co.id", "shopee.co.id\n", "localhost",
+            "shopée.co.id", "", None, 7,
+        ):
+            with self.subTest(raw=raw):
+                self.assertIsNone(normalize_host(raw))
 
 
 if __name__ == "__main__":

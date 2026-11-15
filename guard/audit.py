@@ -13,6 +13,7 @@ import json
 import re
 from dataclasses import asdict, dataclass
 
+from guard.domains import normalize_host
 from guard.risk import find_secrets
 
 
@@ -29,7 +30,7 @@ class AuditEvent:
     reason: str | None
     approved_by: str | None    # siapa yang menyetujui, kalau ada konfirmasi
     result: str | None
-    at: str                    # waktu ISO 8601, UTC
+    at: str                    # waktu ISO 8601, UTC. Disimpan persis seperti ini (kolom teks)
 
 
 def chain_hash(prev_hash, event):
@@ -69,8 +70,12 @@ def redact(text, limit=120):
 def target_of(action):
     """Target aksi untuk log: host, nama aplikasi, atau folder dan nama file."""
 
-    if isinstance(action.host, str) and action.host:
-        return action.host.lower()
+    # Hanya nama host yang sah yang dicatat. Teks lain di kolom host bisa
+    # memuat jalur dan parameter kueri, dan itu tidak boleh masuk log.
+    host = normalize_host(action.host)
+
+    if host:
+        return host
 
     if isinstance(action.app, str) and action.app:
         return action.app.lower()

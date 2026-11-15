@@ -11,8 +11,18 @@ masukan rusak: alamat datang dari halaman web dan dari model.
 """
 
 import ipaddress
+import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
+
+# Nama host yang sah: label huruf kecil, angka, dan tanda hubung, minimal dua
+# label. Apa pun di luar itu ditolak. Parser URL Python membiarkan "\" dan
+# spasi di dalam host, sedangkan browser membaca "\" sebagai "/", jadi tanpa
+# pemeriksaan ini "evil.com\.toko.co.id" terlihat seperti subdomain toko.
+LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+HOST_RE = re.compile(rf"{LABEL}(?:\.{LABEL})+")
+PORT_RE = re.compile(r":\d{1,5}\Z")
+MAX_HOST = 253
 
 
 @dataclass(frozen=True)
@@ -33,6 +43,29 @@ def is_ip(host):
     except ValueError:
         return False
     return True
+
+
+def valid_hostname(host):
+    return len(host) <= MAX_HOST and HOST_RE.fullmatch(host) is not None
+
+
+def normalize_host(host):
+    """Host seperti yang dilaporkan browser, dirapikan, atau None kalau bukan nama host.
+
+    Yang diterima: huruf besar, satu titik di akhir, dan ":port". Jalur,
+    kueri, spasi, "\\", "@", dan skema membuat hasilnya None, supaya teks
+    seperti "evil.com/.toko.co.id" tidak pernah cocok dengan domain mana pun.
+    """
+
+    if not isinstance(host, str):
+        return None
+
+    host = PORT_RE.sub("", host.lower())
+
+    if host.endswith("."):
+        host = host[:-1]
+
+    return host if valid_hostname(host) else None
 
 
 def check_url(url):
@@ -58,6 +91,9 @@ def check_url(url):
 
     if not host.isascii():
         return HostCheck(None, "punycode")
+
+    if not ip and not valid_hostname(host):
+        return MALFORMED
 
     if "@" in parts.netloc:
         return HostCheck(host, "userinfo")

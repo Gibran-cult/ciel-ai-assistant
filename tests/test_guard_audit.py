@@ -96,6 +96,15 @@ class TargetTest(unittest.TestCase):
         self.assertEqual(target_of(Action(kind="file_list", path="catatan.txt")), "catatan.txt")
         self.assertEqual(target_of(Action(kind="tab_read", host="Mall.Shopee.co.id")), "mall.shopee.co.id")
 
+    def test_only_a_real_hostname_reaches_the_log(self):
+        # Temuan C2: parameter kueri tidak boleh ikut tercatat.
+        leaky = Action(kind="tab_read", host="shopee.co.id/search?q=kartu+4111111111111111&token=abc")
+        self.assertEqual(target_of(leaky), "")
+        self.assertEqual(target_of(Action(kind="tab_read", host="Shopee.co.id.:443")), "shopee.co.id")
+
+    def test_card_with_trailing_digits_is_redacted(self):
+        self.assertNotIn("4111", redact("4111 1111 1111 1111 123"))
+
     def test_wrong_typed_fields(self):
         self.assertEqual(target_of(Action(kind="tab_read", host=7, app=["x"], path=None)), "")
 
@@ -112,7 +121,10 @@ class SqlTest(unittest.TestCase):
     def test_action_log_keeps_the_chain_columns(self):
         sql = (ROOT / "docs" / "chat_store.sql").read_text(encoding="utf-8")
         table = sql.split("create table if not exists public.agent_actions", 1)[1].split(");", 1)[0]
-        for column in ("prev_hash text not null", "hash text not null", "primary key (owner, task, seq)"):
+        # "at" disimpan sebagai teks yang sama persis dengan yang di-hash (temuan I10):
+        # timestamptz dicetak ulang Postgres dengan format lain, jadi rantainya putus.
+        self.assertNotIn("at timestamptz", table)
+        for column in ("at text not null", "prev_hash text not null", "hash text not null", "primary key (owner, task, seq)"):
             with self.subTest(column=column):
                 self.assertIn(column, table)
 

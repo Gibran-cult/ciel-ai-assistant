@@ -99,6 +99,11 @@ class VerifyStoreTest(unittest.TestCase):
     def test_unclear_automated_flag_counts_as_automated(self):
         self.check(good(), "automation_forbidden", automated=None, registry=registry_with(automation="forbidden"))
 
+    def test_backslash_host_is_not_official(self):
+        # Browser membaca "\" sebagai "/", jadi alamat ini sebenarnya milik evil.com (temuan C1).
+        self.check(replace(good(), url="https://evil.com\\.shopee.co.id/toko"), "not_listed")
+        self.check(replace(good(), url="https://evil.com\\.merek-contoh.example/produk", badge_text=""), "not_listed")
+
     def test_rejections_carry_no_proof(self):
         self.assertEqual(self.check(replace(good(), badge_text="Star Seller"), "no_official_badge").proof, {})
 

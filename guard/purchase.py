@@ -12,11 +12,13 @@ adalah pemanggil (tabel purchase_confirmations).
 import hashlib
 import hmac
 import json
+import re
 from dataclasses import asdict, dataclass
-from datetime import timezone
+from datetime import datetime
 
 PURCHASE_TTL = 600   # detik
 MIN_SECRET = 16      # byte; rahasia yang lebih pendek dianggap salah konfigurasi
+MAC_RE = re.compile(r"[0-9a-f]{64}")
 
 
 @dataclass(frozen=True)
@@ -78,8 +80,14 @@ def summary_digest(summary):
 
 
 def seconds(now):
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
+    """Detik sejak epoch, atau None untuk waktu tanpa zona.
+
+    Waktu tanpa zona ditolak. Menebak zonanya bisa membuat token yang
+    seharusnya berumur 10 menit tetap berlaku berjam-jam.
+    """
+
+    if not isinstance(now, datetime) or now.tzinfo is None:
+        return None
 
     return int(now.timestamp())
 
@@ -113,15 +121,33 @@ def sign(summary, owner, exp, nonce, secret):
 def issue_confirmation(summary, owner, now, secret, nonce):
     """Token untuk ringkasan yang baru disetujui pengguna, atau None."""
 
-    exp = seconds(now) + PURCHASE_TTL
+    issued = seconds(now)
+
+    if issued is None:
+        return None
+
+    exp = issued + PURCHASE_TTL
     mac = sign(summary, owner, exp, nonce, secret)
     return f"{exp}.{nonce}.{mac}" if mac else None
 
 
 def check_confirmation(token, summary, owner, now, secret, used_nonces):
-    """(True, None) kalau token sah untuk ringkasan ini, selain itu (False, alasan)."""
+    """(True, None) kalau token sah untuk ringkasan ini, selain itu (False, alasan).
 
-    if not isinstance(token, str):
+    Token datang dari klien, jadi bentuk apa pun yang tidak terduga
+    dijawab "malformed" dan tidak pernah memicu exception.
+    """
+
+    try:
+        return check_token(token, summary, owner, now, secret, used_nonces)
+    except Exception:
+        return False, "malformed"
+
+
+def check_token(token, summary, owner, now, secret, used_nonces):
+    current = seconds(now)
+
+    if not isinstance(token, str) or current is None:
         return False, "malformed"
 
     parts = token.split(".")
@@ -131,12 +157,16 @@ def check_confirmation(token, summary, owner, now, secret, used_nonces):
 
     exp_text, nonce, mac = parts
 
-    if not (exp_text.isascii() and exp_text.isdigit()) or not nonce or not mac:
+    # 12 digit cukup untuk ribuan tahun dan mencegah angka raksasa.
+    if not (exp_text.isascii() and exp_text.isdigit()) or len(exp_text) > 12:
+        return False, "malformed"
+
+    if not nonce or not nonce.isascii() or not MAC_RE.fullmatch(mac):
         return False, "malformed"
 
     exp = int(exp_text)
 
-    if seconds(now) > exp:
+    if current > exp:
         return False, "expired"
 
     if nonce in used_nonces:

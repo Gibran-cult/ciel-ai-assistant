@@ -71,9 +71,12 @@ def is_stale(checked, today):
     """Benar kalau pengecekan lebih dari 90 hari lalu atau tanggalnya tidak terbaca."""
 
     try:
-        return (today - date.fromisoformat(checked)).days > STALE_AFTER_DAYS
+        age = (today - date.fromisoformat(checked)).days
     except (TypeError, ValueError):
         return True
+
+    # Tanggal di masa depan berarti datanya salah, jadi dianggap kedaluwarsa.
+    return age > STALE_AFTER_DAYS or age < 0
 
 
 def texts(value, what):
@@ -118,11 +121,17 @@ def load_registry(path=DEFAULT_PATH):
                 raise ValueError("marketplace tanpa domain")
 
             checked_common(entry, domains, seen)
+            labels = texts(entry["official_labels"], "official_labels")
+
+            # Label kosong akan membuat toko tanpa label terbaca resmi.
+            if not all(label.strip() for label in labels) or not isinstance(entry["tos_url"], str):
+                raise ValueError(f"label atau tos_url tidak sah: {entry['id']!r}")
+
             marketplaces.append(Marketplace(
                 id=entry["id"],
                 name=entry["name"],
                 domains=domains,
-                official_labels=texts(entry["official_labels"], "official_labels"),
+                official_labels=labels,
                 automation=entry["automation"],
                 approved=entry["approved"],
                 tos_url=entry["tos_url"],
@@ -133,7 +142,8 @@ def load_registry(path=DEFAULT_PATH):
             evidence = texts(entry["evidence"], "evidence")
             checked_common(entry, texts([entry["domain"]], "domain"), seen)
 
-            if entry["approved"] and len(evidence) < 2:
+            # Dua bukti harus benar-benar berbeda.
+            if entry["approved"] and len({item.strip().casefold() for item in evidence if item.strip()}) < 2:
                 raise ValueError(f"situs brand disetujui tanpa dua bukti: {entry['domain']}")
 
             brand_sites.append(BrandSite(

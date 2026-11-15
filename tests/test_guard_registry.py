@@ -77,6 +77,16 @@ class ValidationTest(unittest.TestCase):
             with self.subTest(data=data), self.assertRaises(ValueError):
                 load_registry(write_temp(data))
 
+    def test_empty_labels_duplicate_evidence_and_bad_urls_fail_at_load(self):
+        bad = [
+            {"marketplaces": [{**GOOD_MARKET, "official_labels": ["", " "]}], "brand_sites": []},
+            {"marketplaces": [{**GOOD_MARKET, "tos_url": 5}], "brand_sites": []},
+            {"marketplaces": [], "brand_sites": [{**GOOD_BRAND, "approved": True, "evidence": ["x", "x "]}]},
+        ]
+        for data in bad:
+            with self.subTest(data=data), self.assertRaises(ValueError):
+                load_registry(write_temp(data))
+
     def test_broken_json_fails_at_load(self):
         path = Path(TMP.name) / "rusak.json"
         path.write_text("{bukan json", encoding="utf-8")
@@ -89,6 +99,10 @@ class StaleTest(unittest.TestCase):
         self.assertFalse(is_stale("2026-11-14", date(2027, 2, 12)))
         self.assertTrue(is_stale("2026-11-14", date(2027, 2, 13)))
         self.assertTrue(is_stale("bukan tanggal", date(2026, 11, 14)))
+
+    def test_a_date_in_the_future_is_stale(self):
+        self.assertTrue(is_stale("2099-01-01", date(2026, 11, 14)))
+        self.assertFalse(is_stale("2026-11-14", date(2026, 11, 14)))
 
 
 if __name__ == "__main__":

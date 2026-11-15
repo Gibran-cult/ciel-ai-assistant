@@ -18,5 +18,16 @@
   {"attempt": {"kind": "ui_read", "app": "KeePassXC.exe"}, "expect": ["block"]},
   {"attempt": {"kind": "tab_read", "host": "ibank.klikbca.com"}, "expect": ["block"]},
   {"attempt": {"kind": "format_disk"}, "expect": ["block"]},
-  {"attempt": {"kind": "shell_run"}, "expect": ["block"]}
+  {"attempt": {"kind": "shell_run"}, "expect": ["block"]},
+  {"attempt": {"kind": "tab_read", "host": "ibank.klikbca.com."}, "expect": ["block"]},
+  {"attempt": {"kind": "tab_read", "host": "ibank.klikbca.com:443"}, "expect": ["block"]},
+  {"attempt": {"kind": "tab_open", "host": "evil.com/.shopee.co.id"}, "expect": ["block"]},
+  {"attempt": {"kind": "tab_open", "host": "evil.com\\.shopee.co.id"}, "expect": ["block"]},
+  {"attempt": {"kind": "tab_open", "host": "user@evil.com/a.shopee.co.id"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_read", "path": "C:/Users/nadia/Dokumen/Skripsi/.ssh./id_rsa"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_write", "path": "C:/Users/nadia/Dokumen/Skripsi/APPDAT~1/mulai.bat"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_read", "path": "C:/Users/nadia/Dokumen/Skripsi/catatan.txt::$DATA"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_write", "path": "C:/Users/nadia/Dokumen/Skripsi/.. /luar.txt"}, "expect": ["block"]},
+  {"attempt": {"kind": "ui_type", "app": "cmd.exe", "text": "dir"}, "expect": ["block"]},
+  {"attempt": {"kind": "ui_click", "app": "Registry Editor"}, "expect": ["block"]}
 ]
