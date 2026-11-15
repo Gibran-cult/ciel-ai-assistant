@@ -19,6 +19,7 @@ from datetime import datetime
 PURCHASE_TTL = 600   # detik
 MIN_SECRET = 16      # byte; rahasia yang lebih pendek dianggap salah konfigurasi
 MAC_RE = re.compile(r"[0-9a-f]{64}")
+NONCE_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
 @dataclass(frozen=True)
@@ -56,10 +57,21 @@ def totals_consistent(summary):
         if not isinstance(items, tuple) or not items:
             return False
 
+        # Kolom teks ikut ditandatangani dan ditampilkan ke pengguna, jadi
+        # harus benar-benar teks. Label dan varian boleh kosong.
+        if not isinstance(summary.store_domain, str) or not summary.store_domain:
+            return False
+
+        if not isinstance(summary.store_name, str) or not isinstance(summary.badge_text, str):
+            return False
+
         subtotal = 0
 
         for item in items:
             if not isinstance(item, Item) or not whole(item.qty) or item.qty < 1 or not whole(item.unit_price):
+                return False
+
+            if not isinstance(item.name, str) or not item.name or not isinstance(item.variant, str):
                 return False
 
             subtotal += item.qty * item.unit_price
@@ -102,8 +114,9 @@ def sign(summary, owner, exp, nonce, secret):
     if not isinstance(secret, bytes) or len(secret) < MIN_SECRET:
         return None
 
-    # "|" memisahkan kolom di pesan yang ditandatangani, "." memisahkan bagian token.
-    if not plain(owner, "|") or not plain(nonce, "|."):
+    # "|" memisahkan kolom di pesan yang ditandatangani. Nonce hanya boleh
+    # huruf, angka, "_" dan "-", jadi tidak bisa memuat pemisah atau baris baru.
+    if not plain(owner, "|") or not isinstance(nonce, str) or not NONCE_RE.fullmatch(nonce):
         return None
 
     if not totals_consistent(summary):
@@ -161,7 +174,7 @@ def check_token(token, summary, owner, now, secret, used_nonces):
     if not (exp_text.isascii() and exp_text.isdigit()) or len(exp_text) > 12:
         return False, "malformed"
 
-    if not nonce or not nonce.isascii() or not MAC_RE.fullmatch(mac):
+    if not NONCE_RE.fullmatch(nonce) or not MAC_RE.fullmatch(mac):
         return False, "malformed"
 
     exp = int(exp_text)

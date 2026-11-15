@@ -18,12 +18,38 @@ def event(seq, **kw):
     return AuditEvent(**base)
 
 
-def chain(events, first_prev=""):
+def chain(events, first_prev="", key=None):
     rows, prev = [], first_prev
     for e in events:
-        prev = chain_hash(prev, e)
+        prev = chain_hash(prev, e, key=key) if key else chain_hash(prev, e)
         rows.append((e, prev))
     return rows
+
+
+class ChainHeadAndKeyTest(unittest.TestCase):
+    """Temuan minor tinjauan akhir: baris terakhir yang dipotong, dan rantai berkunci."""
+
+    def test_missing_tail_rows_are_found_when_the_head_is_known(self):
+        rows = chain([event(1), event(2), event(3)])
+        head = rows[-1][1]
+        self.assertIsNone(verify_chain(rows, head=head))
+        self.assertEqual(verify_chain(rows[:2], head=head), 2)
+        self.assertEqual(verify_chain([], head=head), 0)
+        self.assertIsNone(verify_chain([], head=""))
+
+    def test_keyed_chain_needs_the_key(self):
+        key = b"kunci-rantai-uji-0123456789abcdef"
+        keyed = chain_hash("", event(1), key=key)
+        self.assertRegex(keyed, r"^[0-9a-f]{64}$")
+        self.assertNotEqual(keyed, chain_hash("", event(1)))
+        self.assertNotEqual(keyed, chain_hash("", event(1), key=b"kunci-lain-uji-0123456789abcdef-x"))
+        rows = chain([event(1), event(2)], key=key)
+        self.assertIsNone(verify_chain(rows, key=key))
+        self.assertEqual(verify_chain(rows), 0)
+
+    def test_short_key_is_refused(self):
+        with self.assertRaises(ValueError):
+            chain_hash("", event(1), key=b"pendek")
 
 
 class ChainTest(unittest.TestCase):
@@ -117,6 +143,22 @@ class SqlTest(unittest.TestCase):
                 self.assertIn(f"create table if not exists public.{table}", sql)
                 self.assertIn(f"alter table public.{table} enable row level security;", sql)
                 self.assertNotRegex(sql, rf"create policy[^;]*public\.{table}")
+
+    def test_constraints_index_and_no_update_triggers(self):
+        sql = (ROOT / "docs" / "chat_store.sql").read_text(encoding="utf-8")
+        for text in (
+            "check (seq >= 1)",
+            "check (level in ('R0', 'R1', 'R2', 'R3'))",
+            "check (decision in ('allow', 'confirm', 'block', 'handover'))",
+            "check (per_tx >= 0)",
+            "check (per_month >= 0)",
+            "check (total > 0)",
+            "create index if not exists purchase_confirmations_owner_month",
+            "before update on public.agent_actions",
+            "before update on public.consent_events",
+        ):
+            with self.subTest(text=text):
+                self.assertIn(text, sql)
 
     def test_action_log_keeps_the_chain_columns(self):
         sql = (ROOT / "docs" / "chat_store.sql").read_text(encoding="utf-8")

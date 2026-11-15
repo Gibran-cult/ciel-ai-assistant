@@ -33,6 +33,7 @@ def good():
     return StoreEvidence(
         url="https://shopee.co.id/tokocontoh", nav_origin="typed", store_name="Toko Contoh",
         store_page_name="Toko Contoh", badge_text="Shopee Mall", adapter_ok=True,
+        store_page_url="https://shopee.co.id/tokocontoh", store_page_badge="Shopee Mall",
     )
 
 
@@ -103,6 +104,26 @@ class VerifyStoreTest(unittest.TestCase):
         # Browser membaca "\" sebagai "/", jadi alamat ini sebenarnya milik evil.com (temuan C1).
         self.check(replace(good(), url="https://evil.com\\.shopee.co.id/toko"), "not_listed")
         self.check(replace(good(), url="https://evil.com\\.merek-contoh.example/produk", badge_text=""), "not_listed")
+
+    def test_label_must_show_on_the_store_page_too(self):
+        # docs/security.md bagian 4 langkah 4: label di halaman toko dan di halaman produk.
+        self.check(replace(good(), store_page_badge=""), "no_official_badge")
+        self.check(replace(good(), store_page_badge="Star Seller"), "no_official_badge")
+        self.check(replace(good(), store_page_badge=None), "no_official_badge")
+
+    def test_store_page_must_be_on_the_same_marketplace(self):
+        for url in ("https://example.org/tokocontoh", "http://shopee.co.id/tokocontoh", "", None,
+                    "https://tokopedia.com/tokocontoh", "https://evil.com\\.shopee.co.id/tokocontoh"):
+            with self.subTest(url=url):
+                self.check(replace(good(), store_page_url=url), "badge_unverifiable")
+
+    def test_store_page_may_be_a_subdomain_of_the_same_marketplace(self):
+        evidence = replace(good(), store_page_url="https://mall.shopee.co.id/tokocontoh")
+        self.assertTrue(verify_store(evidence, REGISTRY, NOW, True).official)
+
+    def test_brand_site_needs_no_store_page(self):
+        evidence = replace(good(), url="https://merek-contoh.example/produk", badge_text="", store_page_url="", store_page_badge="")
+        self.assertTrue(verify_store(evidence, REGISTRY, NOW, True).official)
 
     def test_rejections_carry_no_proof(self):
         self.assertEqual(self.check(replace(good(), badge_text="Star Seller"), "no_official_badge").proof, {})

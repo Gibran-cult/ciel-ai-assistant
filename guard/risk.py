@@ -10,7 +10,7 @@ sebagai kosong dan tidak pernah memicu exception.
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 
 from guard.domains import match_allowed, normalize_host
@@ -28,12 +28,37 @@ class Action:
     field_type: str | None = None   # "password" | "otp" | "card" | "text" | None
     submits: bool = False           # klik atau ketik yang memicu kirim data
     tainted: bool = False           # target berasal dari isi tidak tepercaya
+    dest: str | None = None         # jalur tujuan untuk file_move dan download
+    # Efek aksi menurut klien, ditulis sebagai jenis aksi. Contoh: klik pada
+    # tombol "Tambah ke keranjang" dikirim sebagai kind="tab_click" dengan
+    # effect="cart_add", supaya gerbang belanja tetap berlaku untuk klik biasa.
+    effect: str | None = None
+
+
+def action_from(data):
+    """Action dari keluaran model.
+
+    Kunci yang tidak dikenal tidak diabaikan: aksinya dijadikan tidak dikenal
+    (dan karena itu diblokir), sebab kolom yang dibuang bisa saja kolom yang
+    membuat aksi itu berbahaya.
+    """
+
+    if not isinstance(data, dict) or "kind" not in data or not set(data) <= ACTION_FIELDS:
+        return Action(kind=None)
+
+    return Action(**data)
+
+
+ACTION_FIELDS = frozenset(field.name for field in fields(Action))
 
 
 @dataclass(frozen=True)
 class RiskVerdict:
     level: str
     reason: str
+
+
+LEVEL_ORDER = {R0: 0, R1: 1, R2: 2, R3: 3}
 
 
 ACTION_LEVELS = {
@@ -214,6 +239,19 @@ def classify(action):
     if base is None:
         return RiskVerdict(R3, "unknown_kind")
 
+    reason = kind
+    effect = action.effect
+
+    # Efek dari klien hanya bisa menaikkan tingkat risiko, tidak menurunkannya.
+    if effect is not None:
+        effect_level = ACTION_LEVELS.get(effect) if isinstance(effect, str) else None
+
+        if effect_level is None:
+            return RiskVerdict(R3, "unknown_kind")
+
+        if LEVEL_ORDER[effect_level] > LEVEL_ORDER[base]:
+            base, reason = effect_level, effect
+
     # Target diperiksa lebih dulu daripada isi: aplikasi atau situs yang
     # diblokir tetap diblokir, apa pun yang mau dikerjakan di sana.
     if isinstance(action.host, str):
@@ -238,7 +276,7 @@ def classify(action):
 
     # Memori jangka panjang hanya ditulis dari pesan pengguna sendiri, tidak
     # pernah dari isi halaman, email, atau file (pertahanan racun memori).
-    if kind == "memory_store" and action.tainted is not False:
+    if "memory_store" in (kind, effect) and action.tainted is not False:
         return RiskVerdict(R3, "tainted_memory")
 
     if base == R1:
@@ -254,4 +292,4 @@ def classify(action):
         if "token" in secrets:
             return RiskVerdict(R2, "possible_secret")
 
-    return RiskVerdict(base, kind)
+    return RiskVerdict(base, reason)

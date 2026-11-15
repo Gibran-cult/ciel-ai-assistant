@@ -9,6 +9,7 @@ pernah isi halaman, isi file, atau teks rahasia.
 """
 
 import hashlib
+import hmac
 import json
 import re
 from dataclasses import asdict, dataclass
@@ -33,24 +34,48 @@ class AuditEvent:
     at: str                    # waktu ISO 8601, UTC. Disimpan persis seperti ini (kolom teks)
 
 
-def chain_hash(prev_hash, event):
+MIN_KEY = 16   # byte
+
+
+def chain_hash(prev_hash, event, key=None):
+    """Hash satu catatan, dihitung dari hash catatan sebelumnya.
+
+    Dengan key (rahasia server), hasilnya HMAC: orang yang bisa menulis ke
+    tabel log tetap tidak bisa menghitung ulang rantainya. Tanpa key, hasilnya
+    SHA-256 biasa, yang hanya mendeteksi perubahan tak sengaja.
+    """
+
     canonical = json.dumps(asdict(event), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return hashlib.sha256((prev_hash + "\n" + canonical).encode("utf-8")).hexdigest()
+    data = (prev_hash + "\n" + canonical).encode("utf-8")
+
+    if key is None:
+        return hashlib.sha256(data).hexdigest()
+
+    if not isinstance(key, bytes) or len(key) < MIN_KEY:
+        raise ValueError("kunci rantai log harus bytes, minimal 16 byte")
+
+    return hmac.new(key, data, hashlib.sha256).hexdigest()
 
 
-def verify_chain(rows, first_prev=""):
+def verify_chain(rows, first_prev="", head=None, key=None):
     """Indeks baris pertama yang hash-nya tidak cocok, atau None kalau rantai utuh.
 
     rows: daftar (AuditEvent, hash tersimpan), urut dari yang paling lama.
+    head: hash catatan terakhir yang disimpan terpisah. Kalau diberikan,
+    baris terakhir yang dipotong ikut ketahuan: hasilnya len(rows), yaitu
+    indeks baris pertama yang hilang.
     """
 
     prev = first_prev
 
     for index, (event, stored) in enumerate(rows):
-        if chain_hash(prev, event) != stored:
+        if chain_hash(prev, event, key) != stored:
             return index
 
         prev = stored
+
+    if head is not None and prev != head:
+        return len(rows)
 
     return None
 

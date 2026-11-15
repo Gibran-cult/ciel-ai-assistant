@@ -104,7 +104,11 @@ def decide_checked(action, ctx, risk):
 
         return Decision("confirm", level, "scope_" + scope.reason)
 
-    if action.kind in PURCHASE_KINDS:
+    # Gerbang belanja berlaku untuk jenis aksinya dan untuk efeknya, supaya
+    # klik biasa pada tombol keranjang atau checkout tidak melewatinya.
+    purchase = {action.kind, action.effect} & PURCHASE_KINDS
+
+    if purchase:
         if ctx.adult_verified is not True:
             return Decision("block", level, "underage")
 
@@ -121,10 +125,10 @@ def decide_checked(action, ctx, risk):
             return Decision("block", level, "not_listed")
 
         # Membatalkan pesanan tetap boleh saat pembelian dimatikan.
-        if action.kind != "order_cancel" and not purchases_on(ctx.limits, ctx.scope.spend_cap):
+        if purchase != {"order_cancel"} and not purchases_on(ctx.limits, ctx.scope.spend_cap):
             return Decision("block", level, "purchases_off")
 
-        if action.kind in SPEND_CHECKED:
+        if purchase & SPEND_CHECKED:
             spend = check_spend(ctx.purchase_total, ctx.limits, ctx.spent_this_month, ctx.scope.spend_cap)
 
             if not spend.ok:

@@ -45,7 +45,37 @@ class TotalsTest(unittest.TestCase):
                 self.assertFalse(totals_consistent(broken))
 
 
+class SummaryTextTest(unittest.TestCase):
+    """Temuan minor tinjauan akhir: kolom teks ringkasan harus benar-benar teks."""
+
+    def test_text_fields_must_be_text(self):
+        for broken in (
+            replace(SUMMARY, store_domain=None),
+            replace(SUMMARY, store_domain=""),
+            replace(SUMMARY, store_name=7),
+            replace(SUMMARY, badge_text=None),
+            replace(SUMMARY, items=(Item(None, "Hitam", 1, 250_000),)),
+            replace(SUMMARY, items=(Item("", "Hitam", 1, 250_000),)),
+            replace(SUMMARY, items=(Item("Kalkulator ilmiah", 5, 1, 250_000),)),
+        ):
+            with self.subTest(broken=broken):
+                self.assertFalse(totals_consistent(broken))
+                self.assertIsNone(issue_confirmation(broken, "owner-a", NOW, SECRET, "n"))
+
+    def test_empty_badge_and_variant_are_fine(self):
+        plain = replace(SUMMARY, badge_text="", items=(Item("Kalkulator ilmiah", "", 1, 250_000),))
+        self.assertTrue(totals_consistent(plain))
+
+
 class ConfirmationTest(unittest.TestCase):
+    def test_nonce_must_be_a_plain_identifier(self):
+        for nonce in ("a\nb", "a b", "x" * 65, "nonce/1", "ñ"):
+            with self.subTest(nonce=nonce):
+                self.assertIsNone(issue_confirmation(SUMMARY, "owner-a", NOW, SECRET, nonce))
+        exp, _, mac = self.token.split(".")
+        self.assertEqual(self.check(token=f"{exp}.a b.{mac}"), (False, "malformed"))
+        self.assertIsNotNone(issue_confirmation(SUMMARY, "owner-a", NOW, SECRET, "Nonce_1-ok"))
+
     def setUp(self):
         self.token = issue_confirmation(SUMMARY, "owner-a", NOW, SECRET, "nonce-1")
 

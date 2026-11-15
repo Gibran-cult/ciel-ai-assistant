@@ -29,5 +29,20 @@
   {"attempt": {"kind": "file_read", "path": "C:/Users/nadia/Dokumen/Skripsi/catatan.txt::$DATA"}, "expect": ["block"]},
   {"attempt": {"kind": "file_write", "path": "C:/Users/nadia/Dokumen/Skripsi/.. /luar.txt"}, "expect": ["block"]},
   {"attempt": {"kind": "ui_type", "app": "cmd.exe", "text": "dir"}, "expect": ["block"]},
-  {"attempt": {"kind": "ui_click", "app": "Registry Editor"}, "expect": ["block"]}
+  {"attempt": {"kind": "ui_click", "app": "Registry Editor"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_move", "path": "C:/Users/nadia/Dokumen/Skripsi/bab1.docx"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "file_move", "path": "C:/Users/nadia/Dokumen/Skripsi/bab1.docx", "dest": "C:/Users/nadia/Desktop/bab1.docx"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "file_move", "path": "C:/Users/nadia/Dokumen/Skripsi/bab1.docx", "dest": "bab1.docx"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "file_move", "path": "C:/Users/nadia/Dokumen/Skripsi/bab1.docx", "dest": "C:/Users/nadia/Dokumen/Catatan/bab1.docx"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "file_move", "path": "C:/Users/nadia/Dokumen/Skripsi/bab1.docx", "dest": "C:/Users/nadia/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/bab1.bat"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_move", "path": "C:/Users/nadia/Dokumen/Skripsi/bab1.docx", "dest": "C:/Users/nadia/Dokumen/Skripsi/../../.ssh/authorized_keys"}, "expect": ["block"]},
+  {"attempt": {"kind": "download", "dest": "C:/Users/nadia/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/pembantu.exe"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_write", "path": "C:/Users/nadia/Dokumen/Catatan/sumber.txt"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "folder_create", "path": "C:/Users/nadia/Dokumen/Catatan/baru"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "file_read", "path": "C:/Users/nadia/.kube/config"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_read", "path": "C:/Users/nadia/Dokumen/Skripsi/.git-credentials"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_read", "path": "C:/Users/nadia/NTUSER.DAT"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_list", "path": "C:/ProgramData/Microsoft"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_read", "path": "/Users/nadia/Library/Keychains/login.keychain-db"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_read", "path": "/etc/passwd"}, "expect": ["block"]}
 ]

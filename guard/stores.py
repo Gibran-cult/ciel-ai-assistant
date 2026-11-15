@@ -18,12 +18,16 @@ TRUSTED_NAV = frozenset({"typed", "internal"})
 
 @dataclass(frozen=True)
 class StoreEvidence:
-    url: str               # alamat halaman toko atau produk
+    url: str               # alamat halaman produk (atau halaman situs brand)
     nav_origin: str        # "typed" | "internal" | "external" | "ad" | "message"
     store_name: str        # nama toko di halaman produk
     store_page_name: str   # nama toko di halaman toko
-    badge_text: str        # teks label yang dibaca adapter, "" kalau tidak ada
+    badge_text: str        # teks label di halaman produk, "" kalau tidak ada
     adapter_ok: bool       # False kalau adapter tidak menemukan struktur halaman
+    # Halaman toko di marketplace. Label resmi harus terlihat di sana juga.
+    # Tidak dipakai untuk situs brand.
+    store_page_url: str = ""
+    store_page_badge: str = ""
 
 
 @dataclass(frozen=True)
@@ -102,6 +106,17 @@ def decide_store(evidence, registry, now, automated):
     badge = text(evidence.badge_text).casefold()
 
     if badge not in labels:
+        return rejected("no_official_badge", domain)
+
+    # Halaman toko harus berada di marketplace yang sama, dan label resminya
+    # harus terlihat di sana juga. Label di satu halaman saja bisa ditiru
+    # lewat gambar atau teks di deskripsi produk.
+    page = check_url(evidence.store_page_url)
+
+    if page.problem or registry.find(page.host) is not entry:
+        return rejected("badge_unverifiable", domain)
+
+    if text(evidence.store_page_badge).casefold() not in labels:
         return rejected("no_official_badge", domain)
 
     if not name or name.casefold() != text(evidence.store_page_name).casefold():

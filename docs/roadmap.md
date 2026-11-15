@@ -86,11 +86,11 @@ Tujuan: server bisa menjalankan loop agent dengan klien tiruan, dan pengguna bis
 | 2.9 | Endpoint WebSocket dengan pemeriksaan asal dan token | `agent_api/ws.py`, `tests/test_agent_ws.py` | Sambungan tanpa token atau dari asal lain ditolak |
 | 2.10 | Antarmuka model dengan model tiruan untuk uji | `agent_api/model.py`, `tests/test_agent_model.py` | Model tiruan mengembalikan aksi sesuai naskah uji |
 | 2.11 | Amplop data untuk isi tidak tepercaya | `agent_api/envelope.py`, `tests/test_agent_envelope.py` | Isi halaman tidak pernah masuk saluran instruksi |
-| 2.12 | Skema argumen setiap tool | `agent_api/tools.py`, `tests/test_agent_tools.py` | Argumen di luar skema ditolak sebelum sampai ke klien |
+| 2.12 | Skema argumen setiap tool. Keluaran model dijadikan aksi lewat `guard.risk.action_from` | `agent_api/tools.py`, `tests/test_agent_tools.py` | Argumen di luar skema ditolak sebelum sampai ke klien, dan aksi dengan kolom yang tidak dikenal diblokir |
 | 2.13 | Loop agent: rencana, lingkup, satu aksi per putaran, `guard.decide` di setiap aksi | `agent_api/loop.py`, `tests/test_agent_loop.py` | Aksi R2 tidak dikirim tanpa konfirmasi, R3 tidak pernah dikirim |
 | 2.14 | Batas langkah dan waktu per tugas | `agent_api/loop.py` | Tugas berhenti di langkah ke-41 |
 | 2.15 | Stop di server: tugas dibatalkan dan aksi berikutnya ditolak | `agent_api/loop.py` | Uji stop di tengah tugas |
-| 2.16 | Penulisan log ke `agent_actions` lewat `guard.audit` | `agent_api/store.py` | `verify_chain` utuh setelah satu tugas |
+| 2.16 | Penulisan log ke `agent_actions` lewat `guard.audit`, memakai kunci rantai dari secrets server. Hash catatan terakhir disimpan per tugas di `agent_tasks` | `agent_api/store.py` | `verify_chain` dengan `key` dan `head` utuh setelah satu tugas, dan catatan terakhir yang dihapus ketahuan |
 | 2.17 | Rate limit agent per akun dan per paket | `agent_api/limits.py`, `tests/test_agent_limits.py` | Tugas kedua yang bersamaan ditolak |
 | 2.18 | Plafon biaya harian dan sakelar mati fitur agent | `agent_api/limits.py` | Tugas baru ditolak saat sakelar mati |
 | 2.19 | Halaman log aktivitas di web | `agent_log.py`, `tests/test_agent_log_app.py` | Baris tampil dengan waktu, risiko, aksi, target, hasil |
@@ -114,7 +114,7 @@ Tujuan: agent bisa membaca halaman, mengisi form, dan mengelola tab di situs yan
 | 3.4 | Klien WebSocket dengan sambung ulang dan verifikasi tiket | `extension/src/socket.ts` | Tiket tidak sah ditolak di klien |
 | 3.5 | Pembaca halaman: teks terlihat, kontrol bernomor, tanpa kolom kata sandi dan pembayaran | `extension/src/content/reader.ts` | Uji pada halaman contoh: kolom sensitif tidak ikut |
 | 3.6 | Penyaring pola rahasia sebelum data dikirim | `extension/src/content/redact.ts` | Nomor kartu uji tidak keluar dari perangkat |
-| 3.7 | Pelaksana aksi: klik, ketik, pilih, gulir berdasarkan nomor rujukan | `extension/src/content/act.ts` | Uji pada halaman contoh |
+| 3.7 | Pelaksana aksi: klik, ketik, pilih, gulir berdasarkan nomor rujukan. Klik pada tombol keranjang, checkout, kirim, batal pesanan, atau unduh dilaporkan dengan `effect` | `extension/src/content/act.ts` | Uji pada halaman contoh: klik tombol keranjang membawa `effect: "cart_add"` |
 | 3.8 | Permintaan izin situs saat dibutuhkan | `extension/src/permissions.ts` | Tanpa izin, aksi ditolak di klien |
 | 3.9 | Pemeriksaan izin lokal sebelum setiap aksi | `extension/src/permissions.ts` | Aksi ke situs di luar izin tidak dijalankan |
 | 3.10 | Banner "Tab ini sedang dikontrol Ciel" dan badge ikon | `extension/src/content/banner.ts` | Banner muncul dan hilang sesuai keadaan |
@@ -145,7 +145,7 @@ Tujuan: Ciel menemukan barang di toko resmi, menunjukkan bukti, menyiapkan ringk
 |---|---|---|---|
 | 4.1 | Tugas pemilik: setujui daftar toko awal | `guard/official_stores.json` | Entri yang disetujui bertanda `approved: true` lewat pull request |
 | 4.2 | Verifikasi brand pertama dengan dua bukti | `guard/official_stores.json` | Uji registry menolak entri brand dengan kurang dari dua bukti |
-| 4.3 | Adapter toko pertama: penanda label, nama toko, elemen keranjang | `extension/src/adapters/` | Uji pada halaman tiruan dengan dan tanpa label |
+| 4.3 | Adapter toko pertama: penanda label di halaman produk dan di halaman toko, alamat halaman toko, nama toko, elemen keranjang | `extension/src/adapters/` | Uji pada halaman tiruan dengan dan tanpa label |
 | 4.4 | Pengiriman bukti toko ke server dan pemanggilan `guard.verify_store` | `agent_api/shopping.py`, `tests/test_agent_shopping.py` | Setiap kode alasan punya uji |
 | 4.5 | Pembaca ringkasan pesanan: barang, jumlah, harga, ongkir, biaya, total | `extension/src/adapters/` | Total sama dengan jumlah bagian pada halaman tiruan |
 | 4.6 | Pernyataan usia dan aktivasi pembelian | `agent_shopping_settings.py`, `tests/test_agent_shopping_app.py` | Tanpa aktivasi, alasan `purchases_off` |
@@ -177,7 +177,7 @@ Tujuan: agent bisa mengelola file di folder yang diizinkan dan mengoperasikan ap
 | 5.2 | Login perangkat, token di Windows Credential Manager | `desktop/src-tauri/src/auth.rs` | Token tidak ada di berkas biasa |
 | 5.3 | Penyimpanan izin aplikasi dan folder, dengan daftar yang selalu ditolak | `desktop/src-tauri/src/permissions.rs` | Uji daftar tolak |
 | 5.4 | Pemeriksa jalur dengan resolusi nyata (shortcut dan `..`) | `desktop/src-tauri/src/paths.rs` | Uji jalur keluar folder ditolak |
-| 5.5 | Tool file: daftar, baca, tulis, pindah, buat folder | `desktop/src-tauri/src/files.rs` | Uji di folder sementara |
+| 5.5 | Tool file: daftar, baca, tulis, pindah (selalu dengan jalur tujuan `dest`), buat folder | `desktop/src-tauri/src/files.rs` | Uji di folder sementara |
 | 5.6 | Hapus ke Recycle Bin | `desktop/src-tauri/src/files.rs` | File bisa dikembalikan |
 | 5.7 | Pembaca struktur aplikasi lewat UI Automation | `desktop/src-tauri/src/uia.rs` | Uji pada aplikasi contoh |
 | 5.8 | Klik dan ketik berdasarkan nama kontrol | `desktop/src-tauri/src/uia.rs` | Uji pada aplikasi contoh |
