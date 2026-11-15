@@ -3,7 +3,7 @@
 Status: draf untuk ditinjau pemilik. Tanggal: 14 November 2026.
 Arsitektur chatbot yang sekarang ada di `docs/ARCHITECTURE.md` dan tidak diubah oleh dokumen ini. Dokumen ini menambahkan lapisan agent di sebelahnya.
 
-Keputusan D1 (stack desktop), D2 (penyedia LLM agent), D6 (hosting), dan D10 (urutan rilis) dijawab pemilik pada 14 November 2026 mengikuti rekomendasi. Catatannya di [decisions.md](decisions.md). Perbandingan opsinya tetap ada di bagian 3, 5, dan 7.
+Keputusan D1 (stack desktop), D2 (penyedia LLM agent), D6 (hosting), dan D10 (urutan rilis) dijawab pemilik pada 14 November 2026 mengikuti rekomendasi. Nama penyedia D2 dikunci pada 15 November 2026: Claude Haiku 5.5, dengan Gemini 3.5 Flash-Lite sebagai cadangan. Catatannya di [decisions.md](decisions.md). Perbandingan opsinya tetap ada di bagian 3, 5, dan 7.
 
 ## 1. Prinsip
 
@@ -88,16 +88,16 @@ Memori jangka panjang hanya ditulis dari pesan pengguna sendiri, tidak pernah da
 
 Kebutuhan agent berbeda dari chat. Isi halaman dan layar pengguna jauh lebih sensitif daripada pertanyaan riset, jadi kebijakan data penyedia ikut menentukan.
 
-Harga per 1 juta token, dicek 14 November 2026:
+Harga per 1 juta token, dicek 14 dan 15 November 2026 dari halaman resmi:
 
 | Model | Input | Output | Kebijakan data | Catatan |
 |---|---|---|---|---|
 | `deepseek-flash` (dipakai Ciel sekarang) | US$0,15 di luar jam sibuk, US$0,30 jam sibuk | US$0,60 atau US$1,20 | Data disimpan di Tiongkok dan bisa dipakai melatih model kecuali opt-out (`docs/LEGAL.md`) | Bisa membaca gambar. Sumber: halaman harga resmi DeepSeek |
-| `gemini-3.5-flash-lite` (cadangan Ciel sekarang) | US$0,30 [PERLU DICEK di halaman resmi] | US$2,50 [PERLU DICEK] | Paket berbayar tidak dipakai melatih, ada DPA (`docs/LEGAL.md`) | Angka dari situs agregator. Ada kabar model ini berstatus lama [PERLU DICEK] |
-| `claude-haiku-5-5` | US$0,10 | US$0,50 | [PERLU DICEK: syarat data API komersial Anthropic] | Harga untuk prompt sampai 100 ribu token |
-| `claude-sonnet-5-5` | US$2,00 | US$10,00 | [PERLU DICEK] | Punya tool computer use resmi (`computer_toolset_20260801`) |
-| `claude-opus-5-5` | US$4,00 | US$20,00 | [PERLU DICEK] | Punya tool computer use resmi |
-| Model computer use dari OpenAI dan Google | [PERLU DICEK] | [PERLU DICEK] | [PERLU DICEK] | Belum berhasil diverifikasi dari sumber resmi |
+| `gemini-3.5-flash-lite` (cadangan Ciel sekarang) | US$0,30 | US$2,50 | Menurut ketentuan Gemini API (berlaku 23 Maret 2026), prompt dan respons layanan berbayar tidak dipakai untuk meningkatkan produk Google, dan hanya dicatat sementara untuk mendeteksi penyalahgunaan. DPA berlaku selama billing aktif (`docs/LEGAL.md`) | Halaman harga resmi tidak menandainya sebagai model lama. Gemini punya tool computer use (`computer_use`), tetapi daftar model yang mendukungnya belum terbaca langsung [PERLU DICEK] |
+| `claude-haiku-5-5` | US$0,10 | US$0,50 | Menurut Commercial Terms Anthropic (berlaku 17 Juni 2025), Anthropic tidak boleh melatih model dengan konten pelanggan. Input dan output API dihapus dalam 30 hari, kecuali untuk menegakkan kebijakan penggunaan (bisa sampai 2 tahun untuk pelanggaran) atau kewajiban hukum. DPA otomatis menjadi bagian dari Commercial Terms | Harga untuk prompt sampai 100 ribu token. Mendukung tool computer use resmi (`computer_toolset_20260801`) |
+| `claude-sonnet-5-5` | US$2,00 | US$10,00 | Sama dengan Haiku | Mendukung `computer_toolset_20260801` |
+| `claude-opus-5-5` | US$4,00 | US$20,00 | Sama dengan Haiku | Mendukung `computer_toolset_20260801` |
+| Model computer use dari OpenAI | [PERLU DICEK] | [PERLU DICEK] | [PERLU DICEK] | Belum dicek |
 
 Perkiraan biaya satu tugas. Asumsi: 15 langkah, rata-rata 8.000 token input per langkah (struktur halaman yang sudah diringkas ditambah riwayat), 300 token output per langkah, tanpa cache. Totalnya 120.000 token input dan 4.500 token output.
 
@@ -119,7 +119,15 @@ Opsi:
 | B. Semua di DeepSeek | Agent memakai `deepseek-flash` seperti chat | Tidak ada vendor baru, sudah dikenal | Isi halaman dan layar pengguna dikirim ke penyedia yang bisa melatih dari data, kecuali opt-out sudah dikonfirmasi tertulis. Tidak ada tool computer use resmi |
 | C. Semua di Gemini | Agent memakai kunci Gemini berbayar yang sudah ada | DPA sudah berlaku, tidak ada vendor baru | Harga dan status model harus dicek ulang. Tool computer use belum diverifikasi |
 
-Rekomendasi: A. Kriteria yang dipakai berurutan: kebijakan data, harga, lalu ketersediaan tool computer use. Sebelum dikunci, cek tiga hal yang masih bertanda [PERLU DICEK]: syarat data Anthropic, apakah `claude-haiku-5-5` mendukung tool yang dibutuhkan, dan harga resmi Gemini. Apa pun pilihannya, model utama selalu punya cadangan seperti pola `Ciel Fallback Model` sekarang.
+Rekomendasi: A. Kriteria yang dipakai berurutan: kebijakan data, harga, lalu ketersediaan tool computer use.
+
+Tiga hal yang dulu bertanda [PERLU DICEK] sudah dicek pada 15 November 2026: Anthropic tidak melatih model dengan konten API dan DPA-nya otomatis berlaku, `claude-haiku-5-5` mendukung tool computer use resmi, dan harga resmi Gemini 3.5 Flash-Lite sama dengan angka di tabel. Penyedia yang dikunci pemilik pada 15 November 2026 (`docs/decisions.md`, D2):
+
+- Model utama agent: Claude Haiku 5.5, untuk langkah teks maupun langkah yang butuh tangkapan layar. Paling murah di tabel dan memenuhi syarat data.
+- Cadangan saat Anthropic gagal: Gemini 3.5 Flash-Lite berbayar, yang sudah dipakai Ciel dan juga tidak dipakai untuk melatih model.
+- Kualitas Haiku untuk tugas agent belum diukur. Kalau di beta banyak langkah gagal, langkah itu dinaikkan ke Claude Sonnet 5.5.
+
+Apa pun pilihannya, model utama selalu punya cadangan seperti pola `Ciel Fallback Model` sekarang.
 
 ## 4. Ekstensi browser
 
@@ -153,7 +161,10 @@ Fungsi: mengelola file di folder yang diizinkan, membuka dan mengoperasikan apli
 Biaya dan hambatan yang sama untuk semua opsi:
 
 - macOS: keanggotaan Apple Developer Program US$99 per tahun, dan butuh Mac untuk build serta notarisasi (pemeriksaan otomatis oleh Apple sebelum aplikasi boleh dijalankan). Aplikasi yang mengontrol aplikasi lain tidak bisa hidup di dalam sandbox Mac App Store, jadi distribusinya lewat unduhan langsung dengan Developer ID.
-- Windows: layanan tanda tangan termurah dari Microsoft (Azure Artifact Signing, sekitar US$9,99 per bulan) hanya menerima developer individu dari Amerika Serikat dan Kanada. Jalur lain: sertifikat dari otoritas sertifikat [PERLU DICEK harga dan syarat untuk individu], atau distribusi lewat Microsoft Store [PERLU DICEK: apakah aplikasi kontrol desktop diterima, dan akun individu menurut Microsoft tidak untuk kegiatan usaha]. Tanpa tanda tangan, Windows menampilkan peringatan SmartScreen. Untuk aplikasi yang mengontrol laptop, rilis tanpa tanda tangan tidak disarankan.
+- Windows: Azure Artifact Signing (sekitar US$9,99 per bulan) hanya menerima developer individu dari Amerika Serikat dan Kanada. Untuk individu di Indonesia ada dua jalur (dicek 15 November 2026):
+  - Paket MSIX lewat Microsoft Store. Microsoft menandatangani ulang paketnya setelah lolos sertifikasi, jadi tidak perlu membeli sertifikat. Tetapi menurut Microsoft, akun individu hanya untuk distribusi yang tidak terkait usaha, sehingga Ciel kemungkinan butuh akun perusahaan. Yang belum dicek: syarat akun perusahaan untuk usaha tanpa badan hukum, apakah aplikasi yang mengontrol aplikasi lain diterima di Store, dan apakah Tauri bisa langsung menghasilkan MSIX [PERLU DICEK].
+  - Sertifikat dari otoritas sertifikat, untuk distribusi di luar Store. Microsoft menyebut kisaran US$150 sampai 300 per tahun untuk sertifikat OV. SSL.com menjual IV Code Signing untuk individu tanpa badan usaha seharga US$129 per tahun, ditambah token hardware (US$379) atau langganan tanda tangan cloud. Certum menjual sertifikat Standard untuk individu mulai €139, dan Open Source Code Signing seharga €69 untuk set kartu dan pembacanya, yang hanya cocok kalau aplikasinya dirilis sebagai open source. Semua jalur ini mewajibkan kunci disimpan di token hardware atau HSM cloud.
+  - Dengan sertifikat apa pun, SmartScreen tetap memberi peringatan untuk berkas baru sampai reputasinya terkumpul. Menurut Microsoft, itu bisa makan beberapa minggu dan ratusan instalasi. Hanya paket MSIX dari Store yang tidak mengalaminya. Rilis tanpa tanda tangan tetap tidak disarankan untuk aplikasi yang mengontrol laptop.
 
 Rekomendasi: A, dimulai dari Windows saja. Hambatan sertifikat Windows adalah alasan utama ekstensi dirilis lebih dulu (D10).
 
@@ -228,3 +239,13 @@ Data baru di Postgres: `agent_devices`, `agent_tasks`, `agent_actions`, `spend_l
 - Aturan Manifest V3 dan kode jarak jauh: https://developer.chrome.com/docs/webstore/program-policies/mv3-requirements
 - Pembaruan kebijakan Chrome Web Store 2026: https://developer.chrome.com/blog/cws-policy-updates-2026
 - Biaya daftar Chrome Web Store: https://developer.chrome.com/docs/webstore/register
+- Commercial Terms Anthropic: https://www.anthropic.com/legal/commercial-terms
+- Retensi data API Anthropic: https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data
+- Model yang mendukung computer use Claude: https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool
+- Harga Gemini API: https://aistudio.google.com/docs/pricing
+- Ketentuan Gemini API: https://aistudio.google.com/docs/terms
+- Computer use di Gemini API: https://aistudio.google.com/docs/computer-use
+- Penandatanganan ulang MSIX oleh Microsoft Store: https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements
+- Reputasi SmartScreen: https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation
+- SSL.com IV Code Signing: https://www.ssl.com/products/software-integrity/code-signing/iv/
+- Certum code signing: https://www.certum.eu/en/code-signing-certificates/
