@@ -117,7 +117,6 @@ create table if not exists public.agent_tasks (
     head_hash text not null default '',
     stop_requested boolean not null default false,
     created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now(),
     primary key (owner, id)
 );
 
