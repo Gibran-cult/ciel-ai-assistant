@@ -565,7 +565,7 @@ def test_target_and_kind_are_safe_for_the_log(self):
 Alur `run_task`:
 
 1. Sebelum model dipanggil. `start_refusal(config, account.plan, store.cost_since(day_start(now)))`. Lalu `store.create_task`: `"busy"` berarti `busy`, `None` berarti `unavailable`. Lalu `store.rate_limit_hit(task_rate_limits(...), now.timestamp())`: gagal menghubungi database berarti `unavailable`, kunci penuh berarti `rate_limited`. Kuota dihitung setelah tugas dibuat supaya permintaan ganda yang ditolak `busy` tidak memakan kuota. Kalau penolakan terjadi setelah tugas dibuat, barisnya ditutup dengan status `failed` dan alasan itu. Semua penolakan ini mengembalikan `TaskResult("refused", alasan, 0, "")` dan tidak memanggil model.
-2. Rencana. `model.plan(instruction)`, lalu `parse_plan(output, account.limits.per_tx)`. Rencana tidak sah: `failed` dengan `bad_plan`. `client.show_plan(steps, scope_to_json(scope))`: `None` berarti `stopped` dengan `plan_rejected`. Nilai selain `"auto"` dibaca sebagai `"ask"`. Simpan `plan`, `scope`, `mode`, dan status `running`.
+2. Rencana. `model.plan(instruction)`, lalu `parse_plan(output, account.limits.per_tx)`. Rencana tidak sah: `failed` dengan `bad_plan`. `client.show_plan(steps, scope_to_json(scope))`: hanya jawaban persis `"ask"` atau `"auto"` yang berarti disetujui. Jawaban lain apa pun berarti `stopped` dengan `plan_rejected`. Simpan `plan`, `scope`, `mode`, dan status `running`.
 3. Satu putaran, diulang:
    1. `over_limit(...)` tidak `None`: akhiri `failed` dengan alasan itu.
    2. `model.act(view)`. `cost` ditambahkan. `view.instruction` selalu perintah pengguna. `view.observation` selalu hasil `envelope.wrap` dari pengamatan terakhir.
