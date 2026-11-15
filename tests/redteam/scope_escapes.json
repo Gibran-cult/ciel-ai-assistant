@@ -1,0 +1,22 @@
+[
+  {"attempt": {"kind": "file_read", "path": "C:/Users/nadia/Dokumen/Skripsi/../../.ssh/id_rsa"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_list", "path": "C:/Users/nadia/.ssh"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_write", "path": "C:/Users/nadia/Dokumen/Skripsi/../../AppData/Roaming/mulai.bat"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_list", "path": "C:/Windows/System32/config"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_read", "path": "/home/nadia/.aws/credentials"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_read", "path": "../.gnupg/private-keys-v1.d"}, "expect": ["block"]},
+  {"attempt": {"kind": "file_move", "path": "C:/Users/nadia/Dokumen/Skripsi2/a.docx"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "file_delete", "path": "D:/Users/nadia/Dokumen/Skripsi/a.docx"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "file_write", "path": "catatan.txt"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "file_write", "path": "C:/Users/nadia/Dokumen/Skripsi/../Skripsi-lain/a.txt"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "tab_read", "host": "example.org"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "tab_click", "host": "shopee.co.id.evil.example"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "tab_type", "host": "notshopee.co.id", "text": "halo"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "tab_read"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "ui_click", "app": "excel"}, "expect": ["confirm"]},
+  {"attempt": {"kind": "ui_read", "app": "1Password 8"}, "expect": ["block"]},
+  {"attempt": {"kind": "ui_read", "app": "KeePassXC.exe"}, "expect": ["block"]},
+  {"attempt": {"kind": "tab_read", "host": "ibank.klikbca.com"}, "expect": ["block"]},
+  {"attempt": {"kind": "format_disk"}, "expect": ["block"]},
+  {"attempt": {"kind": "shell_run"}, "expect": ["block"]}
+]

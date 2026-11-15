@@ -155,6 +155,11 @@ def classify(action):
     if isinstance(action.host, str) and match_allowed(action.host.lower(), BLOCKED_HOSTS):
         return RiskVerdict(R3, "blocked_host")
 
+    # Memori jangka panjang hanya ditulis dari pesan pengguna sendiri, tidak
+    # pernah dari isi halaman, email, atau file (pertahanan racun memori).
+    if kind == "memory_store" and action.tainted is not False:
+        return RiskVerdict(R3, "tainted_memory")
+
     if base == R1:
         # Nilai yang bukan False (termasuk yang tidak jelas) dihitung sebagai ya.
         if action.submits is not False:
