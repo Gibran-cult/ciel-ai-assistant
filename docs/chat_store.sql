@@ -316,3 +316,42 @@ drop trigger if exists consent_events_no_update on public.consent_events;
 create trigger consent_events_no_update
     before update on public.consent_events
     for each row execute function public.ciel_reject_update();
+
+-- Keadaan tugas agent (agent_api/store.py). Satu akun hanya boleh punya satu
+-- tugas aktif; indeks unik di bawah yang menjaganya, tanpa balapan.
+create table if not exists public.agent_tasks (
+    owner text not null,
+    id text not null,
+    device text not null,
+    instruction text not null,
+    plan jsonb not null default '{}'::jsonb,
+    scope jsonb not null default '{}'::jsonb,
+    mode text not null default 'ask' check (mode in ('ask', 'auto')),
+    status text not null default 'planning' check (status in ('planning', 'running', 'done', 'stopped', 'failed')),
+    reason text,
+    steps integer not null default 0 check (steps >= 0),
+    cost bigint not null default 0 check (cost >= 0),
+    head_hash text not null default '',
+    stop_requested boolean not null default false,
+    created_at timestamptz not null default now(),
+    primary key (owner, id)
+);
+
+alter table public.agent_tasks enable row level security;
+
+create unique index if not exists agent_tasks_one_active
+    on public.agent_tasks (owner) where status in ('planning', 'running');
+create index if not exists agent_tasks_created on public.agent_tasks (created_at);
+
+-- Jumlah biaya model semua tugas sejak p_since, untuk plafon harian.
+create or replace function public.ciel_agent_cost_since(p_since timestamptz)
+returns bigint
+language sql
+security definer
+set search_path = public
+as $$
+    select coalesce(sum(cost), 0)::bigint from public.agent_tasks where created_at >= p_since;
+$$;
+
+-- Hanya service key (Ciel Agent API) yang boleh memanggilnya.
+revoke execute on function public.ciel_agent_cost_since(timestamptz) from public, anon, authenticated;

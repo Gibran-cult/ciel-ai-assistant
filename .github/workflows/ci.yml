@@ -144,6 +144,15 @@ jobs:
             tests.test_guard_audit \
             tests.test_guard_decide \
             tests.test_guard_redteam \
+            tests.test_agent_store \
+            tests.test_agent_envelope \
+            tests.test_agent_model \
+            tests.test_agent_tools \
+            tests.test_agent_plan \
+            tests.test_agent_limits \
+            tests.test_agent_journal \
+            tests.test_agent_loop \
+            tests.test_agent_redteam \
             tests.test_ci_coverage
 
       # Node that comes with the runner (no extra setup): the Edge Function's

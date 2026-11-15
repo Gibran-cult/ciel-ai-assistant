@@ -10,7 +10,8 @@
 - [ ] App changes that touch rendering are checked in a browser or with Streamlit's `AppTest`.
 - [ ] Prompt or flow changes are tried on a separate test flow in Langflow first (import a copy without its `id`), never on the production flow.
 - [ ] A live quality run (`python tests/collect_quality.py`) shows no regression in response quality, and failed cases are explained.
-- [ ] The agent guard and red-team tests (`tests.test_guard_*`) pass, and every new case from an incident or finding is added to `tests/redteam/`.
+- [ ] The agent guard and red-team tests (`tests.test_guard_*`, `tests.test_agent_*`) pass, and every new case from an incident or finding is added to `tests/redteam/`.
+- [ ] Before the Ciel Agent API is deployed for the first time: the agent section at the end of `docs/chat_store.sql` has been run in Supabase, and `AGENT_ENABLED` stays unset until the owner turns the agent on.
 - [ ] `CHANGELOG.md` describes the change and its measurements.
 - [ ] Changes to Privasi or Ketentuan bump `terms.LEGAL_VERSION` and the page dates; open items in `docs/LEGAL.md` are reviewed.
 

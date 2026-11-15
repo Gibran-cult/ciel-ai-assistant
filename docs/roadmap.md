@@ -73,6 +73,16 @@ Kriteria selesai: semua uji lulus di CI, nol kasus red-team lolos, `guard/` tida
 
 Tujuan: server bisa menjalankan loop agent dengan klien tiruan, dan pengguna bisa melihat log serta mengatur izin di web. Belum ada kontrol browser atau laptop.
 
+Fase ini dikerjakan dalam tiga rencana, supaya bagian yang tidak butuh server selesai lebih dulu:
+
+| Rencana | Task | Status |
+|---|---|---|
+| 2A, inti loop sebagai pustaka `agent_api/` ([rencana](plans/2026-11-15-agent-loop-core.md)) | 2.3 (tabel `agent_tasks`), 2.4, 2.10 sampai 2.18 | Selesai 15 November 2026. Tanpa dependensi baru dan tanpa VPS |
+| 2B, layanan, perangkat, tiket, WebSocket, adaptor model, kontainer | 2.1, 2.2, 2.3 (tabel `agent_devices`), 2.5 sampai 2.9, 2.23, 2.24 | Belum ditulis. Menunggu VPS dan tiga keputusan pemilik yang tercatat di akhir rencana 2A |
+| 2C, halaman log, perangkat dan izin di Pengaturan, Hapus akun, `consent_events` | 2.19 sampai 2.22 | Belum ditulis. Perubahan UI, menunggu cek pemilik di browser |
+
+Catatan dari 2A untuk 2B: tugas yang gagal ditutup barisnya tetap berstatus `running` dan mengunci akun dari tugas baru. Layanan butuh pembersih yang menutup tugas berumur lebih dari 15 menit.
+
 | No | Task | Berkas | Cara mengecek |
 |---|---|---|---|
 | 2.1 | Kerangka layanan dengan endpoint `/healthz` | `agent_api/main.py`, `tests/test_agent_api_health.py` | Uji memanggil `/healthz` dan menerima 200 |
