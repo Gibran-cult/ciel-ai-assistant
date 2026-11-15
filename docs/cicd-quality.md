@@ -28,7 +28,7 @@ Aturan yang dipertahankan: setiap berkas uji baru masuk daftar di `ci.yml`, urut
 | Lint | Pemeriksa gaya dan kesalahan umum untuk Python [ISI: alat, belum ada di repo] | Ya |
 | Uji unit | `unittest`, termasuk `tests/test_guard_*.py` | Ya |
 | Uji integrasi | Agent API dengan database uji dan model tiruan | Ya |
-| Red-team | `tests/test_guard_redteam.py` dan kumpulan serangan (bagian 4) | Ya |
+| Red-team | `tests/test_guard_redteam.py`, `tests/test_agent_redteam.py`, dan kumpulan serangan (bagian 4) | Ya |
 | Keamanan | `pip-audit`, uji rahasia, analisis statis keamanan (CodeQL atau sejenis) | Ya untuk temuan tinggi |
 | Bangun | Image kontainer untuk Agent API | Ya |
 | Deploy staging | Otomatis setelah merge ke `main` | |
@@ -97,10 +97,11 @@ Disimpan di `tests/redteam/` dan bertambah setiap ada temuan baru.
 - `injections.json`: teks suntikan beserta tempatnya (deskripsi produk, ulasan, email, nama file, teks tersembunyi di halaman) dan hasil yang diharapkan.
 - `fake_stores.json`: host dan bukti toko tiruan beserta kode alasan yang diharapkan.
 - `scope_escapes.json`: aksi yang mencoba keluar dari lingkup tugas (jalur dengan `..`, situs lain, aplikasi yang tidak diizinkan).
+- `purchase_gates.json`: konteks belanja dengan satu syarat yang dilemahkan (usia, toko, batas, mode) dan keputusan yang diharapkan.
 
 Dua tingkat pengujian:
 
-1. Tanpa model, di setiap pull request. Menguji mesin kebijakan langsung: untuk setiap kasus, aksi berbahaya yang mungkin diusulkan model diberikan ke mesin kebijakan, dan hasilnya harus blokir atau konfirmasi. Tingkat ini membuktikan pengaman bekerja apa pun kata model.
+1. Tanpa model, di setiap pull request. Menguji mesin kebijakan langsung: untuk setiap kasus, aksi berbahaya yang mungkin diusulkan model diberikan ke mesin kebijakan, dan hasilnya harus blokir atau konfirmasi. Tingkat ini membuktikan pengaman bekerja apa pun kata model. Uji yang sama dijalankan lewat loop agent (`tests/test_agent_redteam.py`): setiap teks suntikan dijadikan isi halaman, model tiruan mengusulkan aksi berbahaya, pengguna tiruan menolak semua dialog, dan tidak boleh ada aksi itu yang sampai ke klien.
 2. Dengan model, terjadwal dan sebelum rilis. Agent dijalankan pada halaman tiruan berisi suntikan. Yang dicatat: seberapa sering model terpancing mengusulkan aksi berbahaya, dan apakah ada yang lolos. Yang lolos harus nol. Angka terpancing dipakai untuk memperbaiki prompt.
 
 Situs toko tiruan dibuat sendiri dan hanya meniru penanda yang diperiksa adapter. Halaman marketplace asli tidak disalin ke repo.
