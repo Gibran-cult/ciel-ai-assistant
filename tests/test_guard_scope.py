@@ -59,7 +59,7 @@ class InScopeTest(unittest.TestCase):
         for action in (
             Action(kind="tab_read", host="mall.shopee.co.id"),
             Action(kind="file_list", path=SKRIPSI + "/bab1"),
-            Action(kind="file_move", path=SKRIPSI + "/rapi/bab1.docx"),
+            Action(kind="file_move", path=SKRIPSI + "/rapi/bab1.docx", dest=SKRIPSI + "/rapi/bab1/bab1.docx"),
             Action(kind="ui_click", app="WINWORD"),
             Action(kind="ask_user"), Action(kind="finish"),
         ):
@@ -142,6 +142,71 @@ class FinalReviewTest(unittest.TestCase):
         for path in ("C:/Users/nadia/Dokumen/a.txt", "C:/Users/nadia/Dokumen/Bab 1/draf v1.0.docx", "C:/Users/nadia/~$draf.docx"):
             with self.subTest(path=path):
                 self.assertTrue(in_scope(Action(kind="file_write", path=path), HOME).inside)
+
+
+MOVES = TaskScope(
+    hosts=frozenset({"shopee.co.id"}), folders=(SKRIPSI,), writable_folders=(SKRIPSI + "/rapi",),
+    kinds=frozenset({"file_move", "download", "file_read", "tab_click"}),
+)
+STARTUP = "C:/Users/nadia/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/mulai.bat"
+ANYWHERE = TaskScope(
+    writable_folders=("C:/", "/"), kinds=frozenset({"file_read", "file_write"}),
+)
+
+
+class DeferredMinorsTest(unittest.TestCase):
+    """Temuan minor tinjauan akhir: tujuan pindah file, daftar folder terlarang, efek, tipe lingkup."""
+
+    def test_move_needs_a_destination_inside_writable_folders(self):
+        source = SKRIPSI + "/rapi/a.docx"
+        good = Action(kind="file_move", path=source, dest=SKRIPSI + "/rapi/bab1/a.docx")
+        self.assertEqual(in_scope(good, MOVES), ScopeVerdict(True, None))
+
+        for dest in (None, 7, SKRIPSI + "/a.docx", "C:/Users/nadia/Unduhan/a.docx", "a.docx"):
+            with self.subTest(dest=dest):
+                self.assertEqual(in_scope(Action(kind="file_move", path=source, dest=dest), MOVES), ScopeVerdict(False, "path"))
+
+        for dest in (STARTUP, SKRIPSI + "/rapi/.ssh./a.docx"):
+            with self.subTest(dest=dest):
+                moved = Action(kind="file_move", path=source, dest=dest)
+                self.assertEqual(in_scope(moved, MOVES), ScopeVerdict(False, "path_denied"))
+
+    def test_download_destination_is_checked_when_given(self):
+        self.assertTrue(in_scope(Action(kind="download"), MOVES).inside)
+        self.assertTrue(in_scope(Action(kind="download", dest=SKRIPSI + "/rapi/berkas.pdf"), MOVES).inside)
+        outside = Action(kind="download", dest="C:/Users/nadia/Unduhan/berkas.pdf")
+        self.assertEqual(in_scope(outside, MOVES), ScopeVerdict(False, "path"))
+        self.assertEqual(in_scope(Action(kind="download", dest=STARTUP), MOVES), ScopeVerdict(False, "path_denied"))
+
+    def test_ordinary_folder_names_are_not_denied(self):
+        for path in ("C:/Users/nadia/Dokumen/Skripsi/Library/zotero.pdf", "C:/Users/nadia/Dokumen/Skripsi/windows/layar.png",
+                     "/home/nadia/skripsi/etc/catatan.md", "/home/nadia/skripsi/library/buku.pdf",
+                     "/Users/nadia/Documents/Library/buku.pdf"):
+            with self.subTest(path=path):
+                self.assertTrue(in_scope(Action(kind="file_write", path=path), ANYWHERE).inside)
+
+    def test_more_credential_and_system_folders_are_denied(self):
+        for path in ("/home/nadia/.kube/config", "/home/nadia/.docker/config.json", "/home/nadia/.config/gh/hosts.yml",
+                     "/home/nadia/.netrc", "/home/nadia/.mozilla/firefox/profil", "/home/nadia/.git-credentials",
+                     "C:/ProgramData/aplikasi/x", "C:/Users/nadia/NTUSER.DAT", "/etc/passwd",
+                     "/Users/nadia/Library/Keychains/login.keychain-db", "/Library/Preferences/x",
+                     "/Users/nadia/Library/Application Support/Google/Chrome/Default/Login Data",
+                     "C:/Windows/win.ini", "C:/Program Files/aplikasi/x", "C:/Users/nadia/AppData/Local/x"):
+            with self.subTest(path=path):
+                self.assertEqual(in_scope(Action(kind="file_read", path=path), ANYWHERE), ScopeVerdict(False, "path_denied"))
+
+    def test_effect_must_be_in_the_plan(self):
+        click = Action(kind="tab_click", host="shopee.co.id", effect="cart_add")
+        self.assertEqual(in_scope(click, MOVES), ScopeVerdict(False, "kind"))
+        planned = TaskScope(hosts=frozenset({"shopee.co.id"}), kinds=frozenset({"tab_click", "cart_add"}))
+        self.assertTrue(in_scope(click, planned).inside)
+        self.assertEqual(in_scope(Action(kind="tab_click", host="shopee.co.id", effect=7), planned), ScopeVerdict(False, "kind"))
+
+    def test_scope_rejects_wrong_types(self):
+        for kwargs in ({"kinds": "tab_read"}, {"hosts": ["shopee.co.id"]}, {"apps": frozenset({7})}, {"folders": "C:/x"},
+                       {"writable_folders": ["C:/x"]}, {"folders": (7,)}, {"spend_cap": "500000"}, {"spend_cap": True}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(TypeError):
+                TaskScope(**kwargs)
 
 
 if __name__ == "__main__":

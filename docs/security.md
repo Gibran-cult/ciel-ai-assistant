@@ -102,7 +102,7 @@ Dicatat untuk setiap aksi: waktu, perangkat, tugas, jenis aksi, target (nama apl
 
 Tidak dicatat: teks yang diketik ke kolom sensitif, isi file, tangkapan layar, dan isi halaman. Teks lain yang diketik disimpan terpotong dan disaring dari pola rahasia.
 
-Log hanya bisa ditambah. Setiap catatan memuat hash catatan sebelumnya, jadi catatan yang diubah atau dihapus di tengah akan ketahuan. Pengguna bisa melihat, mengunduh, dan menghapus log miliknya (lihat [privacy-consent.md](privacy-consent.md)).
+Log hanya bisa ditambah. Setiap catatan memuat hash catatan sebelumnya, jadi catatan yang diubah atau dihapus di tengah akan ketahuan. Hash itu dihitung dengan kunci rahasia server, supaya orang yang berhasil menulis ke tabel log tetap tidak bisa menyusun ulang rantainya. Hash catatan terakhir setiap tugas disimpan terpisah, jadi catatan yang dihapus dari ujung juga ketahuan. Di database, baris log dan riwayat persetujuan ditolak kalau diubah. Pengguna bisa melihat, mengunduh, dan menghapus log miliknya (lihat [privacy-consent.md](privacy-consent.md)).
 
 ### Konfirmasi aksi berisiko
 

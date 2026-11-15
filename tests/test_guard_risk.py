@@ -2,7 +2,7 @@
 
 import unittest
 
-from guard.risk import R0, R1, R2, R3, Action, RiskVerdict, classify, find_secrets, looks_like_secret
+from guard.risk import R0, R1, R2, R3, Action, RiskVerdict, action_from, classify, find_secrets, looks_like_secret
 
 
 class BaseLevelTest(unittest.TestCase):
@@ -153,6 +153,39 @@ class FinalReviewTest(unittest.TestCase):
         from guard.domains import normalize_host
         self.assertTrue(all(normalize_host(host) == host for host in risk.BLOCKED_HOSTS))
         self.assertTrue(all(app == app.lower() and app.strip() for app in risk.BLOCKED_APPS))
+
+
+class DeferredMinorsTest(unittest.TestCase):
+    """Temuan minor tinjauan akhir: efek aksi dari klien dan aksi dari keluaran model."""
+
+    def test_effect_raises_the_level(self):
+        checkout = Action(kind="tab_click", host="shopee.co.id", effect="checkout_handoff")
+        self.assertEqual(classify(checkout), RiskVerdict(R2, "checkout_handoff"))
+        self.assertEqual(classify(Action(kind="tab_click", effect="pay")), RiskVerdict(R3, "pay"))
+
+    def test_effect_never_lowers_the_level(self):
+        self.assertEqual(classify(Action(kind="tab_click", effect="cart_add")), RiskVerdict(R1, "tab_click"))
+        self.assertEqual(classify(Action(kind="tab_click", effect="tab_read")), RiskVerdict(R1, "tab_click"))
+        self.assertEqual(classify(Action(kind="file_delete", effect="tab_read")), RiskVerdict(R2, "file_delete"))
+
+    def test_unknown_effect_is_blocked(self):
+        for effect in ("beli_sekarang", "", 7, ["cart_add"]):
+            with self.subTest(effect=effect):
+                self.assertEqual(classify(Action(kind="tab_click", effect=effect)), RiskVerdict(R3, "unknown_kind"))
+
+    def test_memory_written_through_an_effect_is_checked_too(self):
+        poisoned = Action(kind="tab_click", effect="memory_store", tainted=True)
+        self.assertEqual(classify(poisoned), RiskVerdict(R3, "tainted_memory"))
+
+    def test_action_from_model_output(self):
+        built = action_from({"kind": "tab_click", "host": "shopee.co.id", "effect": "cart_add"})
+        self.assertEqual(built, Action(kind="tab_click", host="shopee.co.id", effect="cart_add"))
+
+    def test_action_from_broken_output_is_an_unknown_action(self):
+        for broken in ({"kind": "tab_click", "selector": "#beli"}, {"host": "shopee.co.id"}, None, "tab_click",
+                       ["tab_click"], {7: "x", "kind": "tab_read"}):
+            with self.subTest(broken=broken):
+                self.assertEqual(classify(action_from(broken)), RiskVerdict(R3, "unknown_kind"))
 
 
 if __name__ == "__main__":

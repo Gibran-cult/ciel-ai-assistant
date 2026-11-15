@@ -30,5 +30,20 @@
   {"url": "https://evil.com\\.shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "expect": "not_listed"},
   {"url": "https://evil.com%2f.shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "expect": "not_listed"},
   {"url": "https://evil.com .shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "expect": "not_listed"},
-  {"url": "https://.shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "expect": "not_listed"}
+  {"url": "https://.shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "expect": "not_listed"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "evidence": {"adapter_ok": false}, "expect": "badge_unverifiable"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "evidence": {"adapter_ok": 1}, "expect": "badge_unverifiable"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "evidence": {"store_page_name": "Toko Lain"}, "expect": "badge_unverifiable"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "evidence": {"store_name": ""}, "expect": "badge_unverifiable"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "evidence": {"store_page_badge": ""}, "expect": "no_official_badge"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "evidence": {"store_page_badge": null}, "expect": "no_official_badge"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "evidence": {"store_page_badge": "Star Seller"}, "expect": "no_official_badge"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "evidence": {"store_page_url": ""}, "expect": "badge_unverifiable"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "evidence": {"store_page_url": "http://shopee.co.id/toko"}, "expect": "badge_unverifiable"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "evidence": {"store_page_url": "https://toko-lain.example/toko"}, "expect": "badge_unverifiable"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "evidence": {"store_page_url": "https://tokopedia.com/toko"}, "expect": "badge_unverifiable"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "evidence": {"store_page_url": "https://shopee.co.id.toko-resmi.example/toko"}, "expect": "badge_unverifiable"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "evidence": {"store_page_url": "https://evil.com\\.shopee.co.id/toko"}, "expect": "badge_unverifiable"},
+  {"url": "https://shopee.co.id/toko", "nav_origin": "typed", "badge_text": "Shopee Mall", "now": "2027-06-01T00:00:00+00:00", "expect": "registry_stale"},
+  {"url": "https://pasarcontoh.co.id/toko", "nav_origin": "typed", "badge_text": "Toko Resmi", "evidence": {"store_page_url": "https://pasarcontoh.co.id/toko", "store_page_badge": "Toko Resmi"}, "expect": "automation_forbidden"}
 ]

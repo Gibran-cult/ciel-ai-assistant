@@ -181,6 +181,43 @@ class DecideTest(unittest.TestCase):
         typing = Action(kind="tab_type", host="shopee.co.id", text="Ab3d" * 8)
         self.assertEqual(decide(typing, ctx(mode="auto")), Decision("confirm", "R2", "possible_secret"))
 
+    def test_purchase_gates_follow_the_effect_of_a_click(self):
+        # Temuan minor: klik biasa di tombol "Tambah ke keranjang" dulu melewati gerbang belanja.
+        add = Action(kind="tab_click", host="shopee.co.id", effect="cart_add")
+        self.assertEqual(decide(add, ctx()), Decision("allow", "R1", "tab_click"))
+        self.assertEqual(decide(add, ctx(store=None)), Decision("block", "R1", "not_listed"))
+        self.assertEqual(decide(add, ctx(adult_verified=False)), Decision("block", "R1", "underage"))
+        self.assertEqual(decide(add, ctx(limits=SpendLimits())), Decision("block", "R1", "purchases_off"))
+        checkout = Action(kind="tab_click", host="shopee.co.id", effect="checkout_handoff")
+        self.assertEqual(decide(checkout, ctx()), Decision("confirm", "R2", "checkout_handoff"))
+        self.assertEqual(decide(checkout, ctx(purchase_total=600_000)), Decision("block", "R2", "limit_exceeded"))
+        pay = Action(kind="tab_click", host="shopee.co.id", effect="pay")
+        self.assertEqual(decide(pay, ctx()), Decision("handover", "R3", "pay"))
+
+    def test_cancel_through_a_click_still_works_with_purchases_off(self):
+        cancel = Action(kind="tab_click", host="shopee.co.id", effect="order_cancel")
+        self.assertEqual(decide(cancel, ctx(limits=SpendLimits())), Decision("confirm", "R2", "order_cancel"))
+
+    def test_cancel_does_not_excuse_another_purchase_action(self):
+        # "Batal" sebagai efek tidak boleh dipakai menumpang aksi belanja lain.
+        for action in (
+            Action(kind="cart_add", host="shopee.co.id", effect="order_cancel"),
+            Action(kind="order_cancel", host="shopee.co.id", effect="checkout_prepare"),
+        ):
+            with self.subTest(action=action):
+                decision = decide(action, ctx(limits=SpendLimits()))
+                self.assertEqual((decision.outcome, decision.reason), ("block", "purchases_off"))
+
+    def test_move_destination_is_part_of_the_decision(self):
+        source = SKRIPSI + "/a.docx"
+        inside = Action(kind="file_move", path=source, dest=SKRIPSI + "/bab1/a.docx")
+        self.assertEqual(decide(inside, ctx()), Decision("allow", "R1", "file_move"))
+        startup = "C:/Users/nadia/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/a.bat"
+        self.assertEqual(decide(Action(kind="file_move", path=source, dest=startup), ctx()), Decision("block", "R1", "path_denied"))
+        self.assertEqual(decide(Action(kind="file_move", path=source), ctx()), Decision("confirm", "R1", "scope_path"))
+        away = Action(kind="file_move", path=source, dest="C:/Users/nadia/Unduhan/a.docx")
+        self.assertEqual(decide(away, ctx()), Decision("confirm", "R1", "scope_path"))
+
     def test_broken_action_never_raises(self):
         for action in (Action(kind=None), Action(kind="tab_read", host=7), Action(kind="file_move", path=object())):
             with self.subTest(action=action):

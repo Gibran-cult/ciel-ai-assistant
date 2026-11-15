@@ -1,6 +1,7 @@
 """guard/domains.py: pemeriksa alamat, pencocokan persis, dan deteksi domain mirip."""
 
 import unittest
+from unittest import mock
 
 from guard.domains import HostCheck, check_url, lookalike_of, match_allowed, normalize_host
 
@@ -97,6 +98,13 @@ class StrictHostTest(unittest.TestCase):
         ):
             with self.subTest(raw=raw):
                 self.assertIsNone(normalize_host(raw))
+
+
+class OversizedHostTest(unittest.TestCase):
+    def test_oversized_host_is_refused_without_comparing(self):
+        # Temuan minor: perbandingan huruf demi huruf pada label raksasa makan detik.
+        with mock.patch("guard.domains.edit_distance", side_effect=AssertionError("label raksasa dibandingkan")):
+            self.assertIsNone(lookalike_of("a" * 300 + ".com", ALLOWED))
 
 
 if __name__ == "__main__":

@@ -25,6 +25,25 @@ class TaskScope:
     kinds: frozenset = frozenset()     # jenis aksi yang ada di rencana
     spend_cap: int = 0                 # rupiah; 0 berarti tugas ini tidak boleh belanja
 
+    def __post_init__(self):
+        # Lingkup dibuat kode server. Tipe yang salah adalah bug di sana, dan
+        # harus ketahuan saat lingkup dibuat: kinds="tab_read" (teks, bukan
+        # frozenset) akan diam-diam cocok dengan potongan teks apa pun.
+        for name in ("hosts", "apps", "kinds"):
+            value = getattr(self, name)
+
+            if not isinstance(value, frozenset) or not all(isinstance(item, str) for item in value):
+                raise TypeError(f"{name} harus frozenset berisi teks")
+
+        for name in ("folders", "writable_folders"):
+            value = getattr(self, name)
+
+            if not isinstance(value, tuple) or not all(isinstance(item, str) for item in value):
+                raise TypeError(f"{name} harus tuple berisi teks")
+
+        if type(self.spend_cap) is not int:
+            raise TypeError("spend_cap harus int rupiah")
+
 
 @dataclass(frozen=True)
 class ScopeVerdict:
@@ -42,9 +61,15 @@ WRITE_KINDS = frozenset({"file_write", "file_move", "folder_create", "file_delet
 
 # Bagian jalur yang tidak pernah boleh disentuh, walau ada di dalam folder
 # yang diizinkan: kunci, kredensial, dan folder sistem.
-DENIED_PARTS = frozenset({
-    ".ssh", ".gnupg", ".aws", "appdata", "windows", "system32",
-    "program files", "program files (x86)", "library", "keychains",
+DENIED_ANYWHERE = frozenset({
+    ".ssh", ".gnupg", ".aws", ".kube", ".docker", ".config", ".mozilla", ".netrc",
+    ".git-credentials", "appdata", "system32", "keychains", "ntuser.dat",
+})
+
+# Nama yang hanya terlarang di pangkal drive atau pangkal sistem berkas.
+# Folder "Library" atau "windows" di dalam folder tugas pengguna itu biasa.
+DENIED_AT_ROOT = frozenset({
+    "windows", "program files", "program files (x86)", "programdata", "etc", "library",
 })
 
 WINDOWS_STYLE = re.compile(r"^[A-Za-z]:|\\")
@@ -100,19 +125,27 @@ def denied(path):
     if result is None:
         return False
 
+    style = result[0]
     parts = [part for part in re.split(r"[\\/]", result[1].casefold()) if part]
 
-    for index, part in enumerate(parts):
-        if index == 0 and DRIVE.fullmatch(part):
-            continue
+    if parts and DRIVE.fullmatch(parts[0]):
+        parts = parts[1:]
 
+    for index, part in enumerate(parts):
         # Windows membuka folder yang sama lewat beberapa ejaan: titik atau
         # spasi di akhir (".ssh."), nama pendek ("SSH~1"), dan alur data
         # (".ssh::$INDEX_ALLOCATION"). Ejaan seperti itu selalu ditolak,
         # karena teks jalurnya tidak lagi menunjukkan folder yang sebenarnya.
         cleaned = part.rstrip(". ")
 
-        if cleaned != part or ":" in part or SHORT_NAME.search(part) or cleaned in DENIED_PARTS:
+        if cleaned != part or ":" in part or SHORT_NAME.search(part) or cleaned in DENIED_ANYWHERE:
+            return True
+
+        if index == 0 and cleaned in DENIED_AT_ROOT:
+            return True
+
+        # ~/Library di macOS: kunci, profil browser, dan data aplikasi.
+        if style == "posix" and index == 2 and parts[0] == "users" and cleaned == "library":
             return True
 
     return False
@@ -125,6 +158,13 @@ def in_scope(action, scope):
         return INSIDE
 
     if not isinstance(kind, str) or kind not in scope.kinds:
+        return ScopeVerdict(False, "kind")
+
+    # Efek aksi (misalnya klik yang menambah barang ke keranjang) juga harus
+    # ada di rencana yang disetujui pengguna.
+    effect = action.effect
+
+    if effect is not None and (not isinstance(effect, str) or effect not in scope.kinds):
         return ScopeVerdict(False, "kind")
 
     if kind.startswith(HOST_PREFIXES):
@@ -148,6 +188,18 @@ def in_scope(action, scope):
         folders = scope.writable_folders if kind in WRITE_KINDS else scope.folders + scope.writable_folders
 
         if not any(contains_path(folder, path) for folder in folders):
+            return ScopeVerdict(False, "path")
+
+    # Jalur tujuan diperiksa seperti jalur tulis. Pindah file wajib punya
+    # tujuan: tanpa itu file bisa dipindah keluar dari folder tugas, atau
+    # masuk ke folder yang dijalankan sistem saat laptop menyala.
+    dest = action.dest
+
+    if dest is not None or kind == "file_move":
+        if denied(dest):
+            return ScopeVerdict(False, "path_denied")
+
+        if not any(contains_path(folder, dest) for folder in scope.writable_folders):
             return ScopeVerdict(False, "path")
 
     return INSIDE

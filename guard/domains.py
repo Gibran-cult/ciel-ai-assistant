@@ -161,7 +161,9 @@ def lookalike_of(host, allowed):
     supaya sinyal terkuat menang.
     """
 
-    if not isinstance(host, str):
+    # Host yang lebih panjang dari batas nama host tidak dibandingkan huruf
+    # demi huruf: itu bukan nama host, dan perbandingannya bisa makan detik.
+    if not isinstance(host, str) or len(host) > MAX_HOST:
         return None
 
     domains = sorted(allowed)

@@ -234,12 +234,12 @@ revoke execute on function public.ciel_rate_limit_hit(jsonb, double precision) f
 create table if not exists public.agent_actions (
     owner text not null,
     task text not null,
-    seq integer not null,
+    seq integer not null check (seq >= 1),
     device text not null,
     kind text not null,
     target text not null,
-    level text not null,
-    decision text not null,
+    level text not null check (level in ('R0', 'R1', 'R2', 'R3')),
+    decision text not null check (decision in ('allow', 'confirm', 'block', 'handover')),
     reason text,
     approved_by text,
     result text,
@@ -257,8 +257,8 @@ alter table public.agent_actions enable row level security;
 -- Batas belanja per akun. 0 berarti fitur pembelian mati.
 create table if not exists public.spend_limits (
     owner text primary key,
-    per_tx bigint not null default 0,
-    per_month bigint not null default 0,
+    per_tx bigint not null default 0 check (per_tx >= 0),
+    per_month bigint not null default 0 check (per_month >= 0),
     updated_at timestamptz not null default now()
 );
 
@@ -270,7 +270,7 @@ create table if not exists public.purchase_confirmations (
     nonce text primary key,
     owner text not null,
     digest text not null,
-    total bigint not null,
+    total bigint not null check (total > 0),
     month text not null,
     expires_at timestamptz not null,
     used_at timestamptz,
@@ -278,6 +278,10 @@ create table if not exists public.purchase_confirmations (
 );
 
 alter table public.purchase_confirmations enable row level security;
+
+-- Dipakai untuk menjumlah belanja satu akun dalam satu bulan.
+create index if not exists purchase_confirmations_owner_month
+    on public.purchase_confirmations (owner, month);
 
 -- Riwayat persetujuan dan penarikannya (docs/privacy-consent.md). Hanya ditambah.
 create table if not exists public.consent_events (
@@ -291,3 +295,24 @@ create table if not exists public.consent_events (
 );
 
 alter table public.consent_events enable row level security;
+
+-- Log aksi dan riwayat persetujuan tidak boleh diubah setelah ditulis.
+-- Menghapus tetap bisa, untuk Hapus akun dan masa simpan.
+create or replace function public.ciel_reject_update()
+returns trigger
+language plpgsql
+as $$
+begin
+    raise exception 'baris di % tidak boleh diubah', tg_table_name;
+end;
+$$;
+
+drop trigger if exists agent_actions_no_update on public.agent_actions;
+create trigger agent_actions_no_update
+    before update on public.agent_actions
+    for each row execute function public.ciel_reject_update();
+
+drop trigger if exists consent_events_no_update on public.consent_events;
+create trigger consent_events_no_update
+    before update on public.consent_events
+    for each row execute function public.ciel_reject_update();

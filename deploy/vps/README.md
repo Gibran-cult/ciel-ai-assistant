@@ -210,13 +210,14 @@ a fresh pull of `:latest` can be a newer build.
 
 ## 9. Open the Langflow UI
 
-Langflow is not public. From your own machine:
+Langflow is not public. From your own machine, open a tunnel on local port 17860 (until the
+cutover the laptop's own Langflow is still using 7860):
 
 ```bash
-ssh -L 7860:127.0.0.1:7860 root@<vps-ip>
+ssh -L 17860:127.0.0.1:7860 root@<vps-ip>
 ```
 
-then open http://127.0.0.1:7860 and sign in with `LANGFLOW_SUPERUSER` and
+then open http://127.0.0.1:17860 and sign in with `LANGFLOW_SUPERUSER` and
 `LANGFLOW_SUPERUSER_PASSWORD`.
 
 ## 10. Migrate the flows and create the API key
@@ -224,8 +225,8 @@ then open http://127.0.0.1:7860 and sign in with `LANGFLOW_SUPERUSER` and
 1. In the VPS Langflow UI (step 9): create an API key and put it in `.env` as
    `LANGFLOW_API_KEY`. Create the global variables `DEEPSEEK_API_KEY` and `EXA_API_KEY`
    and the `GEMINI_API_KEY` credential (the settings are not in Git).
-2. On the **laptop**, with the laptop's Langflow running, open a tunnel to the VPS
-   Langflow on another local port (7860 is the laptop's own Langflow):
+2. On the **laptop**, with the laptop's Langflow running, keep the tunnel from step 9 open,
+   or open it again (7860 is the laptop's own Langflow):
 
    ```bash
    ssh -L 17860:127.0.0.1:7860 root@<vps-ip>
@@ -235,7 +236,8 @@ then open http://127.0.0.1:7860 and sign in with `LANGFLOW_SUPERUSER` and
    Langflow) and `TARGET_LANGFLOW_API_KEY` (the VPS key from 1) in the environment or the
    laptop's `.env`, then copy the four flows and the sub-flows they call. The `--flow-id`
    values are the laptop's `FLOW_ID`, `RESEARCH_FLOW_ID`, `WRITER_FLOW_ID` and
-   `MEMORY_ADMIN_FLOW_ID`:
+   `MEMORY_ADMIN_FLOW_ID`. On Windows run this in Git Bash: PowerShell rejects `mkdir -p`
+   and the `\` line continuation:
 
    ```bash
    mkdir -p ~/.ciel_ai/flow_backups

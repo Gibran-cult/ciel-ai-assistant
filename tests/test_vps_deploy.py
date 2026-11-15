@@ -210,7 +210,7 @@ class ReadmeTest(unittest.TestCase):
             "nomic-embed-text-v2-moe:latest",
             "qwen2.5vl:3b",
             "ollama list",
-            "ssh -L 7860:127.0.0.1:7860",
+            "ssh -L 17860:127.0.0.1:7860",
             'curl -u "$NGROK_USER:$NGROK_PASSWORD" https://api.ciel-ai.web.id/health_check',
             "Backups and scheduled jobs",
             "Rollback",
@@ -241,6 +241,7 @@ class RunbookTest(unittest.TestCase):
     def test_nginx_follows_langflows_address_and_the_vps_check_proves_it(self):
         self.assertNotIn("keeps the address", README)
         self.assertNotIn("resolves `langflow` once", README)
+        self.assertNotIn("resolves once at start", COMPOSE)
         check = readme_section("### When Langflow restarts")
         self.assertIn("`resolve`", check)
         inspect = "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}'"
@@ -256,6 +257,18 @@ class RunbookTest(unittest.TestCase):
         self.assertIn("OLLAMA_EMBED_MODEL_ID", step)
         self.assertIn('$1 == "nomic-embed-text-v2-moe:latest"', step)
         self.assertIn("after any restore", step)
+
+    def test_the_ui_tunnel_does_not_take_the_laptops_langflow_port(self):
+        # The laptop runs its own Langflow on 7860 until the cutover.
+        step = readme_section("## 9.")
+        self.assertIn("ssh -L 17860:127.0.0.1:7860", step)
+        self.assertIn("http://127.0.0.1:17860", step)
+        self.assertNotIn("ssh -L 7860:", README)
+        self.assertNotIn("open http://127.0.0.1:7860", README)
+
+    def test_the_laptop_commands_say_which_shell_runs_them(self):
+        # `mkdir -p` and the `\` line continuation fail in PowerShell.
+        self.assertIn("Git Bash", readme_section("## 10."))
 
     def test_flows_are_migrated_with_the_tool_and_the_gateway_re_rendered(self):
         step = readme_section("## 10.")
