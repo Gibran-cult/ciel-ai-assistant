@@ -38,9 +38,9 @@ Tujuan: semua hal yang menahan pekerjaan lain selesai atau punya jawaban.
 | 0.6 | Tugas pemilik: urus NIB lewat OSS | `docs/LEGAL.md` bagian 2 | Nomor dan tanggal tercatat |
 | 0.7 | Tugas pemilik: daftar PSE Lingkup Privat | `docs/LEGAL.md` bagian 2 | Nomor tanda daftar tercatat |
 | 0.8 | Jalankan rencana VPS yang sudah ada | `docs/superpowers/plans/2026-10-27-ciel-foundation-vps.md` | Kriteria selesai di rencana itu |
-| 0.9 | Baca lengkap syarat layanan Tokopedia (versi terbaru), Lazada, Blibli, dan TikTok Shop soal alat otomatis | `docs/business-ethics.md` bagian 7, `docs/security.md` bagian 4 | Tidak ada lagi tanda [PERLU DICEK] di tabel marketplace |
-| 0.10 | Cek tiga hal model: syarat data Anthropic, dukungan tool di model murah, harga resmi Gemini | `docs/agent-architecture.md` bagian 3 | Tanda [PERLU DICEK] di tabel model hilang |
-| 0.11 | Cek jalur code signing Windows untuk individu di Indonesia | `docs/cicd-quality.md` bagian 5 | Ada satu jalur dengan harga dan syarat tertulis |
+| 0.9 | Sebagian selesai 15 November 2026: Lazada terbaca penuh, label resmi Tokopedia, Lazada, dan Blibli tercatat. Sisa tugas pemilik: baca manual syarat Blibli, Tokopedia versi terbaru, dan syarat pembeli TikTok Shop, karena halamannya menolak pembaca otomatis | `docs/business-ethics.md` bagian 7, `docs/security.md` bagian 4 | Status Lazada, Blibli, dan TikTok Shop diputuskan bersama ahli hukum, lalu dicatat di `guard/official_stores.json` |
+| 0.10 | Selesai 15 November 2026: syarat data Anthropic, dukungan computer use di Claude Haiku 5.5, dan harga resmi Gemini sudah dicek. Penyedia dikunci pemilik: Claude Haiku 5.5, cadangan Gemini 3.5 Flash-Lite | `docs/agent-architecture.md` bagian 3 | Tercatat di `docs/decisions.md` |
+| 0.11 | Selesai 15 November 2026: dua jalur tercatat dengan harga, yaitu MSIX lewat Microsoft Store dan sertifikat individu | `docs/agent-architecture.md` bagian 5, `docs/cicd-quality.md` bagian 5 | Sisa sebelum Fase 5: syarat akun perusahaan Microsoft tanpa badan hukum, dan dukungan MSIX di Tauri |
 | 0.12 | Tugas pemilik: konsultasi ahli hukum dengan lima draf di `docs/legal/` dan daftar pertanyaan | `docs/legal/agent-usage-policy.md` bagian 10 | Catatan jawaban tersimpan, draf direvisi |
 | 0.13 | Tugas pemilik: wawancara 8 sampai 10 calon pengguna | `docs/prd.md` bagian "Fakta dan asumsi" | Asumsi A1 sampai A4 diberi status terbukti atau tidak |
 | 0.14 | Buat `docs/asset-licenses.md` dengan aset yang sekarang dipakai | `docs/asset-licenses.md` | Setiap gambar dan huruf punya baris lisensi |

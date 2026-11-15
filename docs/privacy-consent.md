@@ -179,7 +179,7 @@ Status vendor yang sudah dipakai diambil dari `docs/LEGAL.md` bagian 3 (pemeriks
 
 | Vendor | Data yang dibagikan | Lokasi server | Status DPA |
 |---|---|---|---|
-| Penyedia LLM untuk agent (D2) | Teks halaman, struktur aplikasi, tangkapan layar kalau diizinkan | [PERLU DICEK] | [PERLU DICEK] sebelum dipilih |
+| Penyedia LLM untuk agent (D2): Anthropic, Claude Haiku 5.5 | Teks halaman, struktur aplikasi, tangkapan layar kalau diizinkan | [PERLU DICEK lokasi pemrosesan] | DPA otomatis menjadi bagian dari Commercial Terms. Tidak boleh melatih model dengan konten pelanggan. Input dan output dihapus dalam 30 hari |
 | Penyedia VPS (D6) | Semua data backend | [ISI: pilih lokasi Indonesia atau Singapura] | [PERLU DICEK] |
 | Cloudflare R2 (cadangan, dari rencana VPS) | Cadangan terenkripsi | [PERLU DICEK] | [PERLU DICEK] |
 | Chrome Web Store | Data pemasangan ekstensi dikelola Google | Amerika Serikat | Perjanjian developer |

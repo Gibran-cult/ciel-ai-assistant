@@ -120,7 +120,7 @@ Pemeriksaan terhadap situs asli: marketplace bertanda "Melarang" tidak boleh diu
 | Hal | Rencana |
 |---|---|
 | Kunci tanda tangan pembaruan | Dibuat sekali, kunci privat disimpan sebagai rahasia CI di lingkungan terlindung yang butuh persetujuan pemilik, salinannya di luar laptop harian |
-| Windows | Sertifikat code signing. Azure Artifact Signing tidak tersedia untuk individu di Indonesia, jadi pilihannya sertifikat dari otoritas sertifikat atau Microsoft Store [PERLU DICEK harga, syarat, dan apakah butuh badan usaha] |
+| Windows | Azure Artifact Signing tidak tersedia untuk individu di Indonesia. Pilihannya paket MSIX lewat Microsoft Store (Microsoft yang menandatangani, gratis, kemungkinan butuh akun perusahaan) atau sertifikat individu dari otoritas sertifikat (mulai US$129 per tahun ditambah token atau langganan cloud). Rinciannya di [agent-architecture.md](agent-architecture.md) bagian 5 |
 | macOS | Developer ID dari Apple Developer Program (US$99 per tahun), build di runner macOS, notarisasi sebelum terbit |
 | Hasil build | Hash setiap berkas rilis dicatat di catatan rilis |
 | Build yang bisa diulang | Versi alat dipatok, lockfile wajib |

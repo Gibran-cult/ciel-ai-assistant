@@ -126,15 +126,17 @@ Label performa seperti "Star Seller" atau "Power Merchant" menunjukkan penjual a
 
 ### Usulan daftar awal (D5, menunggu persetujuan pemilik)
 
-Marketplace. Kolom temuan berisi hasil pengecekan syarat layanan pada 14 November 2026.
+Marketplace. Kolom temuan berisi hasil pengecekan syarat layanan pada 14 dan 15 November 2026.
 
 | Marketplace | Label yang dicek | Temuan soal akses otomatis | Usulan status |
 |---|---|---|---|
 | Shopee | Shopee Mall | Syarat Layanan butir 3.1 melarang robot, spider, atau perangkat otomatis untuk memantau atau menyalin konten tanpa izin tertulis. Butir 6.3(k) melarang mengakses situs atau akun dengan perangkat tidak resmi, termasuk emulator, simulator, dan bot | Melarang. Tidak diotomatisasi |
-| Tokopedia | Label toko resmi [PERLU DICEK nama label yang sekarang dipakai] | Syarat dan ketentuan melarang membuat atau memakai emulator, robot, macro, crawler, atau perangkat otomatis untuk mengakses situs. Kutipan dari halaman bantuan, versi terbaru di tokopedia.com/terms belum terbaca | Melarang. Tidak diotomatisasi |
-| Lazada | LazMall | Dari 100.000 karakter pertama Ketentuan Penggunaan tidak ada larangan bot yang eksplisit, hanya larangan akses tidak sah dan mengganggu sistem. Sisanya belum terbaca | [PERLU DICEK] |
-| Blibli | Label toko resmi [PERLU DICEK] | Halaman syarat menolak dibaca otomatis. Cuplikan hasil pencarian: dilarang mengambil isi situs secara sistematis dengan perangkat otomatis tanpa izin tertulis | [PERLU DICEK] |
-| TikTok Shop | [PERLU DICEK] | Belum terverifikasi | [PERLU DICEK] |
+| Tokopedia | "Mall" (pengajuannya hanya untuk produsen dan distributor resmi sebuah merek) dan "Official Store" (label untuk toko yang terverifikasi menjual produk resmi). Teks label persis di halaman toko belum dicek | Halaman bantuan Syarat dan Ketentuan melarang membuat atau memakai emulator, robot, macro, crawler, atau perangkat otomatis untuk mengakses situs. Halaman tokopedia.com/terms tidak bisa dibaca otomatis (tiga kali timeout) | Melarang. Tidak diotomatisasi |
+| Lazada | LazMall, dengan judul halaman "Semua Produk dari Brand Resmi" dan jaminan uang kembali dua kali lipat untuk produk palsu | Seluruh Ketentuan Penggunaan sudah dibaca (15 November 2026). Tidak ada larangan robot, bot, atau perangkat otomatis yang eksplisit. Yang paling dekat: larangan berusaha mendapat akses tidak sah atau mengganggu sistem (bagian 2.2 butir 3), larangan menyalin dan menyimpan isi platform (bagian 5.2), dan larangan beberapa checkout di aturan voucher. Halaman tidak mencantumkan tanggal pembaruan | Belum jelas. Tidak ada larangan eksplisit, tetapi larangan akses tidak sah bisa ditafsirkan mencakup bot. Perlu pendapat ahli hukum sebelum diotomatisasi |
+| Blibli | "Official Store", terkait status Flagship Store (toko resmi brand yang lolos verifikasi Blibli, dengan kontrak satu tahun) | Halaman syarat menolak pembaca otomatis (HTTP 403). Cuplikan hasil pencarian: dilarang mengambil isi situs secara sistematis dengan perangkat otomatis atau manual tanpa izin tertulis | Belum jelas. Perlu dibaca manual |
+| TikTok Shop | Belum terverifikasi | Halaman syarat pembeli hanya tampil dengan JavaScript, jadi belum terbaca. Menurut pemberitaan, sejak kesepakatan Desember 2023 checkout TikTok Shop di Indonesia berjalan di sistem Tokopedia [PERLU DICEK status 2026] | Belum jelas. Diperlakukan seperti Tokopedia sampai syaratnya terbaca |
+
+Halaman Blibli, Tokopedia, dan TikTok Shop yang menolak pembaca otomatis sengaja tidak dibuka lewat browser otomatis, karena aturan yang sama berlaku untuk Ciel sendiri. Pemilik membacanya manual (roadmap 0.9).
 
 Arti temuan ini: dua marketplace terbesar melarang akses dengan bot atau alat otomatis. Mengotomatisasi klik dan checkout di sana melanggar perjanjian pengguna dengan marketplace dan bisa membuat akun pengguna dibekukan. Untuk marketplace berstatus "Melarang", Ciel hanya boleh bekerja dalam mode pendamping sampai ada izin tertulis dari marketplace atau pendapat ahli hukum yang membolehkan.
 
@@ -356,3 +358,7 @@ Daftar yang dipakai adalah edisi 2021. Edisi 2025 sudah terbit dan menambah kate
 - Ketentuan Penggunaan Lazada Indonesia: https://www.lazada.co.id/terms-of-use/
 - Syarat dan Ketentuan Blibli: https://www.blibli.com/faq/tentang-blibli/syarat-ketentuan/
 - Aturan nama toko "official" di Shopee sejak 1 September 2026: https://ukmindonesia.id/index.php/baca-deskripsi-posts/nama-toko-official-di-shopee-butuh-haki-kelas-35-dampak-dan-persiapan-umkm
+- Mall Tokopedia: https://www.tokopedia.com/help/article/bagaimana-cara-menjadi-mall-tokopedia
+- LazMall: https://pages.lazada.co.id/wow/i/id/LandingPage/lazmall
+- Flagship Store Blibli: https://www.blibli.com/faq/belanja/apa-itu-flagship-store/
+- Checkout TikTok Shop di sistem Tokopedia: https://thestar.com.my/tech/tech-news/2024/10/30/how-tiktok-saved-its-ecommerce-business-in-indonesia dan https://kr-asia.com/tokopedia-and-tiktok-complete-merger-cementing-e-commerce-partnership-in-indonesia

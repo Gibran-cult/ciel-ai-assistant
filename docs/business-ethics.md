@@ -99,7 +99,7 @@ Aturan khusus untuk ekstensi yang mengotomatisasi browser dengan AI [PERLU DICEK
 | Hal | Temuan |
 |---|---|
 | Akun developer individu | Gratis lewat alur pendaftaran baru. Menurut panduan Microsoft, akun individu untuk distribusi yang tidak terkait usaha, dan tidak bisa diubah menjadi akun perusahaan. Ciel adalah usaha, jadi kemungkinan butuh akun perusahaan dan badan usaha [PERLU DICEK] |
-| Tanda tangan kode | Azure Artifact Signing untuk individu hanya tersedia di Amerika Serikat dan Kanada |
+| Tanda tangan kode | Azure Artifact Signing untuk individu hanya tersedia di Amerika Serikat dan Kanada. Paket MSIX yang terbit di Microsoft Store ditandatangani ulang oleh Microsoft, jadi tidak perlu sertifikat sendiri. Installer EXE atau MSI tetap harus ditandatangani sendiri, juga kalau lewat Store |
 | Aplikasi yang mengontrol aplikasi lain | Kelayakan di Microsoft Store [PERLU DICEK] |
 | Edge Add-ons untuk ekstensi | Syarat dan biaya [PERLU DICEK] |
 
@@ -114,20 +114,20 @@ Aturan khusus untuk ekstensi yang mengotomatisasi browser dengan AI [PERLU DICEK
 
 ## 7. Syarat layanan marketplace soal pembelian otomatis
 
-Hasil pengecekan 14 November 2026. Rincian kutipan ada di [security.md](security.md) bagian 4.
+Hasil pengecekan 14 dan 15 November 2026. Rincian kutipan ada di [security.md](security.md) bagian 4.
 
 | Marketplace | Mengizinkan alat otomatis | Tanda | Dasar |
 |---|---|---|---|
 | Shopee | Tidak | Melarang | Syarat Layanan butir 3.1 dan 6.3(k): robot, spider, perangkat otomatis, dan akses dengan perangkat tidak resmi termasuk bot |
-| Tokopedia | Tidak | Melarang | Syarat dan ketentuan: dilarang memakai emulator, robot, macro, crawler, atau perangkat otomatis untuk mengakses situs. Versi terbaru perlu dibaca ulang |
-| Lazada | Belum jelas | [PERLU DICEK] | Bagian yang terbaca tidak memuat larangan bot yang eksplisit, hanya larangan akses tidak sah. Sisa dokumen belum terbaca |
-| Blibli | Belum jelas | [PERLU DICEK] | Halaman syarat tidak bisa dibaca otomatis. Cuplikan: larangan mengambil isi situs secara sistematis dengan perangkat otomatis |
-| TikTok Shop | Belum jelas | [PERLU DICEK] | Belum terverifikasi |
+| Tokopedia | Tidak | Melarang | Syarat dan ketentuan: dilarang memakai emulator, robot, macro, crawler, atau perangkat otomatis untuk mengakses situs. Versi di tokopedia.com/terms tidak bisa dibaca otomatis, jadi dibaca manual |
+| Lazada | Belum jelas | Belum jelas | Seluruh ketentuan sudah dibaca. Tidak ada larangan bot yang eksplisit, tetapi ada larangan akses tidak sah dan mengganggu sistem (bagian 2.2 butir 3) yang bisa ditafsirkan mencakup bot |
+| Blibli | Belum jelas | Belum jelas | Halaman syarat menolak pembaca otomatis. Cuplikan: larangan mengambil isi situs secara sistematis dengan perangkat otomatis |
+| TikTok Shop | Belum jelas | Belum jelas | Syarat pembeli belum terbaca. Menurut pemberitaan, checkout-nya berjalan di sistem Tokopedia |
 
 Aturan produk yang mengikuti temuan ini:
 
 1. Marketplace bertanda "Melarang" tidak diotomatisasi. Agent tidak mengklik, mengetik, atau checkout di sana.
-2. Marketplace bertanda [PERLU DICEK] diperlakukan sama dengan "Melarang" sampai syaratnya dibaca lengkap.
+2. Marketplace bertanda "Belum jelas" diperlakukan sama dengan "Melarang" sampai ada pendapat ahli hukum atau izin tertulis. Tidak adanya larangan eksplisit, seperti di Lazada, belum berarti boleh.
 3. Website brand hanya masuk daftar kalau syarat layanannya tidak melarang akses otomatis.
 4. Sebelum mode pendamping dipakai di marketplace yang melarang, minta pendapat ahli hukum dan, kalau bisa, izin tertulis atau jalur resmi (program afiliasi atau API mitra) dari marketplace. Syarat program afiliasi Shopee sendiri melarang robot atau alat kueri otomatis, jadi jalur itu pun perlu dibaca teliti.
 5. Status tiap marketplace disimpan di daftar toko (`automation`: `forbidden`, `unknown`, `allowed`) dan dicek ulang setiap 90 hari (usulan), karena syarat layanan bisa berubah.
@@ -151,6 +151,8 @@ Usulan urutan: keempatnya selesai sebelum fitur pembelian dibuka. NIB dan PSE se
 - Aturan Manifest V3: https://developer.chrome.com/docs/webstore/program-policies/mv3-requirements
 - Pendaftaran developer Microsoft Store untuk individu: https://learn.microsoft.com/en-us/windows/apps/publish/whats-new-individual-developer
 - Opsi tanda tangan kode Windows: https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options
+- Penandatanganan ulang MSIX oleh Microsoft Store: https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements
+- Jenis akun developer Microsoft: https://learn.microsoft.com/en-us/windows/apps/publish/partner-center/open-a-developer-account
 - Apple Developer Program: https://developer.apple.com/programs/enroll/
 - Syarat Layanan Shopee: https://help.shopee.co.id/portal/4/article/71187
 - Syarat program afiliasi Shopee: https://shopee.co.id/docs/6937

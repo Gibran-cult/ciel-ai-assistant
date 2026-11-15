@@ -33,7 +33,7 @@ Semua dijawab mengikuti rekomendasi.
 | ID | Keputusan | Jawaban (14 November 2026) | Rincian |
 |---|---|---|---|
 | D1 | Stack aplikasi desktop | Tauri 2, mulai dari Windows | agent-architecture.md bagian 5 |
-| D2 | Penyedia LLM untuk agent | Dipisah menurut kepekaan data: chat tetap, agent di penyedia tanpa pelatihan | agent-architecture.md bagian 3 |
+| D2 | Penyedia LLM untuk agent | Dipisah menurut kepekaan data: chat tetap, agent di penyedia tanpa pelatihan. Dikunci 15 November 2026: Claude Haiku 5.5, cadangan Gemini 3.5 Flash-Lite | agent-architecture.md bagian 3 |
 | D3 | Payment gateway langganan | Tetap Mayar sampai ada badan usaha | subscription-payments.md bagian 9 |
 | D4 | Cara bayar agent | Opsi a: agent mengisi keranjang, kamu membayar sendiri | security.md bagian 4 |
 | D5 | Daftar toko resmi awal | Cara verifikasi disetujui. Isi daftar masih menunggu pilihanmu: marketplace mana yang masuk dan 5 sampai 10 brand pertama | security.md bagian 4 |

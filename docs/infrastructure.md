@@ -157,7 +157,7 @@ Asumsi pemakaian:
 | Biaya pembayaran | 0,7% sampai 1,5% dari omzet, atau Rp4.000 per order virtual account | Sama | Sama |
 | Apple Developer Program (kalau macOS dirilis) | US$99 per tahun | Sama | Sama |
 | Chrome Web Store | Sekali bayar, US$5 [PERLU DICEK] | | |
-| Sertifikat code signing Windows | [PERLU DICEK] | Sama | Sama |
+| Sertifikat code signing Windows | Gratis lewat Microsoft Store (MSIX, kemungkinan butuh akun perusahaan). Di luar Store: US$129 per tahun (SSL.com IV) ditambah token US$379 atau langganan cloud, atau mulai €139 (Certum Standard) | Sama | Sama |
 | Domain | [ISI: biaya perpanjangan ciel-ai.web.id] | Sama | Sama |
 
 Rumus supaya bisa dihitung ulang dengan data nyata:

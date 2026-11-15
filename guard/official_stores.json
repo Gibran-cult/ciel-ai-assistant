@@ -9,7 +9,7 @@
      "tos_url": "https://www.tokopedia.com/help/article/terms-conditions", "checked": "2026-11-14"},
     {"id": "lazada", "name": "Lazada", "domains": ["lazada.co.id"], "official_labels": ["LazMall"],
      "automation": "unknown", "approved": false,
-     "tos_url": "https://www.lazada.co.id/terms-of-use/", "checked": "2026-11-14"},
+     "tos_url": "https://www.lazada.co.id/terms-of-use/", "checked": "2026-11-15"},
     {"id": "blibli", "name": "Blibli", "domains": ["blibli.com"], "official_labels": [],
      "automation": "unknown", "approved": false,
      "tos_url": "https://www.blibli.com/faq/tentang-blibli/syarat-ketentuan/", "checked": "2026-11-14"}
