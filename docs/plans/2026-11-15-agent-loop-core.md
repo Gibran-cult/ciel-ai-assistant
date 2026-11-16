@@ -266,7 +266,7 @@ def test_views_are_immutable(self):
 **Interfaces:**
 - Consumes: `guard.risk.Action`, `guard.domains.check_url`, `guard.domains.normalize_host`.
 - Produces:
-  - `Control(field_type: str | None = None, submits: bool = False, effect: str | None = None)`: satu kontrol bernomor di halaman, dilaporkan klien.
+  - `Control(field_type: str | None = None, submits: bool | None = None, effect: str | None = None)`: satu kontrol bernomor di halaman, dilaporkan klien. `submits` yang tidak dilaporkan dihitung mengirim data.
   - `Observation(ok: bool, source: str = "tool", text: str = "", host: str | None = None, controls: Mapping[int, Control] = {})`: hasil satu aksi dari klien.
   - `Bound(tool: str, args: dict, action: Action)` dan `Rejected(tool: str, reason: str)`. Alasan: `bad_call`, `tool_unavailable`, `bad_args`, `no_page`, `unknown_ref`.
   - `TOOLS: dict[str, dict[str, tuple]]`: nama tool ke skema argumen.
@@ -431,10 +431,10 @@ def test_scope_to_json_is_sorted_and_plain(self):
 - Consumes: `guard.limits.JAKARTA`.
 - Produces:
   - `MAX_STEPS = 40`, `MAX_SECONDS = 900`, `MAX_REPAIRS = 2`
-  - `AgentConfig(enabled: bool = False, daily_cost_cap: int = 0, tasks_per_day: Mapping[str, int] = {})`
-  - `load_config(env: Mapping[str, str]) -> AgentConfig`. Membaca `AGENT_ENABLED`, `AGENT_DAILY_COST_CAP`, `AGENT_TASKS_PER_DAY_FREE`, `AGENT_TASKS_PER_DAY_PRO`. Angka yang tidak terbaca menjadi 0. Tidak pernah melempar exception.
+  - `AgentConfig(enabled: bool = False, daily_cost_cap: int = 0, tasks_per_month: Mapping[str, int] = {})`
+  - `load_config(env: Mapping[str, str]) -> AgentConfig`. Membaca `AGENT_ENABLED`, `AGENT_DAILY_COST_CAP`, `AGENT_TASKS_PER_MONTH_FREE`, `AGENT_TASKS_PER_MONTH_PRO`. Angka yang tidak terbaca menjadi 0. Tidak pernah melempar exception.
   - `start_refusal(config: AgentConfig, plan_name: str, cost_today: object) -> str | None`: `"agent_off"`, `"cost_cap"`, `"no_quota"`, atau `None`. Urutannya seperti itu.
-  - `task_rate_limits(owner: str, plan_name: str, config: AgentConfig) -> dict`: `{f"agent:{owner}": (kuota, 86400)}`, bentuk yang diterima `ChatStore.rate_limit_hit`.
+  - `task_rate_limits(owner: str, plan_name: str, config: AgentConfig) -> dict`: `{f"agent:{owner}": (kuota, 30 * 86400)}` (30 hari bergulir, mengikuti "tugas per bulan" di `docs/infrastructure.md`), bentuk yang diterima `ChatStore.rate_limit_hit`.
   - `day_start(now: datetime) -> str`: ISO 8601 untuk pukul 00.00 hari itu di Asia/Jakarta.
   - `over_limit(steps: int, started: datetime, now: datetime, repairs: int) -> str | None`: `"limit_steps"`, `"limit_time"`, `"stuck"`, atau `None`.
 
@@ -447,7 +447,7 @@ def test_agent_is_off_unless_configured(self):
     self.assertEqual(load_config({}), AgentConfig())
     for value in ("true", "yes", "0", "", " 1"):
         self.assertIs(load_config({"AGENT_ENABLED": value}).enabled, False)
-    config = load_config({"AGENT_ENABLED": "1", "AGENT_DAILY_COST_CAP": "1000", "AGENT_TASKS_PER_DAY_FREE": "2", "AGENT_TASKS_PER_DAY_PRO": "x"})
+    config = load_config({"AGENT_ENABLED": "1", "AGENT_DAILY_COST_CAP": "1000", "AGENT_TASKS_PER_MONTH_FREE": "2", "AGENT_TASKS_PER_MONTH_PRO": "x"})
     self.assertEqual(config, AgentConfig(True, 1000, {"free": 2, "pro": 0}))
     self.assertEqual(load_config({"AGENT_DAILY_COST_CAP": "-5"}).daily_cost_cap, 0)
 
@@ -550,7 +550,7 @@ def test_target_and_kind_are_safe_for_the_log(self):
 - Consumes: semua dari Task 1 sampai 7, `guard.decide.Context`, `decide`, `guard.limits.SpendLimits`.
 - Produces:
   - `Account(plan: str, adult_verified: bool, limits: SpendLimits, spent_this_month: int)`
-  - `ConfirmPrompt(tool: str, target: str, level: str, reason: str, widens: str | None, from_page: bool)`. Isi dialog dihitung kode. `widens` adalah host atau jenis aksi yang akan ditambahkan ke lingkup, atau `None`.
+  - `ConfirmPrompt(tool: str, target: str, level: str, reason: str, widens: str | None, from_page: bool, url: str | None = None, ref: int | None = None, text: str | None = None, lookalike: str | None = None)`. Isi dialog dihitung kode. `widens` adalah host atau jenis aksi yang akan ditambahkan ke lingkup, atau `None`. `url` alamat yang akan dibuka, `ref` nomor kontrol, `text` awal teks yang akan diketik (paling banyak 200 karakter, kosong di serah terima), `lookalike` situs di lingkup yang namanya ditiru situs tujuan.
   - `TaskResult(status: str, reason: str | None, steps: int, report: str)`
   - `run_task(owner, task_id, device, instruction, *, model, client, store, config, account, clock, chain_key) -> TaskResult`
 - Kontrak klien (dipenuhi `FakeClient`, nanti adaptor WebSocket di 2B):
@@ -559,7 +559,7 @@ def test_target_and_kind_are_safe_for_the_log(self):
   - `confirm(prompt: ConfirmPrompt) -> bool`
   - `handover(prompt: ConfirmPrompt) -> bool`
   - `ask(question: str) -> str | None`
-  - `run(tool: str, args: dict, seq: int) -> Observation`
+  - `run(tool: str, args: dict, seq: int, host: str | None) -> Observation`. `host` adalah situs yang dinilai guard. Klien menolak kalau tab sudah di situs lain atau nomor rujukannya sudah tidak berlaku.
 - `FakeClient(mode="auto", approve=True, pages=...)` mencatat `ran: list[tuple[tool, args]]`, `prompts: list[ConfirmPrompt]`, `handovers: list[ConfirmPrompt]`, dan punya `on_run` (fungsi opsional yang dipanggil di setiap `run`).
 
 Alur `run_task`:
@@ -697,6 +697,34 @@ def test_package_does_not_import_the_app(self):
 - [ ] **Step 5: Commit.** `git commit -m "Add the loop red-team suite and record Fase 2A in the roadmap"`.
 
 ---
+
+## Hasil tinjauan cabang (15 November 2026)
+
+Cabang ini dibaca reviewer terpisah setelah semua task selesai. Tujuh temuan diperbaiki, masing-masing dengan uji yang gagal dulu:
+
+1. Aksi yang sudah disetujui tetap terkirim kalau Stop ditekan, klien hilang, atau waktu habis selama dialog terbuka. Sekarang ketiganya diperiksa lagi sebelum baris "dikirim" ditulis, dan jawaban dialog yang datang setelah 2 menit tidak berlaku (`CONFIRM_SECONDS = 120`, `docs/security.md` bagian 3).
+2. Persetujuan perluasan lingkup ikut meloloskan konfirmasi R2 yang tidak pernah ditampilkan. Sekarang alasan R2 yang belum dilihat pengguna ditanyakan sendiri. Ini kekeliruan di rencana (Task 8 langkah 10), tidak di kodenya.
+3. Isi situs di luar lingkup sampai ke model lewat klik atau pengalihan. Sekarang isinya ditahan sampai pengguna menyetujui situs itu.
+4. Tanda "tujuan dari isi halaman" lolos dengan variasi kecil pada alamat. Sekarang alamat dibandingkan setelah dirapikan (tanpa skema, port, `www.`, kueri, fragmen, dan tanda baca di akhir), dan alamat tanpa `https://` ikut dikenali.
+5. Nama tool karangan model ikut tertulis di log. Sekarang hanya nama berbentuk `[a-z_]{1,40}` yang dicatat.
+6. Dialog tidak menampilkan alamat, kontrol, teks yang diketik, atau tanda situs tiruan, dan klien tidak diberi tahu situs yang dinilai. `ConfirmPrompt` dan `run` diperluas.
+7. `update_task` menjawab berhasil walau tidak ada baris yang berubah. Sekarang dihitung gagal.
+
+Dua hal lain ikut dibetulkan karena menyimpang dari spesifikasi: kuota tugas dihitung per bulan (sebelumnya per hari), dan kontrol yang tidak melaporkan `submits` dihitung mengirim data.
+
+### Gerbang untuk rencana 2B
+
+Hal berikut tidak dikerjakan di 2A dan harus masuk rencana 2B sebagai task:
+
+- Pembersih tugas macet. Syaratnya: memakai waktu aktivitas terakhir (tugas bisa sah berumur lebih dari 15 menit saat menunggu dialog), dan memasang `stop_requested` sebelum mengubah status, karena loop tidak membaca ulang status.
+- `BaseException` dari klien (pembatalan asyncio) harus menutup baris tugas.
+- Sakelar `AGENT_ENABLED` dan plafon biaya dibaca ulang selama tugas berjalan.
+- Batas 30 aksi per menit per pengguna (`docs/infrastructure.md`).
+- Jawaban `ask_user` dan alamat `tab_open` diperiksa `find_secrets`. Teks `finish.report` dan `ask_user.question` disaring dari tautan dan gambar sebelum ditampilkan (`docs/security.md` bagian 5, lapis 5).
+- Host rencana tidak boleh akhiran publik (`co.id`, `github.io`) atau bentuk angka.
+- Pratinjau dialog ditampilkan klien sebagai teks biasa. Nomor rujukan dibatalkan klien setiap halaman berubah.
+- Penanda amplop dengan nonce per amplop.
+- Verifikasi rantai: baris terakhir tanpa hash kepala yang cocok dilaporkan sebagai "baris lebih", tidak sebagai pemotongan.
 
 ## Keputusan untuk rencana 2B (menunggu pemilik)
 

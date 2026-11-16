@@ -101,10 +101,20 @@ class AgentStoreTest(unittest.TestCase):
             self.assertFalse(store().update_task(ALICE, TASK, status="done", stop_requested=False))
             self.assertFalse(store().update_task(ALICE, TASK))
             request.assert_not_called()
+
+        with patch("requests.request", return_value=Response([{"id": TASK}])) as request:
             self.assertTrue(store().update_task(ALICE, TASK, status="done", steps=3))
 
         self.assertEqual(request.call_args.args[0], "PATCH")
         self.assertEqual(request.call_args.kwargs["json"], {"status": "done", "steps": 3})
+        self.assertEqual(request.call_args.kwargs["headers"]["Prefer"], "return=representation")
+
+    def test_an_update_that_changes_no_row_is_a_failure(self):
+        # PostgREST menjawab 200 dengan daftar kosong kalau tidak ada baris yang cocok.
+        for payload in ([], None, {"id": TASK}, ["t0001"], ValueError("bukan json")):
+            with self.subTest(payload=payload), patch("requests.request", return_value=Response(payload)):
+                self.assertFalse(store().update_task(ALICE, TASK, head_hash="abc"))
+                self.assertFalse(store().request_stop(ALICE, TASK))
 
     def test_stop_requested_is_none_when_unreadable(self):
         cases = (
@@ -120,7 +130,7 @@ class AgentStoreTest(unittest.TestCase):
             self.assertIsNone(store().stop_requested(ALICE, TASK))
 
     def test_request_stop_sets_the_flag(self):
-        with patch("requests.request", return_value=Response()) as request:
+        with patch("requests.request", return_value=Response([{"id": TASK}])) as request:
             self.assertTrue(store().request_stop(ALICE, TASK))
 
         self.assertEqual(request.call_args.args[0], "PATCH")
