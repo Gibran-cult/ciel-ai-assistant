@@ -1,6 +1,8 @@
 """Batas tugas agent, kuota, plafon biaya harian, dan sakelar fitur.
 
-Angka langkah dan waktu berasal dari docs/agent-architecture.md bagian 2.
+Angka langkah dan waktu berasal dari docs/agent-architecture.md bagian 2,
+masa berlaku konfirmasi dari docs/security.md bagian 3, dan kuota tugas per
+bulan dari docs/infrastructure.md.
 Kuota per paket dan plafon biaya tidak ditulis di sini: keduanya dibaca dari
 konfigurasi server, dan nilai yang kosong atau rusak berarti menolak tugas
 baru.
@@ -14,14 +16,16 @@ from guard.limits import JAKARTA
 MAX_STEPS = 40      # usulan model per tugas
 MAX_SECONDS = 900   # 15 menit
 MAX_REPAIRS = 2     # langkah gagal berturut-turut yang masih boleh dicoba ulang
+CONFIRM_SECONDS = 120   # jawaban dialog konfirmasi yang lebih lama dari ini tidak berlaku
 DAY = 86400
+MONTH = 30 * DAY    # jendela kuota tugas: 30 hari bergulir
 
 
 @dataclass(frozen=True)
 class AgentConfig:
     enabled: bool = False
     daily_cost_cap: int = 0                                  # satuan biaya model, semua pengguna
-    tasks_per_day: Mapping = field(default_factory=dict)     # nama paket -> jumlah tugas per hari
+    tasks_per_month: Mapping = field(default_factory=dict)   # nama paket -> jumlah tugas per 30 hari
 
 
 def whole(text):
@@ -35,13 +39,13 @@ def load_config(env):
 
     quotas = {
         name: whole(env[key])
-        for name, key in (("free", "AGENT_TASKS_PER_DAY_FREE"), ("pro", "AGENT_TASKS_PER_DAY_PRO"))
+        for name, key in (("free", "AGENT_TASKS_PER_MONTH_FREE"), ("pro", "AGENT_TASKS_PER_MONTH_PRO"))
         if key in env
     }
     return AgentConfig(
         enabled=env.get("AGENT_ENABLED") == "1",
         daily_cost_cap=whole(env.get("AGENT_DAILY_COST_CAP")),
-        tasks_per_day=quotas,
+        tasks_per_month=quotas,
     )
 
 
@@ -61,16 +65,16 @@ def start_refusal(config, plan_name, cost_today):
     if not positive(cap) or type(cost_today) is not int or not 0 <= cost_today < cap:
         return "cost_cap"
 
-    if not positive(config.tasks_per_day.get(plan_name)):
+    if not positive(config.tasks_per_month.get(plan_name)):
         return "no_quota"
 
     return None
 
 
 def task_rate_limits(owner, plan_name, config):
-    """Batas tugas per hari, dalam bentuk yang diterima ChatStore.rate_limit_hit."""
+    """Batas tugas per bulan, dalam bentuk yang diterima ChatStore.rate_limit_hit."""
 
-    return {f"agent:{owner}": (config.tasks_per_day[plan_name], DAY)}
+    return {f"agent:{owner}": (config.tasks_per_month[plan_name], MONTH)}
 
 
 def day_start(now):

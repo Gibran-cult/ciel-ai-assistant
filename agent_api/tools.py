@@ -10,6 +10,7 @@ Tool desktop dan tool belanja belum ada di sini. Keduanya masuk bersama
 klien yang menjalankannya (Fase 4 dan 5).
 """
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
@@ -22,7 +23,7 @@ class Control:
     """Satu kontrol bernomor di halaman, seperti yang dilaporkan klien."""
 
     field_type: str | None = None   # jenis kolom isian, misalnya "text" atau "password"
-    submits: bool = False           # klik atau ketik di sini mengirim data
+    submits: bool | None = None     # klik atau ketik di sini mengirim data; tidak dilaporkan dihitung mengirim
     effect: str | None = None       # efek tombol sebagai jenis aksi, misalnya "cart_add"
 
 
@@ -67,7 +68,7 @@ TOOLS = {
 
 NO_PAGE_NEEDED = frozenset({"ask_user", "finish", "tab_open"})
 TYPING = {"tab_type": "text", "tab_select": "value"}   # tool -> argumen yang berisi teks ketikan
-MAX_TOOL_NAME = 40
+TOOL_NAME = re.compile(r"[a-z_]{1,40}")   # bentuk nama tool yang boleh masuk ke log
 
 
 def fits(value, rule):
@@ -90,7 +91,9 @@ def bind(call, page):
     schema = TOOLS.get(tool)
 
     if schema is None:
-        return Rejected(tool[:MAX_TOOL_NAME], "tool_unavailable")
+        # Nama ini ikut ditulis ke log yang tidak bisa diubah, jadi teks
+        # karangan model (angka kartu, HTML) tidak boleh sampai ke sana.
+        return Rejected(tool if TOOL_NAME.fullmatch(tool) else "unknown", "tool_unavailable")
 
     if not isinstance(args, dict) or set(args) != set(schema):
         return Rejected(tool, "bad_args")

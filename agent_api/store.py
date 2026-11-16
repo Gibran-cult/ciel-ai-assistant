@@ -103,9 +103,22 @@ class AgentStore(ChatStore):
             return False
 
         response = self._request(
-            "PATCH", action, owner, "agent_tasks", task_id, json=body, headers={"Prefer": "return=minimal"},
+            "PATCH", action, owner, "agent_tasks", task_id, json=body,
+            headers={"Prefer": "return=representation"}, params={"select": "id"},
         )
-        return response is not None
+
+        if response is None:
+            return False
+
+        # PATCH yang tidak mengenai baris mana pun tetap dijawab 200. Itu
+        # dihitung gagal, supaya hash kepala yang tidak tersimpan ketahuan.
+        try:
+            rows = response.json()
+        except ValueError as error:
+            logger.error("agent_store_error action=%s type=%s error=%s", action, type(error).__name__, error)
+            return False
+
+        return isinstance(rows, list) and len(rows) == 1 and isinstance(rows[0], dict)
 
     def update_task(self, owner, task_id, /, **fields):
         if not fields or not set(fields) <= TASK_FIELDS:

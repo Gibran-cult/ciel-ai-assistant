@@ -35,7 +35,7 @@ SAFE = [("tab_open", {"url": "https://shopee.co.id/"}), ("tab_read", {})]
 
 CONTROLS = {
     1: Control("text"), 2: Control("password"), 3: Control(submits=True), 4: Control(effect="pay"),
-    5: Control(), 6: Control(effect="cart_add"), 7: Control(effect="checkout_handoff"), 8: Control(effect="download"),
+    5: Control(submits=False), 6: Control(effect="cart_add"), 7: Control(effect="checkout_handoff"), 8: Control(effect="download"),
     9: Control("otp"),
 }
 

@@ -100,6 +100,7 @@ class FakeClient:
         self.questions = []
         self.ran = []
         self.seqs = []
+        self.hosts = []
 
     def active(self):
         return self.alive
@@ -120,9 +121,10 @@ class FakeClient:
         self.questions.append(question)
         return self.answer
 
-    def run(self, tool, args, seq):
+    def run(self, tool, args, seq, host):
         self.ran.append((tool, args))
         self.seqs.append(seq)
+        self.hosts.append(host)
 
         if self.on_run:
             self.on_run(self)

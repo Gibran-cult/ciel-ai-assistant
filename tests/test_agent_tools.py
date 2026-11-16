@@ -8,7 +8,8 @@ from agent_api.tools import TOOLS, Bound, Control, Observation, Rejected, bind  
 from guard.risk import ACTION_LEVELS, Action, classify  # noqa: E402
 
 PAGE = Observation(True, "page", "isi", "shopee.co.id", {
-    1: Control("text"), 2: Control("password"), 3: Control(submits=True), 4: Control(effect="cart_add"), 5: Control(),
+    1: Control("text", submits=False), 2: Control("password"), 3: Control(submits=True), 4: Control(effect="cart_add"), 5: Control(),
+    6: Control(submits=False),
 })
 
 
@@ -30,7 +31,7 @@ class BindTest(unittest.TestCase):
         self.assertEqual(bind(call("tab_type", ref=5, text="x"), PAGE).action.field_type, "unknown")
         self.assertEqual(bind(call("tab_select", ref=5, value="x"), PAGE).action.field_type, "unknown")
         self.assertIs(bind(call("tab_click", ref=3), PAGE).action.submits, True)
-        self.assertIs(bind(call("tab_click", ref=5), PAGE).action.submits, False)
+        self.assertIs(bind(call("tab_click", ref=6), PAGE).action.submits, False)
         self.assertEqual(bind(call("tab_click", ref=4), PAGE).action.effect, "cart_add")
         self.assertIsNone(bind(call("tab_click", ref=5), PAGE).action.effect)
 
@@ -95,6 +96,18 @@ class BindTest(unittest.TestCase):
         for tool in ("pay", "shell_run", "file_delete", "cart_add", "tidak_ada", "", "__class__"):
             with self.subTest(tool=tool):
                 self.assertEqual(bind({"tool": tool, "args": {}}, PAGE).reason, "tool_unavailable")
+
+        # Nama tool masuk ke log yang tidak bisa diubah. Nama karangan model tidak ikut ke sana.
+        self.assertEqual(bind({"tool": "pay", "args": {}}, PAGE).tool, "pay")
+
+        for tool in ("4111 1111 1111 1111", "<script>alert(1)</script>", "Pay", "tab_open\n", "a" * 41, "", "pay2"):
+            with self.subTest(tool=tool):
+                self.assertEqual(bind({"tool": tool, "args": {}}, PAGE), Rejected("unknown", "tool_unavailable"))
+
+    def test_a_control_that_does_not_say_whether_it_submits_counts_as_submitting(self):
+        self.assertIs(bind(call("tab_click", ref=5), PAGE).action.submits, True)
+        said = Observation(True, "page", "", "shopee.co.id", {5: Control(submits=False)})
+        self.assertIs(bind(call("tab_click", ref=5), said).action.submits, False)
 
         for broken in (call("tab_click", ref=True), call("tab_click", ref="5"), call("tab_click"), call("tab_click", ref=1.0),
                        call("tab_scroll", direction="left"), call("finish", report=""), call("finish", report="a" * 2001),

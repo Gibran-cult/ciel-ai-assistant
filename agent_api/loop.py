@@ -12,7 +12,10 @@ Kontrak klien (ekstensi atau desktop, lewat adaptor di rencana 2B):
     confirm(prompt) -> bool             pengguna menyetujui satu aksi
     handover(prompt) -> bool            pengguna mengerjakan sendiri langkah itu
     ask(question) -> str | None         jawaban pengguna
-    run(tool, args, seq) -> Observation hasil aksi
+    run(tool, args, seq, host) -> Observation
+                                        hasil aksi. `host` adalah situs yang dinilai guard
+                                        untuk aksi ini. Klien menolak kalau tab sudah di
+                                        situs lain atau nomor rujukannya sudah tidak berlaku.
 
 Pembelian belum bisa di fase ini: toko tidak diverifikasi (store=None), jadi
 gerbang belanja di guard selalu menolak.
@@ -20,20 +23,25 @@ gerbang belanja di guard selalu menolak.
 
 import re
 from dataclasses import dataclass, replace
+from urllib.parse import unquote
 
 from agent_api.envelope import flags_injection, wrap
 from agent_api.journal import Journal
-from agent_api.limits import day_start, over_limit, start_refusal, task_rate_limits
+from agent_api.limits import CONFIRM_SECONDS, day_start, over_limit, start_refusal, task_rate_limits
 from agent_api.model import ModelReply, Step, TaskView
 from agent_api.plan import parse_plan, scope_to_json, widened
-from agent_api.tools import Observation, Rejected, bind
+from agent_api.tools import TYPING, Observation, Rejected, bind
 from guard.audit import target_of
 from guard.decide import Context, Decision, decide
+from guard.domains import lookalike_of, match_allowed, normalize_host
 from guard.limits import SpendLimits
 from guard.risk import R3, Action
 
-URL_RE = re.compile(r"https?://[^\s\"'<>()]+", re.IGNORECASE)
+# Alamat di dalam teks, dengan atau tanpa "https://": (host, jalur).
+LINK_RE = re.compile(r"(?:https?://)?((?:[a-z0-9-]+\.)+[a-z][a-z0-9-]+)(?::\d{1,5})?(/[^\s\"'<>]*)?", re.IGNORECASE)
+PATH_END = "/.,;:!?)]}"
 MAX_NOTE = 2000
+MAX_PREVIEW = 200
 
 
 @dataclass(frozen=True)
@@ -54,6 +62,10 @@ class ConfirmPrompt:
     reason: str
     widens: str | None      # situs atau jenis aksi yang ditambahkan ke lingkup, kalau ada
     from_page: bool         # tujuan aksi berasal dari isi halaman, tidak dari perintah pengguna
+    url: str | None = None          # alamat lengkap yang akan dibuka
+    ref: int | None = None          # nomor kontrol yang dikenai aksi, supaya klien bisa menampilkan labelnya
+    text: str | None = None         # awal teks yang akan diketik
+    lookalike: str | None = None    # situs di lingkup tugas yang namanya ditiru situs tujuan
 
 
 @dataclass(frozen=True)
@@ -74,8 +86,19 @@ class End(Exception):
         self.report = report
 
 
-def urls_in(text):
-    return {url.rstrip(".,;:!?").casefold() for url in URL_RE.findall(text)}
+def link_key(host, path):
+    """Alamat yang dirapikan, supaya variasi kecil tetap dikenali sebagai alamat yang sama.
+
+    Yang dibuang: skema, port, "www.", kueri, fragmen, garis miring dan tanda
+    baca di akhir, dan beda huruf besar kecil.
+    """
+
+    path = unquote(re.split(r"[?#]", path or "", maxsplit=1)[0]).rstrip(PATH_END).casefold()
+    return host.casefold().removeprefix("www."), path
+
+
+def link_keys(text):
+    return {link_key(host, path) for host, path in LINK_RE.findall(text)}
 
 
 def run_task(owner, task_id, device, instruction, *, model, client, store, config, account, clock, chain_key):
@@ -259,13 +282,15 @@ class Run:
 
         decision = self.decide(action)
         approved_by = None
+        shown = {"ask_mode"}    # alasan yang sudah dilihat pengguna di dialog untuk aksi ini
 
         while decision.outcome == "confirm":
             scoped = decision.reason.startswith("scope_")
 
-            # Aksi ini sudah disetujui pengguna di putaran sebelumnya. Yang
-            # masih harus ditanyakan hanya perluasan lingkup berikutnya.
-            if approved_by and not scoped:
+            # Pengguna sudah menyetujui aksi ini di dialog sebelumnya. Yang
+            # masih ditanyakan: perluasan lingkup berikutnya, dan alasan lain
+            # yang belum pernah ditampilkan (misalnya aksi ini mengirim data).
+            if approved_by and decision.reason in shown:
                 break
 
             wider = widened(self.scope, action, decision.reason) if scoped else None
@@ -275,15 +300,22 @@ class Run:
                 break
 
             widens = self.added(wider)
-            shown = from_page or (wider is not None and widens in wider.hosts and self.seen_text(widens))
-            prompt = ConfirmPrompt(tool, target_of(action), decision.level, decision.reason, widens, shown)
+            told = from_page or (wider is not None and widens in wider.hosts and self.seen_text(widens))
+            asked = self.clock()
+            approved = self.from_client(self.client.confirm, self.prompt(tool, args, action, decision, widens, told)) is True
+            late = approved and (self.clock() - asked).total_seconds() > CONFIRM_SECONDS
 
-            if self.from_client(self.client.confirm, prompt) is not True:
-                self.log(action, decision, result="declined")
-                self.missed(tool, "confirm", decision.reason, "declined")
+            if not approved or late:
+                result = "expired" if late else "declined"
+                self.log(action, decision, result=result)
+                self.missed(tool, "confirm", decision.reason, result)
                 return
 
             approved_by = "user"
+
+            # Dialog ini sudah bilang tujuannya berasal dari isi halaman.
+            if told:
+                shown.add("tainted_target")
 
             if not scoped:
                 break
@@ -302,7 +334,7 @@ class Run:
             return
 
         if decision.outcome == "handover":
-            prompt = ConfirmPrompt(tool, target_of(action), decision.level, decision.reason, None, from_page)
+            prompt = self.prompt(tool, args, action, decision, None, from_page)
             done = self.from_client(self.client.handover, prompt) is True
             self.log(action, decision, result="handed_over" if done else "declined")
 
@@ -339,10 +371,16 @@ class Run:
         self.send(tool, args, action, decision, approved_by)
 
     def send(self, tool, args, action, decision, approved_by):
+        # Dialog bisa terbuka lama. Stop, klien, dan batas waktu diperiksa
+        # lagi sesudahnya, supaya persetujuan tidak menjalankan aksi yang
+        # sudah dihentikan.
+        if approved_by:
+            self.recheck(action)
+
         # Baris log ditulis sebelum aksi dikirim. Kalau log tidak bisa
         # ditulis, self.log mengakhiri tugas dan klien tidak pernah dipanggil.
         self.log(action, decision, approved_by)
-        result = self.from_client(self.client.run, tool, dict(args), self.journal.seq)
+        result = self.from_client(self.client.run, tool, dict(args), self.journal.seq, normalize_host(action.host))
         ok = isinstance(result, Observation) and result.ok is True
         self.log(action, decision, approved_by, "ok" if ok else "failed")
 
@@ -354,9 +392,19 @@ class Run:
 
         text = result.text if isinstance(result.text, str) else ""
         self.page = result
+        self.repairs = 0
+
+        # Klik atau pengalihan bisa membawa tab ke situs di luar lingkup.
+        # Faktanya disimpan untuk menilai aksi berikutnya, tetapi isinya
+        # tidak diberikan ke model. Untuk membacanya, model harus memakai
+        # tab_read, dan itu meminta persetujuan pengguna untuk situs tersebut.
+        if result.host is not None and not self.inside(result.host):
+            self.observation = ""
+            self.history.append(Step(tool, decision.outcome, decision.reason, "outside_scope"))
+            return
+
         self.observation = wrap(result.source, text)
         self.untrusted.append(text)
-        self.repairs = 0
         self.history.append(Step(tool, decision.outcome, decision.reason, "ok"))
 
         # Isi yang memuat perintah untuk AI: sisa tugas berjalan di "Tanya dulu".
@@ -388,6 +436,35 @@ class Run:
 
         return decision
 
+    def recheck(self, action):
+        """Hentikan tugas kalau stop ditekan, klien hilang, atau waktu habis selama dialog."""
+
+        reason = over_limit(0, self.started, self.clock(), 0)
+
+        if reason:
+            raise End("failed", reason)
+
+        self.decide(action)
+
+    def prompt(self, tool, args, action, decision, widens, from_page):
+        """Isi dialog untuk satu aksi. Semuanya dari argumen dan fakta klien."""
+
+        host = normalize_host(action.host)
+        typed = TYPING.get(tool)
+
+        return ConfirmPrompt(
+            tool, target_of(action), decision.level, decision.reason, widens, from_page,
+            url=args.get("url"),
+            ref=args.get("ref"),
+            # Di serah terima pengguna mengisi sendiri, jadi teks dari model tidak ditampilkan.
+            text=args[typed][:MAX_PREVIEW] if typed and decision.outcome == "confirm" else None,
+            lookalike=lookalike_of(host, self.scope.hosts) if host else None,
+        )
+
+    def inside(self, host):
+        host = normalize_host(host)
+        return host is not None and match_allowed(host, self.scope.hosts) is not None
+
     def log(self, action, decision, approved_by=None, result=None):
         if not self.journal.record(action, decision, self.clock(), approved_by, result):
             raise End("failed", "log_error")
@@ -408,12 +485,19 @@ class Run:
         return ", ".join(sorted(new)) or None
 
     def seen_url(self, url):
-        url = url.rstrip(".,;:!?").casefold()
+        """Benar kalau alamat ini muncul di isi tidak tepercaya dan tidak disebut pengguna."""
 
-        if url in urls_in(self.instruction):
+        found = LINK_RE.search(url)
+
+        if not found:
             return False
 
-        return any(url in urls_in(text) for text in self.untrusted)
+        key = link_key(*found.groups())
+
+        if key in link_keys(self.instruction):
+            return False
+
+        return any(key in link_keys(text) for text in self.untrusted)
 
     def seen_text(self, value):
         value = value.casefold()

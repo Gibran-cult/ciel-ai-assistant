@@ -81,7 +81,7 @@ Fase ini dikerjakan dalam tiga rencana, supaya bagian yang tidak butuh server se
 | 2B, layanan, perangkat, tiket, WebSocket, adaptor model, kontainer | 2.1, 2.2, 2.3 (tabel `agent_devices`), 2.5 sampai 2.9, 2.23, 2.24 | Belum ditulis. Menunggu VPS dan tiga keputusan pemilik yang tercatat di akhir rencana 2A |
 | 2C, halaman log, perangkat dan izin di Pengaturan, Hapus akun, `consent_events` | 2.19 sampai 2.22 | Belum ditulis. Perubahan UI, menunggu cek pemilik di browser |
 
-Catatan dari 2A untuk 2B: tugas yang gagal ditutup barisnya tetap berstatus `running` dan mengunci akun dari tugas baru. Layanan butuh pembersih yang menutup tugas berumur lebih dari 15 menit.
+Catatan dari 2A untuk 2B: tugas yang gagal ditutup barisnya tetap berstatus `running` dan mengunci akun dari tugas baru. Layanan butuh pembersih tugas macet. Syarat pembersih itu dan gerbang lain dari tinjauan cabang 2A ada di bagian "Gerbang untuk rencana 2B" di [rencana 2A](plans/2026-11-15-agent-loop-core.md).
 
 | No | Task | Berkas | Cara mengecek |
 |---|---|---|---|
@@ -96,7 +96,7 @@ Catatan dari 2A untuk 2B: tugas yang gagal ditutup barisnya tetap berstatus `run
 | 2.9 | Endpoint WebSocket dengan pemeriksaan asal dan token | `agent_api/ws.py`, `tests/test_agent_ws.py` | Sambungan tanpa token atau dari asal lain ditolak |
 | 2.10 | Antarmuka model dengan model tiruan untuk uji | `agent_api/model.py`, `tests/test_agent_model.py` | Model tiruan mengembalikan aksi sesuai naskah uji |
 | 2.11 | Amplop data untuk isi tidak tepercaya | `agent_api/envelope.py`, `tests/test_agent_envelope.py` | Isi halaman tidak pernah masuk saluran instruksi |
-| 2.12 | Skema argumen setiap tool. Keluaran model dijadikan aksi lewat `guard.risk.action_from` | `agent_api/tools.py`, `tests/test_agent_tools.py` | Argumen di luar skema ditolak sebelum sampai ke klien, dan aksi dengan kolom yang tidak dikenal diblokir |
+| 2.12 | Skema argumen setiap tool. Keluaran model diikat ke aksi guard oleh `agent_api.tools.bind` memakai fakta dari klien | `agent_api/tools.py`, `tests/test_agent_tools.py` | Argumen di luar skema ditolak sebelum sampai ke klien, dan aksi dengan kolom yang tidak dikenal diblokir |
 | 2.13 | Loop agent: rencana, lingkup, satu aksi per putaran, `guard.decide` di setiap aksi | `agent_api/loop.py`, `tests/test_agent_loop.py` | Aksi R2 tidak dikirim tanpa konfirmasi, R3 tidak pernah dikirim |
 | 2.14 | Batas langkah dan waktu per tugas | `agent_api/loop.py` | Tugas berhenti di langkah ke-41 |
 | 2.15 | Stop di server: tugas dibatalkan dan aksi berikutnya ditolak | `agent_api/loop.py` | Uji stop di tengah tugas |
