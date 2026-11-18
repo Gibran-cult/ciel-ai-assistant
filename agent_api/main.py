@@ -65,7 +65,7 @@ def create_app(settings, *, store, models, google, clock, missing=()):
     @asynccontextmanager
     async def lifespan(app):
         # Pembersih tugas macet berjalan selama proses hidup.
-        sweeper = asyncio.create_task(runner.sweep_forever()) if settings is not None else None
+        sweeper = asyncio.create_task(runner.maintain_forever(settings.chain_key, clock)) if settings is not None else None
         yield
 
         if sweeper is not None:

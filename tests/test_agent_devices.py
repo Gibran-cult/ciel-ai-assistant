@@ -338,6 +338,28 @@ class DeviceTokenTest(unittest.TestCase):
         self.assertEqual(self.devices(tokens).status_code, 401)
 
 
+class AgentConsentLoginTest(unittest.TestCase):
+    """Rencana 2C, keputusan D15: login perangkat butuh persetujuan agent."""
+
+    def test_login_without_agent_consent_creates_no_code(self):
+        service = Service()
+        service.store.consent[ALICE] = False
+        _, back = service.device_code()
+        self.assertEqual(back.status_code, 302)
+        self.assertTrue(back.headers["location"].startswith(EXT_REDIRECT + "?"))
+        params = query(back.headers["location"])
+        self.assertEqual(params, {"error": "consent_required", "state": "s1"})
+        self.assertEqual(service.store.tokens, {})
+
+    def test_unreadable_consent_is_refused(self):
+        service = Service()
+        service.store.fail.add("agent_consent")
+        _, back = service.device_code()
+        self.assertEqual(back.status_code, 503)
+        self.assertNotIn("location", back.headers)
+        self.assertEqual(service.store.tokens, {})
+
+
 class RefreshLimitTest(unittest.TestCase):
     def test_refresh_is_limited_per_account_not_per_address(self):
         service = Service()
@@ -350,6 +372,16 @@ class RefreshLimitTest(unittest.TestCase):
         service.store.full = "agent-refresh:" + ALICE
         response = service.client.post("/v1/device/refresh", json={"refresh_token": response.json()["refresh_token"]})
         self.assertEqual(response.status_code, 429)
+
+class ConsentAfterLoginTest(unittest.TestCase):
+    def test_a_code_cannot_be_traded_after_consent_is_withdrawn(self):
+        service = Service()
+        verifier, back = service.device_code()
+        code = query(back.headers["location"])["code"]
+        service.store.consent[ALICE] = False
+        response = service.client.post("/v1/device/token", json={"code": code, "verifier": verifier, "name": "Chrome", "platform": "extension"})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(service.store.load_devices(ALICE), [])
 
 if __name__ == "__main__":
     unittest.main()

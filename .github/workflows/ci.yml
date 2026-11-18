@@ -153,6 +153,8 @@ jobs:
             tests.test_agent_journal \
             tests.test_agent_loop \
             tests.test_agent_redteam \
+            tests.test_agent_log \
+            tests.test_agent_settings_app \
             tests.test_ci_coverage
 
       # Node that comes with the runner (no extra setup): the Edge Function's
@@ -199,6 +201,7 @@ jobs:
           python -m unittest -v \
             tests.test_agent_api_health \
             tests.test_agent_tickets \
+            tests.test_agent_maintenance \
             tests.test_agent_smoke \
             tests.test_agent_access \
             tests.test_agent_ws \

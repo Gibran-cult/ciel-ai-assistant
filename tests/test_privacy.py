@@ -1,4 +1,5 @@
 import ast
+from agent_consent import AGENT_CONSENT_VERSION
 import json
 import os
 import sys
@@ -195,7 +196,7 @@ class AppDataControlsTest(unittest.TestCase):
             self.assertEqual(self.namespace("")["delete_server_chat_history"](), {"ok": False, "error": "login_required"})
         get.assert_not_called()
 
-    def account_namespace(self, failing=()):
+    def account_namespace(self, failing=(), agent=False, consent=False):
         import logging
         from types import SimpleNamespace
         from unittest.mock import Mock
@@ -209,7 +210,10 @@ class AppDataControlsTest(unittest.TestCase):
 
         self.st = SimpleNamespace(session_state=Session(chats={"c1": {}}, projects={"p1": {}}, profile={"nickname": "Raka"},
                                                         consented=(ALICE, "v")), logout=Mock())
-        self.store = Mock(delete_account=Mock(return_value="database" not in failing))
+        self.store = Mock(delete_account=Mock(return_value="database" not in failing),
+                          delete_agent_data=Mock(return_value="agent" not in failing),
+                          agent_consent=Mock(return_value=consent),
+                          record_consent_event=Mock(return_value="withdraw" not in failing))
         self.calls = []
 
         def memory_admin(action, **kwargs):
@@ -220,8 +224,39 @@ class AppDataControlsTest(unittest.TestCase):
             ("delete_my_account",),
             st=self.st, CHAT_STORE=self.store, chat_owner=lambda: ALICE, memory_admin=memory_admin,
             delete_server_chat_history=lambda: result("history"), logger=logging.getLogger("test_privacy"),
-            clean_profile=lambda raw: {"cleared": True}, new_chat=lambda: None,
+            clean_profile=lambda raw: {"cleared": True}, new_chat=lambda: None, AGENT_WEB_ENABLED=agent,
+            AGENT_CONSENT_VERSION=AGENT_CONSENT_VERSION,
         )
+
+    def test_delete_account_removes_agent_data_when_the_agent_is_on(self):
+        self.account_namespace(agent=True)["delete_my_account"]()
+        self.store.delete_agent_data.assert_called_once_with(ALICE)
+        self.st.logout.assert_called_once()
+
+    def test_a_failed_agent_delete_keeps_the_user_signed_in(self):
+        self.account_namespace(failing={"agent"}, agent=True)["delete_my_account"]()
+        self.st.logout.assert_not_called()
+        self.assertIn("data agent", self.st.session_state["data_notice"][1])
+
+    def test_agent_data_is_deleted_even_when_the_tab_is_off(self):
+        # Mematikan AGENT_WEB_ENABLED adalah rollback tampilan. Data agent
+        # pengguna yang pernah memakainya tetap ikut terhapus.
+        self.account_namespace()["delete_my_account"]()
+        self.store.delete_agent_data.assert_called_once_with(ALICE)
+        self.st.logout.assert_called_once()
+
+    def test_deleting_the_account_withdraws_a_live_agent_consent_first(self):
+        self.account_namespace(consent=True)["delete_my_account"]()
+        self.store.record_consent_event.assert_called_once_with(ALICE, "agent", {"accepted": False}, AGENT_CONSENT_VERSION)
+        self.store.delete_agent_data.assert_called_once_with(ALICE)
+
+        self.account_namespace(consent=False)["delete_my_account"]()
+        self.store.record_consent_event.assert_not_called()
+
+    def test_a_failed_withdrawal_keeps_the_user_signed_in(self):
+        self.account_namespace(consent=True, failing={"withdraw"})["delete_my_account"]()
+        self.st.logout.assert_not_called()
+        self.assertIn("data agent", self.st.session_state["data_notice"][1])
 
     def test_delete_account_logs_out_only_when_everything_is_gone(self):
         self.account_namespace()["delete_my_account"]()

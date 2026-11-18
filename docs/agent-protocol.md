@@ -13,6 +13,7 @@ Setiap pemasangan ekstensi atau desktop adalah satu perangkat. Login memakai aku
    - `redirect` harus persis salah satu alamat terdaftar di server (`AGENT_DEVICE_REDIRECTS`). Ekstensi memakai `https://<id-ekstensi>.chromiumapp.org/` lewat `chrome.identity.launchWebAuthFlow`. Desktop memakai skema sendiri, misalnya `ciel://auth`.
    - `state` adalah teks acak klien (1 sampai 128 karakter `A-Z a-z 0-9 . _ ~ -`), untuk dicocokkan saat kembali.
 3. Pengguna login di Google. Server kembali ke `redirect?code=cdc1...&state=<state klien>`. Kode berlaku 60 detik dan hanya sekali pakai.
+   Kalau akun itu belum mengaktifkan agent di Pengaturan > Agent di web, server kembali ke `redirect?error=consent_required&state=<state klien>` tanpa kode. Klien menampilkan ajakan untuk mengaktifkan agent di web, lalu login lagi. Persetujuan dicek lagi saat kode ditukar di `/v1/device/token` (403 `consent_required`).
 4. Klien menukar kode: `POST /v1/device/token` dengan JSON `{"code", "verifier", "name", "platform"}`. `name` 1 sampai 60 karakter, `platform` `extension` atau `desktop`. Jawabannya `{"device", "access_token", "refresh_token", "expires_in": 900}`.
 5. Token akses berlaku 15 menit. Sebelum habis, klien memanggil `POST /v1/device/refresh` dengan `{"refresh_token"}` dan menerima pasangan baru. Token pembaruan hanya bisa dipakai sekali. Kalau token lama dipakai lagi, perangkat itu dicabut.
 
@@ -38,7 +39,7 @@ Token tidak pernah dikirim di URL. Pesan pertama harus `hello` dalam 10 detik.
 | Arah | `type` | Kunci lain (persis) | Balasan |
 |---|---|---|---|
 | Klien | `hello` | `token`, `client` (`extension` atau `desktop`), `version` (`x.y.z`) | `ready` dengan `device` |
-| Klien | `start` | `instruction` (1 sampai 2.000 karakter) | Tugas dimulai. Kalau sudah ada tugas berjalan: `end` dengan status `refused`, alasan `busy`. Kalau agent sedang dimatikan atau plafon biaya harian terlewati: `end` dengan status `refused`, alasan `agent_off` atau `cost_cap`. Token dan perangkat diperiksa lagi di setiap `start`: token kedaluwarsa atau perangkat yang dicabut menutup koneksi dengan 4401 |
+| Klien | `start` | `instruction` (1 sampai 2.000 karakter) | Tugas dimulai. Kalau sudah ada tugas berjalan: `end` dengan status `refused`, alasan `busy`. Kalau agent sedang dimatikan atau plafon biaya harian terlewati: `end` dengan status `refused`, alasan `agent_off` atau `cost_cap`. Kalau persetujuan agent sudah ditarik atau versinya naik: `end` dengan status `refused`, alasan `consent_required`. Token dan perangkat diperiksa lagi di setiap `start`: token kedaluwarsa atau perangkat yang dicabut menutup koneksi dengan 4401 |
 | Server | `plan` | `id`, `steps`, `scope` | `answer` dengan `id` dan `value`: `"ask"`, `"auto"`, atau `null` untuk menolak |
 | Server | `confirm` | `id`, `prompt` | `answer` dengan `value` `true` atau `false` |
 | Server | `handover` | `id`, `prompt` | `answer` dengan `value` `true` (pengguna sudah mengerjakannya sendiri) atau `false` |

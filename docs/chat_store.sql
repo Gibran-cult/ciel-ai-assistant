@@ -455,3 +455,126 @@ end;
 $$;
 
 revoke execute on function public.ciel_agent_revoke_device(text, text) from public, anon, authenticated;
+
+-- Ciel Agent di web, rencana 2C. Masa simpan log per akun (30 atau 90 hari).
+create table if not exists public.agent_settings (
+    owner text primary key,
+    log_days integer not null default 30 check (log_days in (30, 90)),
+    updated_at timestamptz not null default now()
+);
+
+alter table public.agent_settings enable row level security;
+
+-- Hasil pemeriksaan rantai log per tugas, diisi layanan agent di VPS
+-- (keputusan D14: kunci rantai tidak pernah keluar dari VPS).
+alter table public.agent_tasks add column if not exists chain_status text
+    check (chain_status in ('ok', 'broken', 'extra', 'missing'));
+alter table public.agent_tasks add column if not exists chain_checked_at timestamptz;
+
+create index if not exists consent_events_owner_kind on public.consent_events (owner, kind, created_at);
+
+-- Menarik persetujuan agent: semua perangkat dicabut dan tokennya dibuang.
+create or replace function public.ciel_agent_withdraw(p_owner text)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    revoked integer;
+begin
+    update public.agent_devices set revoked_at = now() where owner = p_owner and revoked_at is null;
+    get diagnostics revoked = row_count;
+    delete from public.agent_device_tokens where owner = p_owner;
+    return revoked;
+end;
+$$;
+
+revoke execute on function public.ciel_agent_withdraw(text) from public, anon, authenticated;
+
+-- Hapus akun: semua data agent pemilik ini dalam satu transaksi. Riwayat
+-- consent_events sengaja tidak ikut, sama dengan consents.
+create or replace function public.ciel_agent_delete_owner(p_owner text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    delete from public.agent_device_tokens where owner = p_owner;
+    delete from public.agent_devices where owner = p_owner;
+    delete from public.agent_actions where owner = p_owner;
+    delete from public.agent_tasks where owner = p_owner;
+    delete from public.agent_settings where owner = p_owner;
+    delete from public.spend_limits where owner = p_owner;
+    delete from public.purchase_confirmations where owner = p_owner;
+    return true;
+end;
+$$;
+
+revoke execute on function public.ciel_agent_delete_owner(text) from public, anon, authenticated;
+
+-- Masa simpan log: tugas yang sudah selesai dan lognya, lebih tua dari
+-- pilihan pemiliknya (bawaan 30 hari). Tugas yang masih berjalan tidak disentuh.
+create or replace function public.ciel_agent_retention()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    removed integer;
+begin
+    -- Baris log yang tugasnya sudah tidak ada (ditulis sebelum aturan
+    -- agent_actions_task_fk berlaku) juga dibuang.
+    delete from public.agent_actions a
+     where not exists (select 1 from public.agent_tasks t where t.owner = a.owner and t.id = a.task);
+
+    with expired as (
+        select t.owner, t.id
+          from public.agent_tasks t
+          left join public.agent_settings s on s.owner = t.owner
+         where t.status not in ('planning', 'running')
+           and t.created_at < now() - make_interval(days => coalesce(s.log_days, 30))
+    ), expired_actions as (
+        delete from public.agent_actions a using expired e where a.owner = e.owner and a.task = e.id
+    )
+    delete from public.agent_tasks t using expired e where t.owner = e.owner and t.id = e.id;
+    get diagnostics removed = row_count;
+    return removed;
+end;
+$$;
+
+revoke execute on function public.ciel_agent_retention() from public, anon, authenticated;
+
+-- Tugas yang perlu diperiksa rantainya: sudah selesai, dan belum pernah
+-- atau sudah lama tidak diperiksa.
+create or replace function public.ciel_agent_tasks_to_check(p_before timestamptz, p_limit integer)
+returns table (owner text, id text, head_hash text)
+language sql
+security definer
+set search_path = public
+as $$
+    select t.owner, t.id, t.head_hash
+      from public.agent_tasks t
+     where t.status not in ('planning', 'running')
+       and (t.chain_checked_at is null or t.chain_checked_at < p_before)
+     order by t.created_at
+     limit p_limit;
+$$;
+
+revoke execute on function public.ciel_agent_tasks_to_check(timestamptz, integer) from public, anon, authenticated;
+
+-- Baris log hanya boleh ada untuk tugas yang masih ada. Tanpa aturan ini,
+-- aksi yang sedang berjalan saat Hapus akun bisa menulis satu atau dua baris
+-- lagi setelah tugasnya terhapus, dan baris itu tersisa selamanya. Tidak
+-- divalidasi untuk baris lama; masa simpan membuang baris lama yang yatim.
+do $$
+begin
+    if not exists (select 1 from pg_constraint where conname = 'agent_actions_task_fk') then
+        alter table public.agent_actions
+            add constraint agent_actions_task_fk
+            foreign key (owner, task) references public.agent_tasks (owner, id) on delete cascade not valid;
+    end if;
+end;
+$$;

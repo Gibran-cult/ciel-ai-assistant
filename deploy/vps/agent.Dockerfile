@@ -18,6 +18,7 @@ COPY guard ./guard
 COPY chat_store.py ./
 COPY account_settings.py ./
 COPY account_ids.py ./
+COPY agent_consent.py ./
 
 USER ciel
 

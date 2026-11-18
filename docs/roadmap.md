@@ -79,7 +79,7 @@ Fase ini dikerjakan dalam tiga rencana, supaya bagian yang tidak butuh server se
 |---|---|---|
 | 2A, inti loop sebagai pustaka `agent_api/` ([rencana](plans/2026-11-15-agent-loop-core.md)) | 2.3 (tabel `agent_tasks`), 2.4, 2.10 sampai 2.18 | Selesai 15 November 2026. Tanpa dependensi baru dan tanpa VPS |
 | 2B, layanan, perangkat, tiket, WebSocket, adaptor model, kontainer | 2.1, 2.2, 2.3 (tabel `agent_devices`), 2.5 sampai 2.9, 2.23, 2.24 | Kode selesai 18 November 2026 ([rencana](plans/2026-11-18-agent-service.md)), keputusan D11 sampai D13. Deploy ke VPS menunggu langkah pemilik di akhir rencana. Tool `search` dan memori dipindah ke Fase 3 |
-| 2C, halaman log, perangkat dan izin di Pengaturan, Hapus akun, `consent_events` | 2.19 sampai 2.22 | Belum ditulis. Perubahan UI, menunggu cek pemilik di browser |
+| 2C, halaman log, perangkat dan izin di Pengaturan, Hapus akun, `consent_events` | 2.19 sampai 2.22 | Kode selesai 18 November 2026 ([rencana](plans/2026-11-18-agent-web.md)), keputusan D14 sampai D16, tab Agent sudah dicek pemilik di browser. Menyala di web setelah SQL 2C dijalankan dan `AGENT_WEB_ENABLED` diisi |
 
 Gerbang dari tinjauan cabang 2A, termasuk pembersih tugas macet, dikerjakan di rencana 2B (Task 2, 3, dan 8). Kontrak untuk klien ada di [agent-protocol.md](agent-protocol.md).
 
@@ -103,10 +103,10 @@ Gerbang dari tinjauan cabang 2A, termasuk pembersih tugas macet, dikerjakan di r
 | 2.16 | Penulisan log ke `agent_actions` lewat `guard.audit`, memakai kunci rantai dari secrets server. Hash catatan terakhir disimpan per tugas di `agent_tasks` | `agent_api/store.py` | `verify_chain` dengan `key` dan `head` utuh setelah satu tugas, dan catatan terakhir yang dihapus ketahuan |
 | 2.17 | Rate limit agent per akun dan per paket | `agent_api/limits.py`, `tests/test_agent_limits.py` | Tugas kedua yang bersamaan ditolak |
 | 2.18 | Plafon biaya harian dan sakelar mati fitur agent | `agent_api/limits.py` | Tugas baru ditolak saat sakelar mati |
-| 2.19 | Halaman log aktivitas di web | `agent_log.py`, `tests/test_agent_log_app.py` | Baris tampil dengan waktu, risiko, aksi, target, hasil |
-| 2.20 | Pengaturan > Perangkat dan Izin agent di web | `account_settings.py`, `tests/test_settings_app.py` | Cabut perangkat dari web bekerja |
-| 2.21 | Hapus akun ikut menghapus tabel agent | `chat_store.py`, `tests/test_chat_store.py` | Setelah hapus akun, tabel agent kosong untuk pemilik itu |
-| 2.22 | Tabel `consent_events` dipakai untuk aktivasi agent dan penarikan | `chat_store.py`, `tests/test_consent_app.py` | Baris baru tercatat saat setuju dan saat menarik |
+| 2.19 | Halaman log aktivitas di web (tab Agent di Pengaturan) | `agent_log.py`, `app.py`, `tests/test_agent_log.py`, `tests/test_agent_settings_app.py` | Baris tampil dengan waktu, risiko, aksi, target, hasil |
+| 2.20 | Pengaturan > Agent: perangkat, persetujuan, dan masa simpan log | `account_settings.py`, `app.py`, `tests/test_agent_settings_app.py` | Cabut perangkat dari web bekerja |
+| 2.21 | Hapus akun ikut menghapus tabel agent | `chat_store.py`, `app.py`, `tests/test_chat_store.py`, `tests/test_privacy.py` | Setelah hapus akun, tabel agent kosong untuk pemilik itu |
+| 2.22 | Tabel `consent_events` dipakai untuk aktivasi agent dan penarikan | `chat_store.py`, `agent_consent.py`, `tests/test_chat_store.py`, `tests/test_agent_settings_app.py` | Baris baru tercatat saat setuju dan saat menarik |
 | 2.23 | Kontainer dan entri di `deploy/vps/docker-compose.yml`, subdomain di Caddy | `deploy/vps/` | `tests/test_vps_deploy.py` |
 | 2.24 | Environment staging dengan kunci terpisah | `deploy/vps/`, `docs/cicd-quality.md` | Uji asap di staging lulus |
 

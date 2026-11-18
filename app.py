@@ -32,6 +32,7 @@ from account_settings import (
     export_chats_json,
     profile_context,
     settings_tab,
+    visible_tabs,
 )
 from answer_blocks import Broken, Markdown, Quiz, Visual, parse_answer, tidy_math
 from answer_cache import AnswerCache, cacheable_question, question_key
@@ -39,6 +40,13 @@ from answer_pdf import answer_pdf, answer_png, document_title, wants_document
 from beranda import greeting, has_riset_map, latest_riset, relative_time, templates_for
 from chat_sources import answer_parts, count_line, source_buttons_html, source_label, summarize
 from account_ids import owner_from_subject
+from agent_consent import AGENT_CONSENT_VERSION, LOG_DAYS
+from agent_log import CHAIN_TEXT, filter_lines, pair_rows
+from agent_log import describe as describe_log_row
+from agent_log import export_csv as export_log_csv
+from agent_log import when as log_when
+from guard.limits import JAKARTA as AGENT_TZ
+from datetime import datetime
 from chat_store import ChatStore
 from login import render_consent, render_login
 from payments import (
@@ -1667,6 +1675,10 @@ CHAT_STORE = (
     else None
 )
 
+# Opsional: tab Agent di Pengaturan (rencana 2C). Hanya "1" yang menyalakannya,
+# dan hanya setelah bagian SQL agent di docs/chat_store.sql dijalankan.
+AGENT_WEB_ENABLED = get_config("AGENT_WEB_ENABLED") == "1" and CHAT_STORE is not None
+
 # Opsional: flow "Ciel Riset Skripsi" (Pro). Fitur hanya tampil jika flow ini
 # dan penyimpanan Supabase (tempat status Pro) sama-sama aktif; menghapus
 # secret ini adalah rollback-nya. App mengirim tanggal terbit minimum sumber
@@ -3107,6 +3119,19 @@ def delete_my_account():
         ("dataset", memory_admin("delete_all_datasets").get("ok")),
         ("chat, proyek, dan profil", database_ok),
     )
+
+    # Data agent selalu ikut dihapus, juga saat tab Agent dimatikan lagi
+    # (rollback tampilan). Kalau SQL agent belum dipasang, tidak ada yang
+    # dihapus dan langkah ini tetap berhasil. Persetujuan agent yang masih
+    # berlaku ditarik dulu, supaya akun yang sama tidak langsung aktif lagi
+    # kalau masuk kembali.
+    owner = chat_owner()
+    withdrawn = True
+
+    if CHAT_STORE.agent_consent(owner) is True:
+        withdrawn = CHAT_STORE.record_consent_event(owner, "agent", {"accepted": False}, AGENT_CONSENT_VERSION)
+
+    steps += (("data agent", withdrawn and CHAT_STORE.delete_agent_data(owner)),)
     left = [name for name, ok in steps if not ok]
 
     if left:
@@ -3726,7 +3751,7 @@ def open_settings_from_url():
     page = current_page()
 
     if page in ("settings", "pricing", "privacy", "terms"):
-        st.session_state.settings_open = settings_tab(page, st.query_params.get("tab"), logged_in())
+        st.session_state.settings_open = settings_tab(page, st.query_params.get("tab"), logged_in(), agent=AGENT_WEB_ENABLED)
         st.query_params.pop("page", None)
         st.query_params.pop("tab", None)
 
@@ -5814,6 +5839,213 @@ def render_theme_settings():
     st.html(THEME_CHOICE_HTML, width="content")
 
 
+# Pengaturan > Agent (rencana 2C, keputusan D15 dan D16) -------------------
+
+# Draf [PERLU DICEK]: teks persetujuan agent belum ditinjau ahli hukum.
+AGENT_CONSENT_TEXT = (
+    "Saat agent aktif, perangkat yang kamu hubungkan (ekstensi atau aplikasi desktop) bisa menjalankan tugas yang "
+    "kamu setujui. Agent membaca isi halaman atau jendela yang dikerjakan, mengirim teks itu ke penyedia model AI "
+    "untuk menentukan langkah berikutnya, dan mencatat setiap aksinya di log aktivitas di bawah. Isi halaman tidak "
+    "disimpan. Agent tidak pernah membaca atau mengetik kata sandi, OTP, PIN, atau nomor kartu, dan tidak membayar "
+    "apa pun. Kamu bisa mematikan agent kapan saja; semua perangkat langsung dicabut."
+)
+PLATFORM_TEXT = {"extension": "Ekstensi browser", "desktop": "Aplikasi desktop"}
+MARKDOWN_SPECIAL = re.compile(r"([\\`*_{}\[\]()#+\-.!|<>~])")
+
+
+def plain_label(text):
+    """Teks untuk label Streamlit (yang membaca Markdown) supaya tampil apa adanya."""
+
+    return MARKDOWN_SPECIAL.sub(r"\\\1", text)
+
+
+def settings_section(title, text):
+    st.markdown(
+        '<div class="ciel-settings-head">'
+        f"<h2>{html.escape(title)}</h2>"
+        f"<p>{html.escape(text)}</p>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def agent_notice(ok, done, failed):
+    st.session_state.agent_notice = ("success", done) if ok else ("error", failed)
+
+
+def activate_agent():
+    ok = CHAT_STORE.record_consent_event(chat_owner(), "agent", {"accepted": True}, AGENT_CONSENT_VERSION)
+    agent_notice(ok, "Agent aktif. Sekarang kamu bisa menghubungkan ekstensi atau aplikasi desktop.",
+                 "Agent belum bisa diaktifkan. Coba lagi.")
+
+
+def withdraw_agent():
+    # Penarikan dicatat dulu, baru perangkat dicabut, supaya buktinya ada
+    # walau pencabutan perlu diulang.
+    owner = chat_owner()
+    recorded = CHAT_STORE.record_consent_event(owner, "agent", {"accepted": False}, AGENT_CONSENT_VERSION)
+    revoked = recorded and CHAT_STORE.withdraw_agent(owner)
+    agent_notice(revoked, "Agent dimatikan dan semua perangkat sudah dicabut.",
+                 "Agent belum bisa dimatikan sepenuhnya. Coba lagi.")
+
+
+def revoke_agent_device(device):
+    ok = CHAT_STORE.revoke_agent_device(chat_owner(), device)
+    agent_notice(ok, "Perangkat dicabut.", "Perangkat belum bisa dicabut. Coba lagi.")
+
+
+def save_agent_log_days():
+    owner, days = chat_owner(), st.session_state.agent_log_days
+    ok = CHAT_STORE.save_agent_settings(owner, days) and CHAT_STORE.record_consent_event(
+        owner, "data_setting", {"agent_log_days": days}, AGENT_CONSENT_VERSION)
+    agent_notice(ok, f"Log aktivitas disimpan {days} hari.", "Masa simpan belum bisa diubah. Coba lagi.")
+
+
+def render_agent_settings():
+    owner = chat_owner()
+    settings_head("Agent", "Atur persetujuan agent, lihat aktivitasnya, dan kelola perangkat yang terhubung.")
+    notice = st.session_state.pop("agent_notice", None)
+
+    if notice:
+        (st.success if notice[0] == "success" else st.error)(notice[1])
+
+    consent = CHAT_STORE.agent_consent(owner)
+
+    if consent is None:
+        st.error("Status agent belum bisa dibaca. Coba lagi sebentar lagi.")
+        return
+
+    settings_section("Status", AGENT_CONSENT_TEXT)
+
+    if consent:
+        st.caption("Agent aktif.")
+        st.button("Matikan agent", key="agent_withdraw", icon=":material/power_settings_new:", on_click=withdraw_agent)
+    else:
+        devices = CHAT_STORE.load_agent_devices(owner) or []
+
+        # Penarikan yang gagal setengah jalan, atau versi persetujuan yang
+        # naik, bisa menyisakan perangkat yang belum dicabut. Pencabutannya
+        # tetap bisa diulang dari sini.
+        if any(not device.get("revoked_at") for device in devices):
+            st.warning("Agent tidak aktif, tetapi ada perangkat yang masih terhubung.")
+            st.button("Cabut semua perangkat", key="agent_revoke_all", icon=":material/link_off:", on_click=withdraw_agent)
+
+        st.checkbox("Saya mengerti dan ingin mengaktifkan agent", key="agent_consent_box")
+        st.button(
+            "Aktifkan agent",
+            key="agent_activate",
+            disabled=not st.session_state.get("agent_consent_box"),
+            on_click=activate_agent,
+        )
+
+    st.button("Baca Kebijakan Privasi", key="agent_privacy", type="tertiary", on_click=open_settings, args=("privasi",))
+    render_agent_activity(owner)
+    render_agent_devices(owner)
+
+    settings_section("Masa simpan log", "Log aktivitas selalu ada selama agent dipakai. Yang bisa kamu pilih hanya lamanya.")
+    saved = CHAT_STORE.load_agent_settings(owner) or {"log_days": LOG_DAYS[0]}
+
+    if "agent_log_days" not in st.session_state:
+        st.session_state.agent_log_days = saved["log_days"]
+
+    st.radio("Simpan log selama", LOG_DAYS, key="agent_log_days", format_func=lambda days: f"{days} hari",
+             horizontal=True, on_change=save_agent_log_days)
+
+
+def render_agent_activity(owner):
+    settings_section("Aktivitas", "Setiap aksi agent tercatat di sini. Menghapus log tidak membatalkan aksi yang sudah terjadi.")
+    tasks = CHAT_STORE.load_agent_tasks(owner)
+
+    if tasks is None:
+        st.caption("Aktivitas belum bisa dimuat. Coba lagi.")
+        return
+
+    if not tasks:
+        st.caption("Belum ada tugas.")
+        return
+
+    today = datetime.now(AGENT_TZ).date()
+    by_id = {task["id"]: task for task in tasks if isinstance(task.get("id"), str)}
+    chosen = st.selectbox(
+        "Tugas",
+        list(by_id),
+        key="agent_task",
+        format_func=lambda task_id: f"{log_when(by_id[task_id].get('created_at'), today)} · {short(str(by_id[task_id].get('instruction') or ''), 80)}",
+    )
+    task = by_id[chosen]
+    status = task.get("chain_status")
+
+    # Log yang rusak atau tidak lengkap adalah peringatan, tidak sekadar keterangan.
+    (st.warning if status in ("broken", "missing", "extra") else st.caption)(CHAIN_TEXT.get(status, CHAIN_TEXT[None]))
+    rows = CHAT_STORE.load_agent_actions(owner, chosen)
+
+    if rows is None:
+        st.caption("Log tugas ini belum bisa dimuat. Coba lagi.")
+        return
+
+    lines = [describe_log_row(row, today) for row in pair_rows(rows)]
+
+    if not lines:
+        st.caption("Tugas ini belum punya catatan aksi.")
+        return
+
+    every = "Semua"
+    devices, levels, results = (sorted({getattr(line, name) for line in lines}) for name in ("device", "level", "result"))
+    columns = st.columns(3)
+    device, level, result = (
+        column.selectbox(label, [every] + options, key=f"agent_filter_{name}")
+        for column, (label, name, options) in zip(
+            columns, (("Perangkat", "device", devices), ("Risiko", "level", levels), ("Hasil", "result", results)))
+    )
+    shown = filter_lines(lines, device=None if device == every else device, level=None if level == every else level,
+                         result=None if result == every else result)
+
+    for line in shown:
+        with st.expander(plain_label(f"{line.time}  [{line.level}]  {line.action}  {line.target}  {line.result}")):
+            st.text(f"{line.time}  [{line.level}]  {line.action}  {line.target}  {line.result}")
+
+            if line.reason:
+                st.text(line.reason)
+
+            st.text(f"Perangkat: {line.device or '-'}")
+
+    st.download_button(
+        "Unduh log (CSV)",
+        data=export_log_csv(shown).encode("utf-8"),
+        file_name=f"ciel-agent-{chosen}.csv",
+        mime="text/csv",
+        key="agent_log_csv",
+        icon=":material/download:",
+    )
+
+
+def render_agent_devices(owner):
+    settings_section("Perangkat", "Ekstensi dan aplikasi desktop yang terhubung ke akunmu. Mencabut perangkat langsung menghentikan tugasnya.")
+    devices = CHAT_STORE.load_agent_devices(owner)
+
+    if devices is None:
+        st.caption("Daftar perangkat belum bisa dimuat. Coba lagi.")
+        return
+
+    if not devices:
+        st.caption("Belum ada perangkat yang terhubung.")
+        return
+
+    today = datetime.now(AGENT_TZ).date()
+
+    for device in devices:
+        name = str(device.get("name") or "Tanpa nama")
+        kind = PLATFORM_TEXT.get(device.get("platform"), "Perangkat")
+        seen = log_when(device.get("last_seen_at"), today) if device.get("last_seen_at") else "belum pernah"
+
+        if device.get("revoked_at"):
+            st.text(f"{name} · {kind} · dicabut")
+            continue
+
+        st.text(f"{name} · {kind} · terakhir aktif {seen}")
+        st.button("Cabut", key=f"agent_revoke_{device.get('id')}", on_click=revoke_agent_device, args=(device.get("id"),))
+
+
 def render_data_settings():
     settings_head("Data saya", "Lihat, unduh, dan hapus data yang Ciel simpan untuk akunmu.")
 
@@ -5970,9 +6202,12 @@ def render_data_settings():
         )
 
         if CHAT_STORE:
+            # Daftar data yang dihapus ikut menyebut data agent hanya kalau agent web menyala.
+            deleted = "chat, proyek, profil, memory, dataset, dan data agentmu" if AGENT_WEB_ENABLED else (
+                "chat, proyek, profil, memory, dan datasetmu")
             st.markdown(
                 '<div class="ciel-settings-head"><h2>Hapus akun</h2>'
-                "<p>Semua chat, proyek, profil, memory, dan datasetmu dihapus permanen, lalu "
+                f"<p>Semua {deleted} dihapus permanen, lalu "
                 "kamu keluar. Akun Google-mu tidak terhapus. Catatan pembelian Pro tetap "
                 "disimpan 10 tahun karena kewajiban pajak, dan masa Pro yang tersisa tetap "
                 "tercatat jika kamu masuk lagi dengan akun yang sama.</p></div>",
@@ -6007,7 +6242,8 @@ def settings_dialog():
     if not st.session_state.get("settings_open"):
         st.rerun()
 
-    tab = settings_tab("settings", st.session_state.settings_open, logged_in())
+    tab = settings_tab("settings", st.session_state.settings_open, logged_in(), agent=AGENT_WEB_ENABLED)
+    shown = visible_tabs(logged_in(), AGENT_WEB_ENABLED)
 
     menu, panel = st.columns([1, 3], gap="medium")
 
@@ -6015,7 +6251,7 @@ def settings_dialog():
 
         for key, label, icon in SETTINGS_TABS:
 
-            if key in LOGIN_TABS and not logged_in():
+            if key not in shown:
                 continue
 
             st.button(
@@ -6046,6 +6282,9 @@ def render_settings_tab(tab):
 
     elif tab == "data":
         render_data_settings()
+
+    elif tab == "agent":
+        render_agent_settings()
 
     elif tab == "paket":
         render_pricing(

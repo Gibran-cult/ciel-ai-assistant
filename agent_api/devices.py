@@ -225,12 +225,26 @@ def device_router(settings, store, google, clock):
         if not owner:
             return refuse(400, "login_failed")
 
+        # Keputusan D15: perangkat baru hanya untuk akun yang sudah
+        # mengaktifkan agent di Pengaturan > Agent. Status yang tidak
+        # terbaca tidak dihitung sebagai setuju.
+        consent = store.agent_consent(owner)
+
+        if consent is None:
+            return refuse(503, "unavailable")
+
+        separator = "&" if "?" in payload["r"] else "?"
+
+        if consent is not True:
+            logger.info("device_login_without_consent owner=%s", owner)
+            return RedirectResponse(payload["r"] + separator + urlencode({"error": "consent_required", "state": payload["s"]}),
+                                    status_code=302)
+
         device_code, code_hash = new_token("code", owner)
 
         if not store.save_token(owner, code_hash, "code", iso(now() + CODE_SECONDS), challenge=payload["c"], redirect=payload["r"]):
             return refuse(503, "unavailable")
 
-        separator = "&" if "?" in payload["r"] else "?"
         return RedirectResponse(payload["r"] + separator + urlencode({"code": device_code, "state": payload["s"]}), status_code=302)
 
     @router.post("/v1/device/token")
@@ -259,6 +273,12 @@ def device_router(settings, store, google, clock):
         if (row is None or row.get("kind") != "code" or expired(row, now())
                 or not hmac.compare_digest(str(row.get("challenge")), proof)):
             return refuse(400, "invalid_grant")
+
+        # Persetujuan bisa ditarik di antara login dan penukaran kode.
+        consent = store.agent_consent(owner)
+
+        if consent is not True:
+            return refuse(503, "unavailable") if consent is None else refuse(403, "consent_required")
 
         device = secrets.token_hex(8)
 

@@ -22,6 +22,7 @@ TASK_FIELDS = frozenset({"plan", "scope", "mode", "status", "reason", "steps", "
 ACTION_LIMIT = 500
 HASH_RE = re.compile(r"[0-9a-f]{64}")
 TOKEN_KINDS = frozenset({"code", "access", "refresh"})
+CHAIN_STATUSES = frozenset({"ok", "broken", "extra", "missing"})
 PLATFORMS = frozenset({"extension", "desktop"})
 MAX_DEVICE_NAME = 60
 DEVICE_COLUMNS = "id,name,platform,created_at,last_seen_at,revoked_at"
@@ -312,6 +313,25 @@ class AgentStore(ChatStore):
             return None
 
         return rows[0] if isinstance(rows, list) and len(rows) == 1 and isinstance(rows[0], dict) else None
+
+    def tasks_to_check(self, before_iso, limit):
+        """Tugas selesai yang rantainya belum atau sudah lama tidak diperiksa (semua pemilik)."""
+
+        if not isinstance(before_iso, str) or type(limit) is not int or limit < 1:
+            return None
+
+        rows = self._rpc("tasks_to_check", "ciel_agent_tasks_to_check", {"p_before": before_iso, "p_limit": limit})
+        return rows if isinstance(rows, list) and all(isinstance(row, dict) for row in rows) else None
+
+    def save_chain_status(self, owner, task_id, status, checked_at_iso):
+        if status not in CHAIN_STATUSES or not isinstance(checked_at_iso, str):
+            return False
+
+        return self._patch_task("save_chain_status", owner, task_id, {"chain_status": status, "chain_checked_at": checked_at_iso})
+
+    def retention(self):
+        removed = self._rpc("retention", "ciel_agent_retention", {})
+        return removed if type(removed) is int and removed >= 0 else None
 
     def sweep(self, idle_seconds):
         """Jumlah tugas macet yang ditutup, atau None kalau gagal."""

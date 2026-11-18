@@ -19,15 +19,18 @@ Dijawab pada 14 November 2026. Pemilik menyetujui semua rekomendasi.
 | D9 | Password manager dan m-banking | Blokir total dan serah terima ke pengguna | Lebih ketat dari "wajib konfirmasi" di brief awal. Aplikasi dan situs itu masuk R3 dan tidak bisa diizinkan pengguna | Daftar awal aplikasi dan situs yang diblokir dilengkapi pemilik (roadmap 0.15) |
 | D10 | Urutan rilis | Ekstensi browser dulu, aplikasi desktop menyusul | Fase 3 dan 4 sebelum Fase 5 | Biaya daftar Chrome Web Store yang sekarang |
 
-## Keputusan untuk layanan agent (rencana 2B)
+## Keputusan untuk layanan agent (rencana 2B dan 2C)
 
-Dijawab pada 18 November 2026. Pemilik menyetujui ketiga rekomendasi. Opsi lengkapnya dibahas sebelum [rencana 2B](plans/2026-11-18-agent-service.md) ditulis.
+D11 sampai D13 dijawab pada 18 November 2026 sebelum [rencana 2B](plans/2026-11-18-agent-service.md) ditulis, D14 sampai D16 sebelum [rencana 2C](plans/2026-11-18-agent-web.md). Pemilik menyetujui semua rekomendasi.
 
 | ID | Keputusan | Jawaban | Akibat langsung | Yang masih harus dicek |
 |---|---|---|---|---|
 | D11 | Tanda tangan tiket aksi | Ed25519: server menandatangani dengan kunci privat, ekstensi dan desktop memeriksa dengan kunci publik | Klien tidak menyimpan rahasia. Ekstensi yang dibobol tidak bisa memalsukan tiket untuk desktop. Paket `cryptography` masuk lockfile layanan | Versi Chrome minimum untuk Ed25519 di WebCrypto [PERLU DICEK] |
 | D12 | Dependensi server | FastAPI dan Uvicorn, SDK resmi `anthropic` untuk Claude. Cadangan Gemini lewat HTTP biasa | Lockfile terpisah `requirements-agent.txt` | Daftar paket lengkapnya terlihat saat lockfile dibuat |
 | D13 | Tempat login perangkat | Login Google di layanan agent sendiri, dengan PKCE antara perangkat dan layanan | Tidak bergantung pada Streamlit. Pemilik menambah redirect URI layanan di Google Cloud Console. ID pemilik dihitung sama persis dengan app | Tidak ada |
+| D14 | Tempat rantai log diperiksa | Layanan agent di VPS memeriksa rantai log per tugas dan menyimpan hasilnya. Web hanya membaca hasil itu | `AGENT_CHAIN_KEY` tetap hanya di VPS, tidak masuk secrets Streamlit | Tidak ada |
+| D15 | Tempat persetujuan aktivasi agent | Di web, Pengaturan > Agent, tercatat di `consent_events`. Layanan menolak login perangkat sebelum ada persetujuan. Menarik persetujuan mencabut semua perangkat | Teks persetujuan masih draf | Teks persetujuan ditinjau ahli hukum [PERLU DICEK] |
+| D16 | Tempat halaman log | Tab "Agent" di dialog Pengaturan: Aktivitas, Perangkat, serta Persetujuan dan masa simpan. Hanya untuk akun yang login | Tampilan baris log dibuat bisa dibuka-tutup supaya muat di ponsel | Cek tampilan oleh pemilik di browser |
 
 ## Yang belum diputuskan dan memakai usulan sampai diubah
 
