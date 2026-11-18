@@ -119,10 +119,10 @@ Hasil pengecekan 14 dan 15 November 2026. Rincian kutipan ada di [security.md](s
 | Marketplace | Mengizinkan alat otomatis | Tanda | Dasar |
 |---|---|---|---|
 | Shopee | Tidak | Melarang | Syarat Layanan butir 3.1 dan 6.3(k): robot, spider, perangkat otomatis, dan akses dengan perangkat tidak resmi termasuk bot |
-| Tokopedia | Tidak | Melarang | Syarat dan ketentuan: dilarang memakai emulator, robot, macro, crawler, atau perangkat otomatis untuk mengakses situs. Versi di tokopedia.com/terms tidak bisa dibaca otomatis, jadi dibaca manual |
+| Tokopedia | Tidak | Melarang | Syarat dan ketentuan: dilarang memakai emulator, robot, macro, crawler, atau perangkat otomatis untuk mengakses layanan, termasuk otomatisasi dalam transaksi dan jual beli. Ringkasan dari tempelan pemilik 15 November 2026, belum dicocokkan dengan halaman aslinya [PERLU DICEK] |
 | Lazada | Belum jelas | Belum jelas | Seluruh ketentuan sudah dibaca. Tidak ada larangan bot yang eksplisit, tetapi ada larangan akses tidak sah dan mengganggu sistem (bagian 2.2 butir 3) yang bisa ditafsirkan mencakup bot |
-| Blibli | Belum jelas | Belum jelas | Halaman syarat menolak pembaca otomatis. Cuplikan: larangan mengambil isi situs secara sistematis dengan perangkat otomatis |
-| TikTok Shop | Belum jelas | Belum jelas | Syarat pembeli belum terbaca. Menurut pemberitaan, checkout-nya berjalan di sistem Tokopedia |
+| Blibli | Belum jelas | Belum jelas | Butir 2.2 melarang mengambil isi situs secara sistematis untuk menyusun koleksi atau database, dengan perangkat otomatis atau manual, tanpa izin tertulis. Akses otomatis secara umum tidak disebut. Ringkasan dari tempelan pemilik 15 November 2026 [PERLU DICEK] |
+| TikTok Shop | Belum jelas | Belum jelas | Syarat pembeli, termasuk versi Indonesia yang diterbitkan PT Tokopedia, tidak menyebut bot. Isinya larangan mengakali pembatasan teknis. Larangan bot yang eksplisit ada di syarat kreator dan disebut ada di Syarat Layanan TikTok yang umum. Ringkasan dari tempelan pemilik 15 November 2026 [PERLU DICEK] |
 
 Aturan produk yang mengikuti temuan ini:
 

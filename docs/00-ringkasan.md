@@ -4,7 +4,7 @@ Tanggal: 14 November 2026. Semua dokumen di bawah adalah draf, dan belum ada kod
 
 ## Tiga temuan yang mengubah rencana
 
-1. Syarat layanan Shopee dan Tokopedia melarang akses dengan bot atau alat otomatis. Lazada, Blibli, dan TikTok Shop belum berhasil dipastikan. Jadi "agent checkout sampai selesai" di marketplace besar belum bisa dijalankan tanpa melanggar syarat mereka. Yang bisa: Ciel mencari dan memeriksa toko resmi, menyiapkan ringkasan, lalu kamu yang membayar.
+1. Syarat layanan Shopee dan Tokopedia melarang akses dengan bot atau alat otomatis. Lazada, Blibli, dan TikTok Shop belum bisa dipastikan: syarat pembelinya tidak melarang akses otomatis secara umum, tetapi memuat larangan yang lebih sempit (mengambil isi situs, mengakses tanpa izin, mengakali pembatasan teknis) yang bisa mencakupnya. Jadi "agent checkout sampai selesai" di marketplace besar belum bisa dijalankan tanpa melanggar syarat mereka. Yang bisa: Ciel mencari dan memeriksa toko resmi, menyiapkan ringkasan, lalu kamu yang membayar.
 2. Layanan tanda tangan kode termurah untuk Windows tidak menerima developer individu dari Indonesia. Ini alasan ekstensi browser diusulkan rilis lebih dulu daripada aplikasi desktop.
 3. Isi layar pengguna jauh lebih sensitif daripada pertanyaan riset. DeepSeek bisa memakai data untuk melatih model, jadi agent diusulkan memakai penyedia lain yang punya komitmen tanpa pelatihan.
 
