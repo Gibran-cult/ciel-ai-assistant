@@ -239,5 +239,104 @@ class DeviceLoginTest(unittest.TestCase):
         self.assertEqual(self.service.start(challenge).status_code, 503)
 
 
+
+def bearer(tokens):
+    return {"Authorization": "Bearer " + tokens["access_token"]}
+
+
+class DeviceTokenTest(unittest.TestCase):
+    """Token akses, rotasi token pembaruan, dan pencabutan (Task 6)."""
+
+    def setUp(self):
+        self.service = Service()
+        self.client = self.service.client
+
+    def at(self, seconds):
+        self.service.clock.time = NOW + timedelta(seconds=seconds)
+
+    def devices(self, tokens):
+        return self.client.get("/v1/devices", headers=bearer(tokens))
+
+    def refresh(self, token):
+        return self.client.post("/v1/device/refresh", json={"refresh_token": token})
+
+    def test_access_tokens_expire_after_15_minutes(self):
+        tokens = self.service.login()
+        self.at(899)
+        self.assertEqual(self.devices(tokens).status_code, 200)
+        self.at(901)
+        self.assertEqual(self.devices(tokens).status_code, 401)
+
+    def test_requests_without_a_good_bearer_token_are_refused(self):
+        tokens = self.service.login()
+        for headers in ({}, {"Authorization": tokens["access_token"]}, {"Authorization": "Bearer " + tokens["refresh_token"]},
+                        {"Authorization": "Bearer cat1.x.y"}, {"Authorization": "Basic abc"}):
+            with self.subTest(headers=headers):
+                self.assertEqual(self.client.get("/v1/devices", headers=headers).status_code, 401)
+
+    def test_a_refresh_gives_a_new_pair_and_uses_up_the_old_token(self):
+        first = self.service.login()
+        self.at(1000)
+        response = self.refresh(first["refresh_token"])
+        self.assertEqual(response.status_code, 200)
+        second = response.json()
+        self.assertEqual(second["device"], first["device"])
+        self.assertNotEqual(second["refresh_token"], first["refresh_token"])
+        self.assertEqual(self.devices(second).status_code, 200)
+
+    def test_reusing_an_old_refresh_token_revokes_the_device(self):
+        first = self.service.login()
+        second = self.refresh(first["refresh_token"]).json()
+        self.assertEqual(self.refresh(first["refresh_token"]).status_code, 401)
+        self.assertEqual(self.devices(second).status_code, 401)
+        self.assertEqual(self.refresh(second["refresh_token"]).status_code, 401)
+        self.assertIs(self.service.store.device_active(ALICE, first["device"]), False)
+
+    def test_refresh_tokens_last_30_days(self):
+        tokens = self.service.login()
+        self.at(30 * 86400 + 1)
+        self.assertEqual(self.refresh(tokens["refresh_token"]).status_code, 401)
+
+    def test_bad_refresh_requests_are_refused(self):
+        tokens = self.service.login()
+        for body in ({}, {"refresh_token": tokens["access_token"]}, {"refresh_token": tokens["refresh_token"], "device": "x"},
+                     {"refresh_token": 7}):
+            with self.subTest(body=body):
+                self.assertIn(self.client.post("/v1/device/refresh", json=body).status_code, (400, 401))
+        self.assertEqual(self.refresh(tokens["refresh_token"]).status_code, 200)
+
+    def test_the_device_list_belongs_to_the_token_owner(self):
+        tokens = self.service.login(name="Chrome kantor")
+        listed = self.devices(tokens).json()["devices"]
+        self.assertEqual([(d["id"], d["name"], d["platform"], d["revoked"]) for d in listed],
+                         [(tokens["device"], "Chrome kantor", "extension", False)])
+        self.assertEqual(set(listed[0]), {"id", "name", "platform", "created_at", "last_seen_at", "revoked"})
+
+    def test_a_revoked_device_is_refused_on_the_next_request(self):
+        tokens = self.service.login()
+        other = self.service.login(name="Laptop", platform="desktop")
+        self.assertEqual(self.client.delete(f"/v1/devices/{tokens['device']}", headers=bearer(other)).status_code, 204)
+        self.assertEqual(self.devices(tokens).status_code, 401)
+        self.assertEqual(self.refresh(tokens["refresh_token"]).status_code, 401)
+        self.assertEqual([d["revoked"] for d in self.devices(other).json()["devices"]], [True, False])
+
+    def test_an_account_cannot_see_or_revoke_another_accounts_device(self):
+        alice, bob = self.service.login(sub="alice"), self.service.login(sub="bob")
+        self.assertEqual([d["id"] for d in self.devices(bob).json()["devices"]], [bob["device"]])
+        self.assertEqual(self.client.delete(f"/v1/devices/{alice['device']}", headers=bearer(bob)).status_code, 404)
+        self.assertEqual(self.client.delete("/v1/devices/tidak..ada", headers=bearer(bob)).status_code, 404)
+        self.assertIs(self.service.store.device_active(ALICE, alice["device"]), True)
+
+    def test_a_token_with_another_owner_inside_is_refused(self):
+        alice = self.service.login(sub="alice")
+        forged = "cat1." + owner_from_subject("bob") + "." + alice["access_token"].split(".", 2)[2]
+        self.assertEqual(self.devices({"access_token": forged}).status_code, 401)
+
+    def test_a_store_outage_refuses_instead_of_letting_through(self):
+        tokens = self.service.login()
+        self.service.store.fail.add("device_active")
+        self.assertEqual(self.devices(tokens).status_code, 401)
+
+
 if __name__ == "__main__":
     unittest.main()

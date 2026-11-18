@@ -26,12 +26,12 @@ from datetime import datetime, timezone
 from typing import Literal
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from account_ids import owner_from_subject
-from chat_store import OWNER_PATTERN
+from chat_store import OWNER_PATTERN, ROW_ID_PATTERN
 
 logger = logging.getLogger("ciel.agent_api.devices")
 
@@ -129,6 +129,36 @@ def expired(row, now):
 
 def refuse(status, error):
     return JSONResponse({"error": error}, status_code=status)
+
+
+class RefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    refresh_token: str = Field(max_length=200)
+
+
+def authenticate(store, token, now):
+    """(pemilik, perangkat) untuk token akses yang sah dan perangkat yang aktif, atau None."""
+
+    parsed = parse_token(token, "access")
+
+    if parsed is None:
+        return None
+
+    owner, hash_ = parsed
+    row = store.find_token(owner, hash_)
+
+    if row is None or row.get("kind") != "access" or expired(row, now):
+        return None
+
+    device = row.get("device")
+
+    # Status yang tidak terbaca dihitung sebagai dicabut.
+    if not isinstance(device, str) or store.device_active(owner, device) is not True:
+        return None
+
+    store.touch_device(owner, device)
+    return owner, device
 
 
 def issue_pair(store, owner, device, now):
@@ -241,5 +271,85 @@ def device_router(settings, store, google, clock):
 
         logger.info("device_registered owner=%s device=%s platform=%s", owner, device, body.platform)
         return tokens
+
+    def current_device(authorization: str = Header(default="")):
+        """Dependensi setiap endpoint perangkat: (pemilik, perangkat) dari token akses."""
+
+        scheme, _, token = authorization.partition(" ")
+        found = authenticate(store, token, now()) if scheme == "Bearer" else None
+
+        if found is None:
+            raise HTTPException(status_code=401, detail="unauthorized")
+
+        return found
+
+    @router.post("/v1/device/refresh")
+    async def refresh(request: Request):
+        limited = address_limit(request)
+
+        if limited:
+            return limited
+
+        try:
+            body = RefreshRequest.model_validate(await request.json())
+        except (ValidationError, ValueError):
+            return refuse(400, "bad_request")
+
+        parsed = parse_token(body.refresh_token, "refresh")
+
+        if parsed is None:
+            return refuse(401, "invalid_grant")
+
+        owner, hash_ = parsed
+        row = store.find_token(owner, hash_)
+
+        if row is None or row.get("kind") != "refresh" or expired(row, now()) or not isinstance(row.get("device"), str):
+            return refuse(401, "invalid_grant")
+
+        device = row["device"]
+
+        # Token pembaruan yang sudah terpakai muncul lagi: ada salinan di
+        # tangan orang lain. Semua token perangkat itu dicabut.
+        if row.get("used_at") is not None or store.use_token(owner, hash_) is None:
+            store.revoke_device(owner, device)
+            logger.warning("refresh_reuse owner=%s device=%s", owner, device)
+            return refuse(401, "invalid_grant")
+
+        if store.device_active(owner, device) is not True:
+            return refuse(401, "invalid_grant")
+
+        tokens = issue_pair(store, owner, device, now())
+        return tokens if tokens is not None else refuse(503, "unavailable")
+
+    @router.get("/v1/devices")
+    def devices(found=Depends(current_device)):
+        rows = store.load_devices(found[0])
+
+        if rows is None:
+            return refuse(503, "unavailable")
+
+        return {"devices": [
+            {"id": row.get("id"), "name": row.get("name"), "platform": row.get("platform"), "created_at": row.get("created_at"),
+             "last_seen_at": row.get("last_seen_at"), "revoked": row.get("revoked_at") is not None}
+            for row in rows
+        ]}
+
+    @router.delete("/v1/devices/{device_id}")
+    def revoke(device_id: str, found=Depends(current_device)):
+        owner = found[0]
+        rows = store.load_devices(owner)
+
+        if rows is None:
+            return refuse(503, "unavailable")
+
+        # Perangkat akun lain dijawab sama dengan perangkat yang tidak ada.
+        if not ROW_ID_PATTERN.match(device_id) or device_id not in {row.get("id") for row in rows}:
+            return refuse(404, "not_found")
+
+        if not store.revoke_device(owner, device_id):
+            return refuse(503, "unavailable")
+
+        logger.info("device_revoked owner=%s device=%s", owner, device_id)
+        return Response(status_code=204)
 
     return router
