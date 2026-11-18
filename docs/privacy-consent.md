@@ -195,7 +195,7 @@ Aturan menambah vendor: masuk tabel ini dulu, DPA atau syarat datanya dicek, hal
 ## 7. Pekerjaan yang muncul dari audit ini
 
 1. Kirim permintaan opt-out pelatihan ke DeepSeek dan tandatangani DPA Supabase (keduanya sudah tercatat belum selesai di `docs/LEGAL.md`).
-2. Buat tabel `consent_events` dan catat penarikan persetujuan.
+2. Buat tabel `consent_events` dan catat penarikan persetujuan. Untuk agent sudah dipakai sejak rencana 2C (aktivasi, penarikan, dan masa simpan log). Untuk cookie, ketentuan, dan pengguna tanpa login belum.
 3. Tambah pemberitahuan privasi untuk pengguna tanpa login.
 4. Tambah keterangan DeepSeek di dialog Edit AI.
 5. Putuskan bawaan memori jangka panjang (nyala atau mati).

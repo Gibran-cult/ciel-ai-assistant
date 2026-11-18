@@ -12,6 +12,7 @@
 - [ ] A live quality run (`python tests/collect_quality.py`) shows no regression in response quality, and failed cases are explained.
 - [ ] The agent guard and red-team tests (`tests.test_guard_*`, `tests.test_agent_*`) pass, and every new case from an incident or finding is added to `tests/redteam/`.
 - [ ] Before the Ciel Agent API is deployed for the first time: the agent sections at the end of `docs/chat_store.sql` have been run in Supabase, the owner steps at the end of `docs/plans/2026-11-18-agent-service.md` are done in order, and `AGENT_ENABLED` stays unset until the owner turns the agent on.
+- [ ] Before `AGENT_WEB_ENABLED` is set to `1` in Streamlit Cloud: every agent section at the end of `docs/chat_store.sql` (including the 2C part: `agent_settings`, chain status columns, `ciel_agent_withdraw`, `ciel_agent_delete_owner`, `ciel_agent_retention`, `ciel_agent_tasks_to_check`) has been run in Supabase, and the agent consent text has been read by a lawyer. Without the flag, Hapus akun does not touch agent tables.
 - [ ] Changes to the agent protocol keep `docs/agent-protocol.md` in step, and old clients keep working (or `AGENT_MIN_CLIENT_VERSION` is raised on purpose).
 - [ ] `CHANGELOG.md` describes the change and its measurements.
 - [ ] Changes to Privasi or Ketentuan bump `terms.LEGAL_VERSION` and the page dates; open items in `docs/LEGAL.md` are reviewed.
