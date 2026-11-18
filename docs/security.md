@@ -313,6 +313,9 @@ Ekstensi:
 - Akun developer memakai 2FA. Unggahan dilakukan dari CI dengan kredensial terpisah.
 - Penambahan izin di versi baru membuat browser meminta persetujuan ulang pengguna, jadi izin baru hanya ditambah kalau benar-benar perlu dan dijelaskan di catatan rilis.
 - Adapter toko ikut di dalam paket. Kalau tampilan marketplace berubah, verifikasi gagal dengan aman sampai versi baru terbit.
+- Tiket aksi diperiksa dengan Ed25519 bawaan WebCrypto (Chrome 137 ke atas, keputusan D19). Browser Chrome 116 sampai 136 memakai pustaka cadangan `@noble/curves` 2.4.0 dengan pemeriksaan ketat RFC 8032 (`zip215: false`). Pustaka cadangan hanya dipakai kalau WebCrypto menjawab `NotSupportedError`; galat lain membuat tiket ditolak. Audit independen `@noble/curves`: Trail of Bits (2023 dan Agustus 2026), Kudelski (September 2023), Cure53 (September 2024). Versi persis yang dicakup audit terbaru [PERLU DICEK].
+- Manifest tidak punya izin host tetap. Izin situs diminta per situs dari klik pengguna di panel, dan layanan agent mengizinkan CORS hanya untuk origin ekstensi yang terdaftar.
+- Build uji ujung ke ujung (`npm run build:e2e`, folder `dist-e2e`) memakai kunci manifest tetap dan izin untuk `toko.test`. Build rilis (`dist`) tidak pernah memuat keduanya, dan uji manifest memeriksanya.
 
 ## 11. Audit OWASP Top 10
 

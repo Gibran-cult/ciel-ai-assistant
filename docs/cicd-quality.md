@@ -41,13 +41,16 @@ Aturan yang dipertahankan: setiap berkas uji baru masuk daftar di `ci.yml`, urut
 | Tahap | Isi | Menahan merge |
 |---|---|---|
 | Lint dan cek tipe | ESLint dan `tsc` | Ya |
-| Uji unit | Pembaca halaman, adapter toko, pemeriksa izin lokal | Ya |
-| Uji adapter | Adapter dijalankan pada halaman tiruan yang meniru penanda label resmi dan versi tanpa label | Ya |
-| Uji ujung ke ujung | Browser otomatis memuat ekstensi dan situs toko tiruan lokal | Ya |
-| Aksesibilitas | Pemeriksa otomatis untuk side panel dan dialog | Ya |
-| Keamanan | `npm audit`, pemeriksaan manifest: tidak ada izin di luar daftar yang disetujui, tidak ada kode jarak jauh | Ya |
-| Bangun | Paket zip dengan nomor versi dari tag | Ya |
-| Terbit | Unggah ke Chrome Web Store dari CI (bagian 6) | Persetujuan manual |
+| Uji unit | Vitest: tiket, login, pembaca halaman, penyaring rahasia, pelaksana aksi, runner, panel | Ya |
+| Vektor bersama | `tests/test_extension_vectors.py` di job `agent-service`: vektor tiket, rahasia, daftar blokir, dan teks log sama dengan kode Python | Ya |
+| Uji adapter toko | Belum ada, menunggu Fase 4 | Nanti |
+| Uji ujung ke ujung | Job `e2e`: layanan agent sungguhan (`tools/agent_e2e_server.py`) dan toko tiruan, Chromium headless dengan build e2e | Ya |
+| Aksesibilitas | axe-core untuk setiap keadaan panel, tema terang dan gelap | Ya |
+| Keamanan | `npm audit --omit=dev --audit-level=high` menahan merge, audit penuh dicetak tanpa menahan; uji manifest: izin persis, tanpa izin host tetap, CSP ketat | Ya |
+| Bangun | `npm run build`, folder `dist` diunggah sebagai artefak selama 14 hari | Ya |
+| Terbit | Unggah ke Chrome Web Store dari CI (bagian 6) | Persetujuan manual, rencana 3B |
+
+Workflow `.github/workflows/extension.yml` hanya jalan kalau `extension/`, `guard/`, `agent_api/`, atau `tools/export_extension_vectors.py` berubah.
 
 ### Aplikasi desktop (Rust dan TypeScript, kalau D1 memilih Tauri)
 
@@ -165,8 +168,8 @@ Setiap rollback dicatat di `CHANGELOG.md` dengan penyebabnya.
 ## 9. Yang perlu dibuat
 
 1. Alat lint Python di CI (sekarang belum ada).
-2. Workflow terpisah untuk ekstensi dan desktop, dipicu hanya oleh perubahan di folder masing-masing.
+2. Workflow terpisah untuk desktop. Workflow ekstensi sudah ada (`extension.yml`).
 3. Lingkungan terlindung di GitHub untuk rahasia tanda tangan dan penerbitan.
 4. Environment staging.
-5. Kumpulan red-team dan situs toko tiruan.
+5. Kumpulan red-team dengan model sungguhan (rencana 3B). Situs toko tiruan untuk uji ujung ke ujung sudah ada di `extension/tests/e2e/shop/`.
 6. Butir agent di `RELEASE_CHECKLIST.md`.

@@ -30,6 +30,8 @@ Endpoint lain dengan `Authorization: Bearer <token akses>`:
 
 Login, callback, token, dan refresh dibatasi 10 permintaan per 10 menit per alamat IP (429).
 
+Endpoint HTTP mengirim header CORS hanya untuk origin yang terdaftar di `AGENT_WS_ORIGINS`, tanpa cookie. Ekstensi tidak punya izin host tetap untuk layanan ini, jadi tanpa header itu browser tidak membiarkan jawabannya terbaca.
+
 ## 2. WebSocket
 
 `wss://<host>/v1/ws`. Kalau klien mengirim header `Origin`, nilainya harus persis salah satu `AGENT_WS_ORIGINS` (ekstensi: `chrome-extension://<id>`). Klien tanpa `Origin` (desktop) diterima, karena autentikasinya dari token.
@@ -87,3 +89,9 @@ Batas waktu menunggu balasan: rencana dan pertanyaan 300 detik, konfirmasi dan s
 - Isi dialog, pertanyaan, dan laporan ditampilkan sebagai teks biasa, tanpa tautan atau gambar aktif.
 - Stop bekerja di perangkat dulu: klien mengosongkan antrean dan melepas kontrol tanpa menunggu server, lalu mengirim `stop`.
 - Kolom kata sandi, kartu, dan pembayaran tidak pernah dibaca atau diisi klien, apa pun isi tiketnya.
+
+## 5. Klien acuan
+
+Ekstensi di `extension/` adalah klien acuan untuk protokol ini: `src/tickets.ts` memeriksa tiket dengan vektor yang dibuat dari `agent_api/tickets.py`, `src/socket.ts` menangani koneksi dan sambung ulang, `src/runner.ts` memeriksa tiket, host tab, daftar blokir, dan izin situs sebelum setiap aksi, dan `src/content/reader.ts` membuat `observation`. Kontrol di teks halaman ditulis `[ref N: ...]`.
+
+Batas sekarang: `start` tidak membawa halaman, jadi layanan baru tahu halaman setelah aksi pertama melaporkannya. Tugas harus dimulai dengan `tab_open`; `tab_read` di tab yang sedang terbuka diblokir `no_page`. Perbaikannya task 3.27 di [roadmap.md](roadmap.md).

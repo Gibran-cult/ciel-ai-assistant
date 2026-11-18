@@ -116,6 +116,8 @@ Kriteria selesai: klien tiruan di uji bisa menjalankan satu tugas dari awal samp
 
 Fase ini dikerjakan dalam dua rencana. 3A ([rencana](plans/2026-11-18-extension-core.md), ditulis 18 November 2026 setelah keputusan D17 sampai D19) berisi task 3.1 sampai 3.17, 3.19 sampai 3.21, dan 3.23, dan bisa diuji di laptop. 3B berisi 3.22 dan 3.24 sampai 3.26, dan butuh VPS, staging, akun Chrome Web Store, dan tinjauan ahli hukum. Task 3.18 dipindah ke rencana sesudah 3B, karena layanan 2B belum bisa melanjutkan tugas setelah koneksi putus.
 
+Status 3A: kode selesai 18 November 2026. Panel, banner, dan badge sudah dicek pemilik di browser. Uji ujung ke ujung menjalankan ekstensi melawan layanan agent sungguhan dengan model bernaskah, dan dari situ ketemu perbaikan di luar rencana: layanan sekarang mengirim header CORS untuk origin ekstensi, jawaban `/v1/ticket-keys` dibaca dengan benar, dan klik yang membuat halaman pindah tidak lagi dilaporkan gagal. Beberapa hal berbeda dari tabel di bawah: serah terima ada di `extension/src/stop.ts` bersama Stop dan jeda (tidak ada `handover.ts`), izin situs dicek di `extension/src/runner.ts`, dan sorotan elemen di preview (3.14) belum dibuat. Task 3.27 ditambahkan dari temuan uji ujung ke ujung.
+
 Tujuan: agent bisa membaca halaman, mengisi form, dan mengelola tab di situs yang diizinkan, dengan stop, indikator, dan konfirmasi yang lengkap. Fitur pembelian belum ada.
 
 | No | Task | Berkas | Cara mengecek |
@@ -146,6 +148,7 @@ Tujuan: agent bisa membaca halaman, mengisi form, dan mengelola tab di situs yan
 | 3.24 | Halaman toko: deskripsi, tangkapan layar, kebijakan privasi, formulir praktik data | Chrome Web Store | Checklist `docs/business-ethics.md` bagian 6 |
 | 3.25 | Terbitkan ke penguji | Chrome Web Store | Penguji bisa memasang |
 | 3.26 | Aktifkan dokumen legal agent dan naikkan `LEGAL_VERSION` | `terms.py`, `privacy.py` | Pengguna diminta setuju lagi sekali |
+| 3.27 | Pesan `start` membawa bacaan tab aktif, supaya agent bisa bekerja di halaman yang sedang dibuka tanpa `tab_open` dulu | `agent_api/ws.py`, `agent_api/loop.py`, `extension/src/controller.ts`, `docs/agent-protocol.md` | Tugas yang dimulai dengan `tab_read` di tab aktif tidak diblokir `no_page` |
 
 Kriteria selesai: beta tertutup dengan [ISI: jumlah] penguji selama minimal dua minggu, nol insiden aksi tanpa persetujuan, uji keyboard dan pembaca layar lulus, dan dokumen legal agent sudah ditinjau ahli hukum.
 
