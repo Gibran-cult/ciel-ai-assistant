@@ -47,13 +47,33 @@ export const test = base.extend<{ context: BrowserContext; agent: Agent }>({
     await context.close();
     rmSync(profile, { recursive: true, force: true });
   },
-  agent: async ({ context }, use) => {
+  agent: async ({ context }, use, testInfo) => {
+    const logs: string[] = [];
+    context.on("console", (message) => logs.push(`[page ${message.type()}] ${message.text()}`));
+    for (const sw of context.serviceWorkers()) {
+      (sw as unknown as { on(event: string, listener: (message: { type(): string; text(): string }) => void): void })
+        .on("console", (message) => logs.push(`[worker ${message.type()}] ${message.text()}`));
+    }
     const panel = await context.newPage();
     await panel.goto(`chrome-extension://${EXTENSION_ID}/panel/index.html`);
     // Sudah masuk, dan pemberitahuan koneksi hilang setelah WebSocket siap.
     await panel.getByText("Siap").waitFor();
     await expect(panel.locator(".notice")).toHaveCount(0, { timeout: 20_000 });
     await use(new Agent(context, panel));
+
+    // Bukti kalau uji gagal: log aksi di layanan, isi panel, konsol, dan tangkapan layar setiap tab.
+    if (testInfo.status !== testInfo.expectedStatus) {
+      const actions = await (await fetch(`${API}/test/actions`)).text().catch(() => "?");
+      const panelText = await panel.locator("body").innerText().catch(() => "?");
+      const pages = context.pages().map((page) => page.url());
+      await testInfo.attach("diagnostics", {
+        body: JSON.stringify({ actions, panelText, pages, logs }, null, 2), contentType: "application/json",
+      });
+      console.log("E2E-DIAGNOSTICS", JSON.stringify({ actions, panelText, pages, logs: logs.slice(-30) }));
+      for (const [index, page] of context.pages().entries()) {
+        await page.screenshot({ path: testInfo.outputPath(`tab-${index}.png`) }).catch(() => undefined);
+      }
+    }
   },
 });
 
