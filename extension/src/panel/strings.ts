@@ -15,6 +15,7 @@ export const TEXT = {
   signOut: "Keluar",
   commandLabel: "Apa yang perlu Ciel kerjakan di tab ini?",
   commandHint: "Ciel menunjukkan rencananya dulu sebelum mulai.",
+  tabUnreadable: "Ciel belum bisa melihat alamat tab ini, jadi tugas dimulai tanpa membaca halaman ini. Klik ikon Ciel di toolbar saat tab ini terbuka, lalu tekan Mulai.",
   start: "Mulai",
   edit: "Ubah",
   stop: "Stop",

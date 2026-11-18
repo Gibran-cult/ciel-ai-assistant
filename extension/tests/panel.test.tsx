@@ -175,3 +175,21 @@ test("review: a refused origin says what to do instead of 'koneksi putus'", () =
   show({ connection: "origin_refused" });
   expect(screen.getByText("Layanan menolak ekstensi ini. Pasang ulang ekstensi dari Chrome Web Store.")).toBeTruthy();
 });
+
+test("review: Mulai never asks for permission on a blocked site", async () => {
+  const { send, requestPermission } = show({}, { id: 7, url: "https://ib.klikbca.com/login" });
+  fireEvent.change(screen.getByLabelText("Apa yang perlu Ciel kerjakan di tab ini?"), { target: { value: "Cek saldo" } });
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Mulai" })));
+  expect(requestPermission).not.toHaveBeenCalled();
+  expect(send).toHaveBeenCalledWith({ type: "start", instruction: "Cek saldo", tabId: 7 });
+});
+
+test("review: a tab whose address Ciel cannot see says the task starts without that page", () => {
+  show({}, { id: 7 });
+  expect(screen.getByText(/Ciel belum bisa melihat alamat tab ini/)).toBeTruthy();
+});
+
+test("review: no such note when the tab can be read", () => {
+  show();
+  expect(screen.queryByText(/Ciel belum bisa melihat alamat tab ini/)).toBeNull();
+});
