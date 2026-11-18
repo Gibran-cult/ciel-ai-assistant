@@ -195,7 +195,7 @@ class AppDataControlsTest(unittest.TestCase):
             self.assertEqual(self.namespace("")["delete_server_chat_history"](), {"ok": False, "error": "login_required"})
         get.assert_not_called()
 
-    def account_namespace(self, failing=()):
+    def account_namespace(self, failing=(), agent=False):
         import logging
         from types import SimpleNamespace
         from unittest.mock import Mock
@@ -209,7 +209,8 @@ class AppDataControlsTest(unittest.TestCase):
 
         self.st = SimpleNamespace(session_state=Session(chats={"c1": {}}, projects={"p1": {}}, profile={"nickname": "Raka"},
                                                         consented=(ALICE, "v")), logout=Mock())
-        self.store = Mock(delete_account=Mock(return_value="database" not in failing))
+        self.store = Mock(delete_account=Mock(return_value="database" not in failing),
+                          delete_agent_data=Mock(return_value="agent" not in failing))
         self.calls = []
 
         def memory_admin(action, **kwargs):
@@ -220,8 +221,25 @@ class AppDataControlsTest(unittest.TestCase):
             ("delete_my_account",),
             st=self.st, CHAT_STORE=self.store, chat_owner=lambda: ALICE, memory_admin=memory_admin,
             delete_server_chat_history=lambda: result("history"), logger=logging.getLogger("test_privacy"),
-            clean_profile=lambda raw: {"cleared": True}, new_chat=lambda: None,
+            clean_profile=lambda raw: {"cleared": True}, new_chat=lambda: None, AGENT_WEB_ENABLED=agent,
         )
+
+    def test_delete_account_removes_agent_data_when_the_agent_is_on(self):
+        self.account_namespace(agent=True)["delete_my_account"]()
+        self.store.delete_agent_data.assert_called_once_with(ALICE)
+        self.st.logout.assert_called_once()
+
+    def test_a_failed_agent_delete_keeps_the_user_signed_in(self):
+        self.account_namespace(failing={"agent"}, agent=True)["delete_my_account"]()
+        self.st.logout.assert_not_called()
+        self.assertIn("data agent", self.st.session_state["data_notice"][1])
+
+    def test_without_the_agent_its_tables_are_not_touched(self):
+        # Tanpa AGENT_WEB_ENABLED, SQL agent mungkin belum dijalankan di Supabase:
+        # memanggil fungsinya akan gagal dan Hapus akun tidak bisa selesai.
+        self.account_namespace()["delete_my_account"]()
+        self.store.delete_agent_data.assert_not_called()
+        self.st.logout.assert_called_once()
 
     def test_delete_account_logs_out_only_when_everything_is_gone(self):
         self.account_namespace()["delete_my_account"]()

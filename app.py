@@ -1667,6 +1667,10 @@ CHAT_STORE = (
     else None
 )
 
+# Opsional: tab Agent di Pengaturan (rencana 2C). Hanya "1" yang menyalakannya,
+# dan hanya setelah bagian SQL agent di docs/chat_store.sql dijalankan.
+AGENT_WEB_ENABLED = get_config("AGENT_WEB_ENABLED") == "1" and CHAT_STORE is not None
+
 # Opsional: flow "Ciel Riset Skripsi" (Pro). Fitur hanya tampil jika flow ini
 # dan penyimpanan Supabase (tempat status Pro) sama-sama aktif; menghapus
 # secret ini adalah rollback-nya. App mengirim tanggal terbit minimum sumber
@@ -3107,6 +3111,11 @@ def delete_my_account():
         ("dataset", memory_admin("delete_all_datasets").get("ok")),
         ("chat, proyek, dan profil", database_ok),
     )
+
+    # Data agent hanya ada (dan fungsi penghapusnya hanya terpasang) kalau
+    # agent web sudah dinyalakan; lihat RELEASE_CHECKLIST.md.
+    if AGENT_WEB_ENABLED:
+        steps += (("data agent", CHAT_STORE.delete_agent_data(chat_owner())),)
     left = [name for name, ok in steps if not ok]
 
     if left:
@@ -5970,9 +5979,12 @@ def render_data_settings():
         )
 
         if CHAT_STORE:
+            # Daftar data yang dihapus ikut menyebut data agent hanya kalau agent web menyala.
+            deleted = "chat, proyek, profil, memory, dataset, dan data agentmu" if AGENT_WEB_ENABLED else (
+                "chat, proyek, profil, memory, dan datasetmu")
             st.markdown(
                 '<div class="ciel-settings-head"><h2>Hapus akun</h2>'
-                "<p>Semua chat, proyek, profil, memory, dan datasetmu dihapus permanen, lalu "
+                f"<p>Semua {deleted} dihapus permanen, lalu "
                 "kamu keluar. Akun Google-mu tidak terhapus. Catatan pembelian Pro tetap "
                 "disimpan 10 tahun karena kewajiban pajak, dan masa Pro yang tersisa tetap "
                 "tercatat jika kamu masuk lagi dengan akun yang sama.</p></div>",
