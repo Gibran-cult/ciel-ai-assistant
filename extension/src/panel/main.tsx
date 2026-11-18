@@ -1,8 +1,9 @@
 import { createRoot } from "react-dom/client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { PanelCommand, PanelState } from "../controller";
 import { ensurePermission } from "../permissions";
 import { App } from "./App";
+import { useKeepalive } from "./keepalive";
 import "./panel.css";
 
 const INITIAL: PanelState = {
@@ -39,7 +40,8 @@ function Root() {
     };
   }, []);
 
-  const send = (command: PanelCommand) => port?.postMessage(command);
+  const send = useCallback((command: PanelCommand) => port?.postMessage(command), [port]);
+  useKeepalive(state.phase !== "idle", send);
 
   const activeTab = async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

@@ -25,6 +25,7 @@ const BIG_CHANGE = 20;
 const SECRET_AUTOCOMPLETE = /^(cc-.+|current-password|new-password|one-time-code)$/;
 const SECRET_PREFIXES = ["pass", "pwd", "otp", "cvv", "cvc", "card", "sandi", "kartu"];
 const SECRET_WORDS = new Set(["pin", "mpin"]);
+const SECRET_LABEL = /\b(otp|cvv|cvc|pin|mpin|password|passcode|sandi|kata sandi|nomor kartu|no\.? kartu|card number|kode verifikasi|verification code|security code|kode keamanan)\b/;
 
 // Efek tombol, diperiksa berurutan. "pay" tidak pernah dijalankan agent.
 const EFFECTS: [string, RegExp][] = [
@@ -35,9 +36,18 @@ const EFFECTS: [string, RegExp][] = [
   ["download", /\b(unduh|download)\b/],
 ];
 
-class PageRefs {
-  generation = 0;
-  private refs = new Map<number, WeakRef<Element>>();
+// Generation dimulai dari angka acak per halaman, supaya nomor dari halaman
+// lain (misalnya halaman yang kembali lewat tombol Back) tidak pernah cocok.
+function randomStart(): number {
+  const [high, low] = crypto.getRandomValues(new Uint32Array(2));
+  return (high! % 2 ** 20) * 2 ** 32 + low! + 1;
+}
+
+export class PageRefs {
+  generation = randomStart();
+  /** Nama acak dokumen ini. Halaman baru (setelah navigasi) punya nama lain. */
+  readonly documentId = [...crypto.getRandomValues(new Uint8Array(8))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  private refs = new Map<number, { element: WeakRef<Element>; signature: string }>();
   private changed = 0;
   private url = "";
   private observer: MutationObserver | null = null;
@@ -50,10 +60,15 @@ class PageRefs {
     this.watch(doc);
   }
 
-  add(element: Element): number {
+  add(element: Element, signature: string): number {
     const ref = this.refs.size + 1;
-    this.refs.set(ref, new WeakRef(element));
+    this.refs.set(ref, { element: new WeakRef(element), signature });
     return ref;
+  }
+
+  /** Rupa kontrol saat dibaca (penanda dan faktanya), untuk dibandingkan saat aksi. */
+  signature(ref: number): string | null {
+    return this.refs.get(ref)?.signature ?? null;
   }
 
   keep(refs: Set<number>): void {
@@ -65,7 +80,7 @@ class PageRefs {
     const doc = this.watched;
     if (doc && (doc.location?.href ?? "") !== this.url) this.invalidate();
 
-    const element = this.refs.get(ref)?.deref();
+    const element = this.refs.get(ref)?.element.deref();
     return element && element.isConnected ? element : null;
   }
 
@@ -86,6 +101,11 @@ class PageRefs {
       if (this.changed > BIG_CHANGE && this.refs.size > 0) this.invalidate();
     });
     this.observer.observe(doc, { childList: true, subtree: true });
+
+    // Halaman dari back-forward cache: isinya bisa sudah berbeda dari bacaan terakhir.
+    doc.defaultView?.addEventListener("pageshow", (event) => {
+      if ((event as PageTransitionEvent).persisted) this.invalidate();
+    });
   }
 }
 
@@ -111,7 +131,19 @@ export function isSecretField(element: Element): boolean {
   if (autocomplete.some((token) => SECRET_AUTOCOMPLETE.test(token))) return true;
 
   const named = words(`${element.getAttribute("name") ?? ""} ${element.id}`);
-  return named.some((word) => SECRET_WORDS.has(word) || SECRET_PREFIXES.some((prefix) => word.startsWith(prefix)));
+  if (named.some((word) => SECRET_WORDS.has(word) || SECRET_PREFIXES.some((prefix) => word.startsWith(prefix)))) return true;
+
+  // Label yang terlihat juga dihitung: "Kode OTP" di kolom name="code".
+  const labels = [...((element as HTMLInputElement).labels ?? [])].map(plainText);
+  const said = [element.getAttribute("aria-label"), element.getAttribute("placeholder"), element.getAttribute("title"), ...labels]
+    .join(" ").toLowerCase();
+  if (SECRET_LABEL.test(said)) return true;
+
+  // Kotak angka pendek (OTP, PIN) walau tanpa nama yang jelas.
+  const input = element as HTMLInputElement;
+  const maxLength = Number(element.getAttribute("maxlength"));
+  return element.getAttribute("inputmode") === "numeric" && ["text", "tel", "password"].includes(input.type)
+    && maxLength >= 4 && maxLength <= 8;
 }
 
 // Teks di dalam elemen, tanpa isi kontrol lain (opsi pilihan, nilai kolom).
@@ -195,6 +227,22 @@ export function kindOf(element: Element): Kind | null {
 interface Described {
   marker: string;
   control: Control;
+}
+
+function sign(described: Described): string {
+  const { field_type, submits, effect } = described.control;
+  return JSON.stringify([described.marker, field_type, submits, effect]);
+}
+
+/** Rupa kontrol ini sekarang, dengan aturan yang sama seperti saat dibaca. */
+export function signatureOf(element: Element): string | null {
+  const kind = kindOf(element);
+  return kind === null ? null : sign(describe(element, kind));
+}
+
+/** Efek kontrol ini sekarang ("pay", "cart_add", ...), atau null. */
+export function effectNow(element: Element): string | null {
+  return effectOf(element, clip(labelOf(element), MAX_LABEL));
 }
 
 function describe(element: Element, kind: Kind): Described {
@@ -326,14 +374,15 @@ class Reader {
   }
 
   control(element: Element, kind: Kind): void {
-    const { marker, control } = describe(element, kind);
+    const described = describe(element, kind);
+    const { marker, control } = described;
 
     if (isDisabled(element)) {
       this.emit(` [${marker} nonaktif] `);
       return;
     }
 
-    const ref = pageRefs.add(element);
+    const ref = pageRefs.add(element, sign(described));
     this.controls.set(ref, control);
     this.emit(` [ref ${ref}: ${marker}] `);
   }
@@ -377,10 +426,13 @@ export function readPage(doc: Document = document, maxChars = 20_000): Observati
 export interface Reading {
   observation: Observation;
   generation: number;
+  document: string;
+  /** Aksi memulai navigasi: halaman ini sedang ditinggalkan dan belum dibaca. */
+  navigating?: boolean;
 }
 
 /** Bacaan halaman beserta generation-nya. Generation tidak dikirim ke server (kunci di luar protokol). */
 export function observe(doc: Document = document, maxChars = 20_000): Reading {
   const observation = readPage(doc, maxChars);
-  return { observation, generation: pageRefs.generation };
+  return { observation, generation: pageRefs.generation, document: pageRefs.documentId };
 }

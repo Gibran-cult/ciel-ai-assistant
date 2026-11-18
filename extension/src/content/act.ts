@@ -3,7 +3,7 @@
 // sini dicek ulang pada elemen yang hidup saat aksi dijalankan, bukan pada
 // hasil bacaan sebelumnya: halaman bisa berubah di antara keduanya.
 import type { Observation } from "../shared/protocol";
-import { isSecretField, kindOf, observe, pageRefs, type Reading, squash } from "./reader";
+import { effectNow, isSecretField, kindOf, observe, pageRefs, type Reading, signatureOf, squash } from "./reader";
 import { findSecrets } from "./redact";
 
 // Jenis kolom yang boleh diketik. Sama dengan HARMLESS_FIELDS di guard/risk.py
@@ -19,7 +19,42 @@ type Args = Record<string, unknown>;
 
 function refused(text: string, doc: Document): Reading {
   const observation: Observation = { ok: false, source: "page", text, host: doc.location?.hostname || null, controls: {} };
-  return { observation, generation: pageRefs.generation };
+  return { observation, generation: pageRefs.generation, document: pageRefs.documentId };
+}
+
+interface NavigationWatch {
+  started: boolean;
+  promise: Promise<void>;
+  stop(): void;
+}
+
+// Dipasang sebelum aksi, karena event navigate terjadi di dalam klik itu sendiri.
+// Halaman yang ditinggalkan bisa hidup beberapa ratus milidetik lagi sampai
+// jawaban server tiba; membacanya memberi halaman yang salah.
+function watchNavigation(doc: Document): NavigationWatch {
+  const view = (doc.defaultView ?? window) as Window & { navigation?: EventTarget };
+  let resolve!: () => void;
+  const watch: NavigationWatch = {
+    started: false,
+    promise: new Promise<void>((done) => (resolve = done)),
+    stop() {
+      view.navigation?.removeEventListener("navigate", onNavigate);
+      view.removeEventListener("beforeunload", onLeave);
+    },
+  };
+
+  function onLeave() {
+    watch.started = true;
+    resolve();
+  }
+
+  function onNavigate(event: Event) {
+    if (!(event as Event & { destination?: { sameDocument?: boolean } }).destination?.sameDocument) onLeave();
+  }
+
+  view.navigation?.addEventListener("navigate", onNavigate);
+  view.addEventListener("beforeunload", onLeave);
+  return watch;
 }
 
 // Tunggu sampai tidak ada perubahan DOM selama sepertiga waktu tunggu, paling lama settleMs.
@@ -53,6 +88,13 @@ function element(args: Args, generation: number): Element | string {
   return found ?? "Kontrol itu sudah tidak ada di halaman. Baca ulang dulu.";
 }
 
+function paysWhenPressed(target: Element): boolean {
+  if (effectNow(target) === "pay") return true;
+  const form = (target as HTMLInputElement).form;
+  if (!form) return false;
+  return [...form.querySelectorAll("button, input[type=submit], input[type=image]")].some((button) => effectNow(button) === "pay");
+}
+
 function show(target: Element): void {
   if (typeof target.scrollIntoView === "function") target.scrollIntoView({ block: "center", inline: "nearest" });
 }
@@ -84,6 +126,14 @@ function run(tool: string, args: Args, generation: number, doc: Document): strin
 
   const kind = kindOf(target);
   if (kind === null) return "Elemen itu bukan kontrol.";
+  // Kontrol yang teks, jenis, atau efeknya berubah sejak dibaca bukan kontrol yang dinilai guard.
+  if (signatureOf(target) !== pageRefs.signature(args.ref as number)) {
+    return "Kontrol itu sudah berubah sejak dibaca. Baca ulang dulu.";
+  }
+  // Ciel tidak pernah membayar: tombol bayar, atau formulir yang dikirim lewat tombol bayar.
+  if ((tool === "tab_click" || tool === "form_submit") && paysWhenPressed(target)) {
+    return "Ciel tidak pernah menekan tombol bayar. Kamu yang membayar sendiri.";
+  }
   // Kolom rahasia diisi sendiri oleh pengguna, apa pun isi tiketnya.
   if ((kind === "field" || kind === "select" || kind === "textarea") && isSecretField(target)) {
     return "Kolom ini meminta data rahasia, jadi kamu yang mengisinya sendiri.";
@@ -136,6 +186,7 @@ function run(tool: string, args: Args, generation: number, doc: Document): strin
 export async function act(tool: string, args: Args, generation: number, options: ActOptions = {},
   doc: Document = document): Promise<Reading> {
   let problem: string | null;
+  const navigation = watchNavigation(doc);
 
   try {
     problem = run(tool, args, generation, doc);
@@ -143,7 +194,18 @@ export async function act(tool: string, args: Args, generation: number, options:
     problem = "Aksi gagal dijalankan di halaman.";
   }
 
-  if (problem !== null) return refused(problem, doc);
-  await settle(doc, options.settleMs ?? 600);
+  if (problem !== null) {
+    navigation.stop();
+    return refused(problem, doc);
+  }
+
+  if (!navigation.started) await Promise.race([settle(doc, options.settleMs ?? 600), navigation.promise]);
+  navigation.stop();
+
+  if (navigation.started) {
+    const leaving: Observation = { ok: true, source: "page", text: "", host: doc.location?.hostname || null, controls: {} };
+    return { observation: leaving, generation: pageRefs.generation, document: pageRefs.documentId, navigating: true };
+  }
+
   return observe(doc);
 }

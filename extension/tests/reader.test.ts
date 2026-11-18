@@ -120,3 +120,37 @@ test("a removed element is not resolved, and a new read starts a new generation"
   readPage(document);
   expect(pageRefs.generation).toBeGreaterThan(generation);
 });
+
+test("review: a field that is secret only by its label, aria-label or placeholder is never read", () => {
+  document.documentElement.innerHTML = `<body>
+    <label>Kode OTP <input type="tel" name="code" value="482913"></label>
+    <input type="text" name="security_code" placeholder="CVV" value="123">
+    <input type="text" aria-label="Kata sandi" name="field1" value="tebakku99">
+    <label>Nomor kartu <input type="text" name="nomor" value="5555"></label>
+    <input type="text" inputmode="numeric" maxlength="6" name="kode" value="771100">
+    <label>Jumlah <input type="number" name="qty" value="2"></label>
+    <label>Kode pos <input type="text" name="zip" value="40115"></label>
+  </body>`;
+  const seen = readPage(document);
+  for (const value of ["482913", "123", "tebakku99", "5555", "771100"]) expect(seen.text).not.toContain(value);
+  expect(Object.values(seen.controls).filter((control) => control.field_type === "password")).toHaveLength(5);
+  expect(seen.text).toContain("40115");
+  expect(seen.controls[refOf(seen.text, "Jumlah")]!.field_type).toBe("number");
+});
+
+test("review: each page starts its generations at its own random number", async () => {
+  const { PageRefs } = await import("../src/content/reader");
+  const a = new PageRefs();
+  const b = new PageRefs();
+  expect(a.generation).not.toBe(b.generation);
+  expect(Number.isSafeInteger(a.generation)).toBe(true);
+});
+
+test("review: a page restored from the back-forward cache drops its refs", () => {
+  const seen = load("shop.html");
+  const cart = refOf(seen.text, "Tambah ke Keranjang");
+  const event = new Event("pageshow");
+  Object.defineProperty(event, "persisted", { value: true });
+  window.dispatchEvent(event);
+  expect(pageRefs.resolve(cart)).toBeNull();
+});

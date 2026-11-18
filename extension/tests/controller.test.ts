@@ -196,3 +196,35 @@ test("after Stop the stopped banner stays when the server confirms the end", asy
   controller.onServer({ type: "end", status: "stopped", reason: "stop", steps: 1, report: "" });
   expect(deps.banner).not.toHaveBeenCalledWith(7, null);
 });
+
+test("review: a dropped connection ends the task here too, and held actions never run", async () => {
+  const { controller, deps, last } = setup();
+  await controller.init();
+  await controller.command({ type: "start", instruction: "x", tabId: 7 });
+  controller.onTakeover(7);
+  controller.onServer({ type: "action", ticket: { task: "t1", seq: 3 }, kid: "k", sig: "s" });
+  controller.onServer({ type: "confirm", id: 2, prompt: { tool: "tab_click" } });
+
+  controller.onSocketState("closed");
+  expect(last()).toMatchObject({ phase: "idle", dialog: null, ended: { status: "failed", reason: "client_gone" } });
+  expect(deps.banner).toHaveBeenLastCalledWith(7, null);
+  await controller.command({ type: "resume" });
+  await controller.session.idle();
+  expect(deps.runner.onAction).not.toHaveBeenCalled();
+});
+
+test("review: a drop after Stop keeps the stopped result", async () => {
+  const { controller, last } = setup();
+  await controller.init();
+  await controller.command({ type: "start", instruction: "x", tabId: 7 });
+  await controller.command({ type: "stop" });
+  controller.onSocketState("closed");
+  expect(last()).toMatchObject({ phase: "idle", ended: { status: "stopped", reason: "stop" } });
+});
+
+test("review: a drop with no task changes nothing but the connection", async () => {
+  const { controller, last } = setup();
+  await controller.init();
+  controller.onSocketState("connecting");
+  expect(last()).toMatchObject({ phase: "idle", ended: null, connection: "connecting" });
+});

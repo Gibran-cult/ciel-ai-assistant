@@ -287,3 +287,70 @@ test("a null result after acting means the page navigated away", async () => {
   await runner.onAction(sign({ tool: "form_submit" }));
   expect(result).toHaveBeenCalledWith("t1", 3, reading.observation);
 });
+
+test("review: after a navigation the runner waits for a different document", async () => {
+  const old = { observation: { ok: true, source: "page", text: "Keranjang", host: "shopee.co.id", controls: {} }, generation: 5, document: "aaaa" };
+  const next = { observation: { ok: true, source: "page", text: "Pengiriman", host: "shopee.co.id", controls: {} }, generation: 9, document: "bbbb" };
+  const answers: unknown[] = [old, { ...old, navigating: true }, old, old, next];
+  const executeScript = vi.fn(async (details: { files?: string[] }): Promise<{ result?: unknown }[]> =>
+    details.files ? [{ result: undefined }] : [{ result: answers.shift() }]);
+  const result = vi.fn(() => true);
+  const runner = new Runner({
+    keys: async () => KEYS, device: async () => "d1", now: () => NOW,
+    tabs: { get: vi.fn(async () => ({ id: 1, windowId: 9, url: "https://shopee.co.id/" })), create: vi.fn(), remove: vi.fn() },
+    scripting: { executeScript }, hasPermission: async () => true, waitForLoad: async () => undefined, result,
+    needPermission: vi.fn(), pause: async () => undefined,
+  });
+  runner.begin(1);
+  await runner.onAction(sign({ seq: 3, tool: "tab_read", args: {} }));
+  await runner.onAction(sign({ seq: 4 }));
+  expect(result.mock.calls[1]).toEqual(["t1", 4, next.observation]);
+});
+
+test("review: Stop during the checks of an action means the action never runs", async () => {
+  let release!: (keys: unknown) => void;
+  const keys = vi.fn(() => new Promise((done) => (release = done)));
+  const executeScript = vi.fn();
+  const result = vi.fn(() => true);
+  const runner = new Runner({
+    keys, device: async () => "d1", now: () => NOW,
+    tabs: { get: vi.fn(async () => ({ id: 1, windowId: 9, url: "https://shopee.co.id/" })), create: vi.fn(), remove: vi.fn() },
+    scripting: { executeScript }, hasPermission: async () => true, waitForLoad: async () => undefined, result,
+    needPermission: vi.fn(), pause: async () => undefined,
+  });
+  runner.begin(1);
+  const pending = runner.onAction(sign());
+  await new Promise((done) => setTimeout(done, 0));
+  runner.end();
+  release(KEYS);
+  await pending;
+  expect(executeScript).not.toHaveBeenCalled();
+  expect(result).toHaveBeenCalledWith("t1", 3, expect.objectContaining({ ok: false }));
+
+  // Tugas berikutnya mulai bersih: tiket tugas lain dengan seq 1 diterima.
+  runner.begin(1);
+  executeScript.mockResolvedValue([{ result: { observation: { ok: true, source: "page", text: "", host: "shopee.co.id", controls: {} }, generation: 1 } }]);
+  await runner.onAction(sign({ task: "t2", seq: 1 }));
+  expect(executeScript).toHaveBeenCalled();
+});
+
+test("review: a navigation that lands on a blocked or non-https site is never read", async () => {
+  for (const landing of ["https://ib.klikbca.com/login", "http://shopee.co.id/promo"]) {
+    const urls = ["https://shopee.co.id/keranjang", landing];
+    const executeScript = vi.fn(async (details: { files?: string[] }): Promise<{ result?: unknown }[]> =>
+      details.files ? [{ result: undefined }] : [{}]);
+    const result = vi.fn(() => true);
+    const runner = new Runner({
+      keys: async () => KEYS, device: async () => "d1", now: () => NOW,
+      tabs: { get: vi.fn(async () => ({ id: 1, windowId: 9, url: urls.length > 1 ? urls.shift() : urls[0] })), create: vi.fn(), remove: vi.fn() },
+      scripting: { executeScript }, hasPermission: async () => true, waitForLoad: async () => undefined, result,
+      needPermission: vi.fn(), pause: async () => undefined,
+    });
+    runner.begin(1);
+    await runner.onAction(sign());
+    expect(executeScript.mock.calls.some(([details]) => details.files)).toBe(false);
+    const observation = (result.mock.calls[0] as unknown as [string, number, { text: string; controls: object }])[2];
+    expect(observation.controls).toEqual({});
+    expect(observation.text).toMatch(/tidak dibaca/);
+  }
+});

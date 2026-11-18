@@ -62,6 +62,10 @@ const REFUSE_TEXT: Record<string, string> = {
   failed: "Aksi gagal dijalankan di tab.",
 };
 
+function unread(text: string, host: string | null): Observation {
+  return { ok: true, source: "page", text, host, controls: {} };
+}
+
 function refusal(reason: string): Observation {
   const text = REFUSE_TEXT[reason] ?? `Tiket aksi tidak sah (${reason}), jadi aksi ini tidak dijalankan.`;
   return { ok: false, source: "tool", text, host: null, controls: {} };
@@ -70,6 +74,8 @@ function refusal(reason: string): Observation {
 interface Reading {
   observation: Observation;
   generation: number;
+  document?: string;
+  navigating?: boolean;
 }
 
 interface TabInfo {
@@ -120,7 +126,7 @@ function callInPage(tool: string, args: unknown, generation: number): unknown {
   return tool === "tab_read" ? agent.observe() : agent.act(tool, args, generation);
 }
 
-const READ_ATTEMPTS = 5;
+const READ_ATTEMPTS = 20;
 const PAGE_TOOLS = new Set(["tab_read", "tab_click", "form_submit", "tab_type", "tab_select", "tab_scroll"]);
 
 export class Runner {
@@ -129,7 +135,11 @@ export class Runner {
   private task: string | null = null;
   private lastSeq = 0;
   private generation = 0;
+  private documentId: string | undefined;
   private cachedKeys: unknown = null;
+  // Naik setiap begin() dan end(). Aksi yang pemeriksaannya masih berjalan
+  // saat Stop ditekan tidak boleh jalan sesudahnya.
+  private epoch = 0;
 
   constructor(private deps: RunnerDeps) {}
 
@@ -139,6 +149,7 @@ export class Runner {
 
   /** Tugas baru dimulai di tab ini (tab aktif saat pengguna menekan Mulai). */
   begin(tabId: number): void {
+    this.epoch += 1;
     this.tabId = tabId;
     this.windowId = undefined;
     this.task = null;
@@ -147,6 +158,7 @@ export class Runner {
   }
 
   end(): void {
+    this.epoch += 1;
     this.task = null;
     this.lastSeq = 0;
   }
@@ -174,6 +186,7 @@ export class Runner {
       ? { task: ticket.task, seq: ticket.seq }
       : null;
 
+    const epoch = this.epoch;
     const device = await this.deps.device();
     const context = async (fresh: boolean): Promise<CheckContext> => ({
       keys: await this.keys(fresh),
@@ -191,6 +204,12 @@ export class Runner {
     // Kunci baru setelah rotasi: ambil daftar kunci sekali lagi.
     if (reason === "unknown_key") reason = await checkAction(signed, await context(true));
 
+    // Stop atau tugas baru di tengah pemeriksaan: jangan jalankan, jangan ikat tugas.
+    if (epoch !== this.epoch) {
+      if (replyTo) this.deps.result(replyTo.task, replyTo.seq, refusal("stopped"));
+      return;
+    }
+
     if (PASSED_TICKET.has(reason as RefuseReason | null) && ticket) {
       this.task = ticket.task as string;
       this.lastSeq = ticket.seq as number;
@@ -198,7 +217,7 @@ export class Runner {
 
     if (reason === "no_permission") this.deps.needPermission(normalizeHost(ticket?.host) ?? "");
 
-    const observation = reason === null ? await this.run(ticket!.tool as string, ticket!.args) : refusal(reason);
+    const observation = reason === null ? await this.run(ticket!.tool as string, ticket!.args, epoch) : refusal(reason);
     if (replyTo) this.deps.result(replyTo.task, replyTo.seq, observation);
 
     if (PASSED_TICKET.has(reason as RefuseReason | null) && ticket) {
@@ -230,8 +249,9 @@ export class Runner {
     const result = frame?.result;
     if (result === NO_SCRIPT) return "no_script";
     const reading = result as Reading | undefined;
-    if (!reading || !isObject(reading.observation)) return "gone";
+    if (!reading || !isObject(reading.observation) || reading.navigating) return "gone";
     this.generation = reading.generation;
+    this.documentId = reading.document;
     return reading;
   }
 
@@ -240,18 +260,25 @@ export class Runner {
     this.deps.onPage?.(this.tabId!);
   }
 
-  // Halaman yang baru berpindah bisa belum siap disuntik; coba beberapa kali.
-  private async readFresh(): Promise<Observation> {
+  // Halaman yang baru berpindah bisa belum siap disuntik, atau halaman lama
+  // masih hidup sampai jawaban server tiba. Coba sampai dokumennya lain.
+  private async readFresh(epoch: number, leaving?: string): Promise<Observation> {
     const pause = this.deps.pause ?? ((ms: number) => new Promise<void>((done) => setTimeout(done, ms)));
 
     for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
-      if (attempt > 0) await pause(400);
+      if (attempt > 0) await pause(500);
       await this.deps.waitForLoad(this.tabId!);
+      if (epoch !== this.epoch || this.tabId === null) return refusal("stopped");
+
+      // Navigasi bisa berakhir di situs yang tidak boleh disentuh (pengalihan
+      // ke bank) atau tanpa https. Halaman seperti itu tidak pernah disuntik.
+      const landed = await this.landedOn();
+      if (landed !== null) return landed;
 
       try {
         await this.inject();
         const reading = await this.call("tab_read", {});
-        if (typeof reading === "object") return reading.observation;
+        if (typeof reading === "object" && (leaving === undefined || reading.document !== leaving)) return reading.observation;
       } catch {
         // Halaman masih berganti.
       }
@@ -260,14 +287,38 @@ export class Runner {
     return refusal("failed");
   }
 
-  private async run(tool: string, args: unknown): Promise<Observation> {
+  private async landedOn(): Promise<Observation | null> {
+    let url: string | undefined;
+
+    try {
+      url = (await this.deps.tabs.get(this.tabId!)).url;
+    } catch {
+      return null;
+    }
+
+    if (url === undefined) return null;
+    const host = httpsHost(url);
+    let plainHost: string | null = null;
+
+    try {
+      plainHost = normalizeHost(new URL(url).hostname);
+    } catch {
+      plainHost = null;
+    }
+
+    if (host === null) return unread("Halaman ini tidak memakai alamat https, jadi tidak dibaca.", plainHost);
+    if (isBlockedHost(host)) return unread("Halaman ini ada di situs yang selalu diblokir untuk agent, jadi tidak dibaca.", host);
+    return null;
+  }
+
+  private async run(tool: string, args: unknown, epoch: number): Promise<Observation> {
     try {
       if (tool === "tab_open") {
         const url = (args as { url: string }).url;
         const tab = await this.deps.tabs.create({ url, windowId: this.windowId, active: true });
         this.tabId = tab.id ?? null;
         this.generation = 0;
-        return this.tabId === null ? refusal("no_tab") : await this.readFresh();
+        return this.tabId === null ? refusal("no_tab") : await this.readFresh(epoch);
       }
 
       if (tool === "tab_close") {
@@ -282,12 +333,13 @@ export class Runner {
       if (tool === "tab_read") {
         const reading = await this.call(tool, args);
         if (typeof reading === "object") return reading.observation;
-        return await this.readFresh();
+        return await this.readFresh(epoch);
       }
 
       // Aksi dengan nomor rujukan hanya berlaku di halaman yang dibaca terakhir.
       // Tanpa content script, halamannya sudah baru: jangan diulang di sana.
       let reading: Reading | "no_script" | "gone";
+      const leaving = this.documentId;
 
       try {
         reading = await this.call(tool, args);
@@ -297,7 +349,7 @@ export class Runner {
 
       if (reading === "no_script") return refusal("no_script");
       // Aksinya membuat tab berpindah halaman di tengah jalan: baca halaman baru.
-      if (reading === "gone") return await this.readFresh();
+      if (reading === "gone") return await this.readFresh(epoch, leaving);
       return reading.observation;
     } catch {
       return refusal("failed");

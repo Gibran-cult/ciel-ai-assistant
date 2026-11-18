@@ -139,3 +139,46 @@ test("the reading after a click waits for the page to update", async () => {
   const after = await act("tab_click", { ref }, generation, { settleMs: 400 });
   expect(after.observation.text).toContain("Masuk keranjang: 1 barang");
 });
+
+test("review: a button whose text changed after reading is not pressed", async () => {
+  const { observation, generation } = load("shop.html");
+  const ref = refOf(observation.text, "Tambah ke Keranjang");
+  const button = [...document.querySelectorAll("button")].find((b) => b.textContent === "Tambah ke Keranjang")!;
+  const clicked = vi.fn();
+  button.addEventListener("click", clicked);
+  button.textContent = "Bayar Sekarang";
+  await new Promise((done) => setTimeout(done, 0));
+
+  const result = await act("tab_click", { ref }, generation, now);
+  expect(result.observation.ok).toBe(false);
+  expect(clicked).not.toHaveBeenCalled();
+});
+
+test("review: a pay button is never pressed, even with a valid ticket", async () => {
+  document.documentElement.innerHTML = "<body><form><button type=submit>Bayar Sekarang</button></form></body>";
+  const { observation, generation } = observe(document);
+  const ref = refOf(observation.text, "Bayar Sekarang");
+  const submitted = vi.fn((event: Event) => event.preventDefault());
+  document.querySelector("form")!.addEventListener("submit", submitted);
+  expect((await act("tab_click", { ref }, generation, now)).observation.ok).toBe(false);
+  expect((await act("form_submit", { ref }, generation, now)).observation.ok).toBe(false);
+  expect(submitted).not.toHaveBeenCalled();
+});
+
+test("review: a click that starts a navigation says so instead of reading the page being left", async () => {
+  const { observation, generation } = load("shop.html");
+  const ref = refOf(observation.text, "Beli Sekarang");
+  [...document.querySelectorAll("button")].find((b) => b.textContent === "Beli Sekarang")!
+    .addEventListener("click", () => window.dispatchEvent(new Event("beforeunload")));
+
+  const started = Date.now();
+  const after = await act("tab_click", { ref }, generation, { settleMs: 2000 });
+  expect(after.navigating).toBe(true);
+  expect(Date.now() - started).toBeLessThan(1500);
+});
+
+test("review: every reading names its document", () => {
+  const first = load("shop.html");
+  expect(first.document).toMatch(/^[0-9a-f]{16,}$/);
+  expect(observe(document).document).toBe(first.document);
+});

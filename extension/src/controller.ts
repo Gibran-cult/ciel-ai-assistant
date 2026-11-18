@@ -55,7 +55,8 @@ export type PanelCommand =
   | { type: "resume" }
   | { type: "handover_done"; done: boolean }
   | { type: "permission_granted" }
-  | { type: "dismiss" };
+  | { type: "dismiss" }
+  | { type: "keepalive" };
 
 export interface ActionLog {
   tool: string;
@@ -187,6 +188,19 @@ export class Controller {
   }
 
   onSocketState(connection: SocketState): void {
+    // Koneksi putus di tengah tugas: layanan mengakhiri tugas itu (client_gone)
+    // tanpa bisa memberi tahu panel. Akhiri juga di sini, supaya dialog lama
+    // dan aksi yang ditahan tidak tersisa.
+    if (connection !== "ready" && this.state.phase !== "idle") {
+      const stopped = this.state.phase === "stopped";
+      const steps = this.state.log.length;
+      this.state = {
+        ...this.state, dialog: null, needPermission: null,
+        ended: stopped ? { status: "stopped", reason: "stop", steps, report: "" } : { status: "failed", reason: "client_gone", steps, report: "" },
+      };
+      this.session.onEnd();
+    }
+
     if (connection === "signed_out") {
       this.update({ connection, auth: "signed_out" });
       return;
@@ -316,6 +330,10 @@ export class Controller {
 
       case "dismiss":
         this.update({ ended: null });
+        return;
+
+      // Pesan dari panel menjaga service worker tetap hidup selama dialog menunggu.
+      case "keepalive":
         return;
 
       default:
