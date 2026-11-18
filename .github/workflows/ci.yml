@@ -199,6 +199,8 @@ jobs:
           python -m unittest -v \
             tests.test_agent_api_health \
             tests.test_agent_tickets \
+            tests.test_agent_claude \
+            tests.test_agent_gemini \
             tests.test_agent_devices \
             tests.test_account_ids \
             tests.test_agent_store \

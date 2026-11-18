@@ -729,5 +729,15 @@ class GateTest2B(unittest.TestCase):
         self.assertIn(("tab_open", "block", "secret_text"), [(row["kind"], row["decision"], row["reason"]) for row in rows(store)])
         self.assertNotIn("4111", repr(store.actions))
 
+class ModelCostTest(unittest.TestCase):
+    def test_a_failed_model_call_still_counts_its_cost(self):
+        from agent_api.model import ModelError
+
+        store = MemoryStore()
+        result, _, _, store = run([OPEN, ModelError("refusal", cost=5)], store=store)
+        self.assertEqual((result.status, result.reason), ("failed", "model_error"))
+        self.assertEqual(store.load_task(ALICE, TASK)["cost"], 1 + 1 + 5)  # rencana, satu aksi, panggilan yang gagal
+
+
 if __name__ == "__main__":
     unittest.main()

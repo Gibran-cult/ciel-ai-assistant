@@ -243,7 +243,10 @@ class Run:
     def ask_model(self, method, argument):
         try:
             reply = method(argument)
-        except Exception:
+        except Exception as error:
+            # Panggilan yang gagal bisa tetap tertagih (misalnya penolakan).
+            spent = getattr(error, "cost", 0)
+            self.cost += spent if type(spent) is int and spent > 0 else 0
             raise End("failed", "model_error") from None
 
         if not isinstance(reply, ModelReply) or type(reply.cost) is not int or reply.cost < 0:
