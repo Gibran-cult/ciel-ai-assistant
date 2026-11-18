@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 import requests
 
 from account_settings import clean_profile
+from agent_consent import AGENT_CONSENT_VERSION, LOG_DAYS
 
 logger = logging.getLogger("ciel_ai.chat_store")
 
@@ -35,6 +36,11 @@ LOAD_LIMIT = 200
 MAX_STORED_IMAGE_BYTES = 256 * 1024
 
 TIMEOUT = 15
+
+# consent_events (docs/privacy-consent.md bagian 1). Rencana 2C hanya memakai
+# agent dan data_setting; jenis lain ditambah bersama form-nya.
+CONSENT_KINDS = frozenset({"agent", "data_setting"})
+CONSENT_SURFACES = frozenset({"web", "extension", "desktop"})
 
 # Dipanggil di jalur kirim pesan, jadi Supabase yang lambat tidak boleh
 # menahan jawaban lama: lewat batas ini app memakai hitungan di proses.
@@ -300,6 +306,132 @@ class ChatStore:
         # Persetujuan pertama untuk versi ini yang dipakai sebagai bukti, jadi
         # baris yang sudah ada tidak ditimpa.
         return self._upsert("save_consent", "consents", {"owner": owner, "version": version}, "ignore-duplicates")
+
+    # Agent di web (rencana 2C) -------------------------------------------
+
+    def _rows_for(self, action, owner, table, **params):
+        """Daftar baris milik pemilik ini, atau None kalau gagal atau bukan daftar."""
+
+        response = self._request("GET", action, owner, table, params=params)
+
+        if response is None:
+            return None
+
+        try:
+            rows = response.json()
+        except ValueError as error:
+            logger.error("chat_store_error action=%s type=%s error=%s", action, type(error).__name__, error)
+            return None
+
+        return rows if isinstance(rows, list) and all(isinstance(row, dict) for row in rows) else None
+
+    def _function(self, action, name, body):
+        """Jawaban fungsi database (rpc), atau None kalau gagal.
+
+        Tanpa Prefer return=minimal: jawaban fungsinya yang dibutuhkan.
+        """
+
+        try:
+            response = requests.post(f"{self.base}/rpc/{name}", headers=self.headers, json=body, timeout=TIMEOUT)
+            response.raise_for_status()
+            return response.json()
+        except (requests.exceptions.RequestException, ValueError) as error:
+            logger.error("chat_store_error action=%s type=%s error=%s", action, type(error).__name__, error)
+            return None
+
+    def record_consent_event(self, owner, kind, choice, version, surface="web"):
+        """Tambah satu kejadian persetujuan atau penarikan (tabel consent_events, hanya ditambah)."""
+
+        if (not OWNER_PATTERN.match(owner or "") or kind not in CONSENT_KINDS or not isinstance(choice, dict)
+                or not isinstance(version, str) or not version or surface not in CONSENT_SURFACES):
+            logger.error("chat_store_rejected action=record_consent_event")
+            return False
+
+        row = {"owner": owner, "kind": kind, "choice": choice, "version": version, "surface": surface}
+
+        try:
+            response = requests.post(f"{self.base}/consent_events", headers={**self.headers, "Prefer": "return=minimal"},
+                                     json=row, timeout=TIMEOUT)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as error:
+            logger.error("chat_store_error action=record_consent_event type=%s error=%s", type(error).__name__, error)
+            return False
+
+        return True
+
+    def consent_history(self, owner, kind):
+        return self._rows_for("consent_history", owner, "consent_events", kind=f"eq.{kind}",
+                              select="kind,choice,version,surface,created_at", order="created_at.desc", limit="20")
+
+    def agent_consent(self, owner):
+        """True kalau persetujuan agent terbaru masih berlaku, False kalau tidak, None kalau tidak terbaca."""
+
+        rows = self._rows_for("agent_consent", owner, "consent_events", kind="eq.agent", select="choice,version",
+                              order="created_at.desc", limit="1")
+
+        if rows is None:
+            return None
+
+        if not rows:
+            return False
+
+        choice = rows[0].get("choice")
+        accepted = isinstance(choice, dict) and choice.get("accepted") is True
+        return accepted and rows[0].get("version") == AGENT_CONSENT_VERSION
+
+    def load_agent_settings(self, owner):
+        rows = self._rows_for("load_agent_settings", owner, "agent_settings", select="log_days")
+
+        if rows is None:
+            return None
+
+        days = rows[0].get("log_days") if rows else None
+        return {"log_days": days if days in LOG_DAYS else LOG_DAYS[0]}
+
+    def save_agent_settings(self, owner, log_days):
+        if type(log_days) is not int or log_days not in LOG_DAYS:
+            logger.error("chat_store_rejected action=save_agent_settings")
+            return False
+
+        return self._upsert("save_agent_settings", "agent_settings", {"owner": owner, "log_days": log_days})
+
+    def withdraw_agent(self, owner):
+        """Catat dulu penarikannya di consent_events, lalu panggil ini: semua perangkat dicabut."""
+
+        if not OWNER_PATTERN.match(owner or ""):
+            return False
+
+        revoked = self._function("withdraw_agent", "ciel_agent_withdraw", {"p_owner": owner})
+        return type(revoked) is int and revoked >= 0
+
+    def delete_agent_data(self, owner):
+        if not OWNER_PATTERN.match(owner or ""):
+            return False
+
+        return self._function("delete_agent_data", "ciel_agent_delete_owner", {"p_owner": owner}) is True
+
+    def load_agent_devices(self, owner):
+        return self._rows_for("load_agent_devices", owner, "agent_devices",
+                              select="id,name,platform,created_at,last_seen_at,revoked_at", order="created_at.asc")
+
+    def revoke_agent_device(self, owner, device):
+        if not OWNER_PATTERN.match(owner or "") or not isinstance(device, str) or not ROW_ID_PATTERN.match(device):
+            return False
+
+        return self._function("revoke_agent_device", "ciel_agent_revoke_device", {"p_owner": owner, "p_device": device}) is True
+
+    def load_agent_tasks(self, owner, limit=20):
+        return self._rows_for("load_agent_tasks", owner, "agent_tasks",
+                              select="id,instruction,status,reason,steps,created_at,chain_status,chain_checked_at",
+                              order="created_at.desc", limit=str(limit))
+
+    def load_agent_actions(self, owner, task_id):
+        if not isinstance(task_id, str) or not ROW_ID_PATTERN.match(task_id):
+            return None
+
+        return self._rows_for("load_agent_actions", owner, "agent_actions", task=f"eq.{task_id}",
+                              select="seq,device,kind,target,level,decision,reason,approved_by,result,at",
+                              order="seq.asc", limit="500")
 
     def load_pro_until(self, owner):
         """

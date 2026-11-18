@@ -587,5 +587,173 @@ class SidebarHistoryTest(unittest.TestCase):
         self.assertIsNone(post.call_args.kwargs["json"]["project_id"])  # the chat left the project
 
 
+
+AGENT_SQL = (ROOT / "docs" / "chat_store.sql").read_text(encoding="utf-8")
+
+
+def sql_function(name):
+    start = AGENT_SQL.index(f"create or replace function public.{name}(")
+    return AGENT_SQL[start:AGENT_SQL.index("$$;", AGENT_SQL.index("$$", start) + 2)]
+
+
+class AgentWebStoreTest(unittest.TestCase):
+    """Persetujuan agent, masa simpan log, dan data agent untuk web (rencana 2C, Task 1)."""
+
+    def setUp(self):
+        self.store = chat_store.ChatStore("https://db.example.invalid/", "service-key")
+
+    def test_agent_sql_adds_settings_chain_columns_and_functions(self):
+        for text in ("create table if not exists public.agent_settings (", "check (log_days in (30, 90))",
+                     "alter table public.agent_settings enable row level security;",
+                     "add column if not exists chain_status text", "add column if not exists chain_checked_at timestamptz",
+                     "create index if not exists consent_events_owner_kind"):
+            self.assertIn(text, AGENT_SQL)
+
+        for name, args in (("ciel_agent_withdraw", "text"), ("ciel_agent_delete_owner", "text"), ("ciel_agent_retention", ""),
+                           ("ciel_agent_tasks_to_check", "timestamptz, integer")):
+            self.assertIn(f"revoke execute on function public.{name}({args}) from public, anon, authenticated;", AGENT_SQL)
+
+    def test_delete_owner_removes_every_agent_table_in_one_function(self):
+        body = sql_function("ciel_agent_delete_owner")
+
+        for table in ("agent_device_tokens", "agent_devices", "agent_actions", "agent_tasks", "agent_settings",
+                      "spend_limits", "purchase_confirmations"):
+            self.assertIn(f"delete from public.{table} where owner = p_owner", body)
+
+        self.assertNotIn("consent_events", body)
+
+    def test_retention_keeps_running_tasks_and_follows_each_owners_choice(self):
+        body = sql_function("ciel_agent_retention")
+        self.assertIn("coalesce(", body)
+        self.assertIn("not in ('planning', 'running')", body)
+        self.assertIn("delete from public.agent_actions", body)
+
+    def test_withdraw_revokes_devices_and_drops_tokens(self):
+        body = sql_function("ciel_agent_withdraw")
+        self.assertIn("revoked_at = now()", body)
+        self.assertIn("delete from public.agent_device_tokens where owner = p_owner", body)
+
+    def test_agent_consent_reads_the_latest_event(self):
+        from agent_consent import AGENT_CONSENT_VERSION
+
+        cases = (([{"choice": {"accepted": True}, "version": AGENT_CONSENT_VERSION}], True),
+                 ([{"choice": {"accepted": False}, "version": AGENT_CONSENT_VERSION}], False),
+                 ([{"choice": {"accepted": True}, "version": "2026-01-01"}], False),
+                 ([{"choice": {"accepted": "ya"}, "version": AGENT_CONSENT_VERSION}], False),
+                 ([], False))
+
+        for rows, expected in cases:
+            with self.subTest(rows=rows), patch("requests.request", return_value=Response(rows)) as request:
+                self.assertIs(self.store.agent_consent(ALICE), expected)
+
+        params = request.call_args.kwargs["params"]
+        self.assertEqual((params["owner"], params["kind"], params["order"], params["limit"]),
+                         ("eq." + ALICE, "eq.agent", "created_at.desc", "1"))
+
+        for failure in (Response("rusak"), Response([{"choice": None}])):
+            with patch("requests.request", return_value=failure):
+                self.assertIn(self.store.agent_consent(ALICE), (None, False))
+
+        with patch("requests.request", side_effect=requests.exceptions.ConnectionError()):
+            self.assertIsNone(self.store.agent_consent(ALICE))
+
+    def test_recording_a_consent_event(self):
+        with patch("requests.post", return_value=Response(status=201)) as post:
+            self.assertTrue(self.store.record_consent_event(ALICE, "agent", {"accepted": True}, "2026-11-18"))
+
+        self.assertTrue(post.call_args.args[0].endswith("/consent_events"))
+        self.assertEqual(post.call_args.kwargs["json"],
+                         {"owner": ALICE, "kind": "agent", "choice": {"accepted": True}, "version": "2026-11-18", "surface": "web"})
+
+    def test_consent_events_are_checked_before_sending(self):
+        with patch("requests.post") as post:
+            for args in ((ALICE, "cookies", {}, "v"), (ALICE, "agent", "ya", "v"), (ALICE, "agent", {}, ""), ("x", "agent", {}, "v")):
+                self.assertFalse(self.store.record_consent_event(*args))
+
+            self.assertFalse(self.store.record_consent_event(ALICE, "agent", {"accepted": True}, "v", surface="ponsel"))
+
+        post.assert_not_called()
+
+    def test_consent_history_is_owner_filtered_and_newest_first(self):
+        with patch("requests.request", return_value=Response([{"kind": "agent"}])) as request:
+            self.assertEqual(self.store.consent_history(ALICE, "agent"), [{"kind": "agent"}])
+
+        params = request.call_args.kwargs["params"]
+        self.assertEqual((params["owner"], params["kind"], params["order"], params["limit"]),
+                         ("eq." + ALICE, "eq.agent", "created_at.desc", "20"))
+
+    def test_log_days_are_30_or_90(self):
+        with patch("requests.post", return_value=Response(status=201)) as post:
+            self.assertTrue(self.store.save_agent_settings(ALICE, 90))
+
+        self.assertEqual(post.call_args.kwargs["json"], {"owner": ALICE, "log_days": 90})
+
+        with patch("requests.post") as post:
+            for days in (0, 31, 365, "90", None, True):
+                self.assertFalse(self.store.save_agent_settings(ALICE, days))
+
+        post.assert_not_called()
+
+    def test_agent_settings_default_to_30_days(self):
+        for rows, expected in (([], {"log_days": 30}), ([{"log_days": 90}], {"log_days": 90}), ([{"log_days": 7}], {"log_days": 30})):
+            with patch("requests.request", return_value=Response(rows)):
+                self.assertEqual(self.store.load_agent_settings(ALICE), expected)
+
+        with patch("requests.request", side_effect=requests.exceptions.ConnectionError()):
+            self.assertIsNone(self.store.load_agent_settings(ALICE))
+
+    def test_functions_are_called_for_the_owner_and_asked_for_their_answer(self):
+        calls = ((lambda: self.store.withdraw_agent(ALICE), "ciel_agent_withdraw", {"p_owner": ALICE}, 2, True),
+                 (lambda: self.store.delete_agent_data(ALICE), "ciel_agent_delete_owner", {"p_owner": ALICE}, True, True),
+                 (lambda: self.store.revoke_agent_device(ALICE, "d1"), "ciel_agent_revoke_device",
+                  {"p_owner": ALICE, "p_device": "d1"}, True, True))
+
+        for call, name, body, payload, expected in calls:
+            with self.subTest(name=name), patch("requests.post", return_value=Response(payload)) as post:
+                self.assertIs(call(), expected)
+
+            self.assertTrue(post.call_args.args[0].endswith("/rpc/" + name))
+            self.assertEqual(post.call_args.kwargs["json"], body)
+            self.assertNotEqual(post.call_args.kwargs["headers"].get("Prefer"), "return=minimal")
+
+        with patch("requests.post", return_value=Response(status=500)):
+            self.assertFalse(self.store.delete_agent_data(ALICE))
+
+        with patch("requests.post") as post:
+            self.assertFalse(self.store.delete_agent_data("x"))
+            self.assertFalse(self.store.revoke_agent_device(ALICE, "d 1"))
+
+        post.assert_not_called()
+
+    def test_every_agent_query_is_filtered_by_owner(self):
+        reads = (lambda: self.store.load_agent_devices(ALICE), lambda: self.store.load_agent_tasks(ALICE),
+                 lambda: self.store.load_agent_actions(ALICE, "t0001"), lambda: self.store.consent_history(ALICE, "agent"))
+
+        for read in reads:
+            with patch("requests.request", return_value=Response([])) as request:
+                read()
+
+            self.assertEqual(request.call_args.kwargs["params"]["owner"], "eq." + ALICE)
+
+    def test_tasks_and_actions_are_read_in_display_order(self):
+        with patch("requests.request", return_value=Response([{"id": "t1"}])) as request:
+            self.assertEqual(self.store.load_agent_tasks(ALICE), [{"id": "t1"}])
+
+        params = request.call_args.kwargs["params"]
+        self.assertEqual((params["order"], params["limit"]), ("created_at.desc", "20"))
+        self.assertIn("chain_status", params["select"])
+
+        with patch("requests.request", return_value=Response([])) as request:
+            self.store.load_agent_actions(ALICE, "t0001")
+
+        params = request.call_args.kwargs["params"]
+        self.assertEqual((params["task"], params["order"]), ("eq.t0001", "seq.asc"))
+
+        with patch("requests.request") as request:
+            self.assertIsNone(self.store.load_agent_actions(ALICE, "../x"))
+
+        request.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
