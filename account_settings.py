@@ -19,11 +19,13 @@ SETTINGS_TABS = (
     ("profil", "Profil", ":material/person:"),
     ("tampilan", "Tampilan", ":material/contrast:"),
     ("data", "Data saya", ":material/database:"),
+    ("agent", "Agent", ":material/smart_toy:"),
     ("paket", "Paket", ":material/sell:"),
     ("privasi", "Privasi", ":material/shield:"),
     ("ketentuan", "Ketentuan", ":material/gavel:"),
 )
-LOGIN_TABS = frozenset({"profil", "data"})
+LOGIN_TABS = frozenset({"profil", "data", "agent"})
+AGENT_TAB = "agent"
 
 # Alamat lama (?page=pricing, ?page=privacy) tetap dipakai landing dan
 # Midtrans, jadi dibuka sebagai tab Pengaturan, begitu juga ?page=terms.
@@ -89,10 +91,19 @@ def profile_context(profile):
     )
 
 
-def settings_tab(page, tab, logged_in):
+def visible_tabs(logged_in, agent=False):
+    """Kunci tab yang boleh tampil. Tab Agent butuh login dan agent web yang menyala."""
+
+    return [
+        key for key, _, _ in SETTINGS_TABS
+        if (logged_in or key not in LOGIN_TABS) and (key != AGENT_TAB or (agent and logged_in))
+    ]
+
+
+def settings_tab(page, tab, logged_in, agent=False):
     """Tab Pengaturan yang ditampilkan untuk ?page= dan ?tab= ini."""
 
-    allowed = [key for key, _, _ in SETTINGS_TABS if logged_in or key not in LOGIN_TABS]
+    allowed = visible_tabs(logged_in, agent)
     chosen = PAGE_TABS.get(page) or tab
     return chosen if chosen in allowed else allowed[0]
 

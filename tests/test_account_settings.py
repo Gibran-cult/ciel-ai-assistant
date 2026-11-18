@@ -84,6 +84,11 @@ class SettingsTabTest(unittest.TestCase):
         self.assertEqual(settings_tab("privacy", "profil", True), "privasi")
         self.assertEqual(settings_tab("settings", None, True), "profil")
         self.assertEqual(settings_tab("settings", None, False), "tampilan")
+
+    def test_the_agent_tab_needs_the_agent_flag_and_login(self):
+        self.assertEqual(settings_tab("settings", "agent", True), "profil")
+        self.assertEqual(settings_tab("settings", "agent", True, agent=True), "agent")
+        self.assertEqual(settings_tab("settings", "agent", False, agent=True), "tampilan")
         self.assertEqual(settings_tab("settings", "bogus", True), "profil")
 
     def test_login_tabs_fall_back_when_signed_out(self):
