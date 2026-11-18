@@ -1,0 +1,81 @@
+/* Dibuat oleh scripts/tokens.mjs dari design/tokens.json. Jangan diubah tangan. */
+
+:root {
+  --c-bg: #f1f1ee;
+  --c-surface: #fbfbf9;
+  --c-raised: #e6e6e2;
+  --c-text: #161513;
+  --c-muted: #4b4a46;
+  --c-faint: #5c5b56;
+  --c-control: #86817a;
+  --c-accent: #2b4886;
+  --c-accent-ink: #ffffff;
+  --c-primary: #161513;
+  --c-on-primary: #f1f1ee;
+  --c-gold: #e9d06a;
+  --c-gold-ink: #3d3209;
+  --c-ok: #2e6a4c;
+  --c-warn: #855a00;
+  --c-err: #a33b2c;
+  --c-agent-active: var(--c-accent);
+  --c-agent-wait: var(--c-warn);
+  --c-stop-bg: #a33b2c;
+  --c-stop-ink: #ffffff;
+  --c-official-bg: #2e6a4c;
+  --c-official-ink: #ffffff;
+  --c-rejected: var(--c-err);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --c-bg: #0e0d0c;
+    --c-surface: #181715;
+    --c-raised: #24231f;
+    --c-text: #f4f4f2;
+    --c-muted: #b4b3ad;
+    --c-faint: #959490;
+    --c-control: #827c72;
+    --c-accent: #9db3e8;
+    --c-accent-ink: #141a2a;
+    --c-primary: #f4f4f2;
+    --c-on-primary: #141311;
+    --c-gold: #e9d06a;
+    --c-gold-ink: #2e2606;
+    --c-ok: #7cc49d;
+    --c-warn: #e3b24f;
+    --c-err: #f0907f;
+    --c-agent-active: var(--c-accent);
+    --c-agent-wait: var(--c-warn);
+    --c-stop-bg: #f0907f;
+    --c-stop-ink: #141311;
+    --c-official-bg: #7cc49d;
+    --c-official-ink: #141311;
+    --c-rejected: var(--c-err);
+  }
+}
+
+:root[data-theme="dark"] {
+  --c-bg: #0e0d0c;
+  --c-surface: #181715;
+  --c-raised: #24231f;
+  --c-text: #f4f4f2;
+  --c-muted: #b4b3ad;
+  --c-faint: #959490;
+  --c-control: #827c72;
+  --c-accent: #9db3e8;
+  --c-accent-ink: #141a2a;
+  --c-primary: #f4f4f2;
+  --c-on-primary: #141311;
+  --c-gold: #e9d06a;
+  --c-gold-ink: #2e2606;
+  --c-ok: #7cc49d;
+  --c-warn: #e3b24f;
+  --c-err: #f0907f;
+  --c-agent-active: var(--c-accent);
+  --c-agent-wait: var(--c-warn);
+  --c-stop-bg: #f0907f;
+  --c-stop-ink: #141311;
+  --c-official-bg: #7cc49d;
+  --c-official-ink: #141311;
+  --c-rejected: var(--c-err);
+}

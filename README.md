@@ -173,6 +173,20 @@ streamlit run app.py
 
 Configure the variables above in `.streamlit/secrets.toml` or `.env` first.
 
+### Ciel Agent extension (development)
+
+The browser extension lives in `extension/` and needs Node 24.
+
+```bash
+cd extension
+npm ci
+npm run build
+```
+
+Load `extension/dist` from `chrome://extensions` or `brave://extensions` with developer mode on ("Load unpacked"). A release build always talks to `https://agent.ciel-ai.web.id`. A development build (`npx vite build --mode development` plus the content build) reads another service address from the `apiBase` key in `chrome.storage.local`.
+
+Checks: `npm run lint` and `npm test`. End to end: `npm run build:e2e`, then `npx playwright test`. Playwright starts `tools/agent_e2e_server.py` with the Python in `E2E_PYTHON` (it needs `requirements-agent.txt`). If Playwright's own Chromium does not start on your machine, point `E2E_BROWSER` at another Chromium-based browser. To try the panel by hand against the local service: `DEMO=1 HEADED=1 npx playwright test demo`.
+
 ## Testing
 
 **Offline suite** (deterministic, no credentials; this is what CI runs):

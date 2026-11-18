@@ -1,0 +1,25 @@
+{
+  "apps": [
+    "1password",
+    "bash",
+    "bitwarden",
+    "cmd.exe",
+    "command prompt",
+    "dashlane",
+    "iterm",
+    "keepass",
+    "keepassxc",
+    "lastpass",
+    "powershell",
+    "pwsh",
+    "regedit",
+    "registry editor",
+    "securityhealth",
+    "terminal",
+    "windows defender",
+    "windows security"
+  ],
+  "host_suffixes": [
+    "klikbca.com"
+  ]
+}

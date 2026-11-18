@@ -32,6 +32,16 @@ D11 sampai D13 dijawab pada 18 November 2026 sebelum [rencana 2B](plans/2026-11-
 | D15 | Tempat persetujuan aktivasi agent | Di web, Pengaturan > Agent, tercatat di `consent_events`. Layanan menolak login perangkat sebelum ada persetujuan. Menarik persetujuan mencabut semua perangkat | Teks persetujuan masih draf | Teks persetujuan ditinjau ahli hukum [PERLU DICEK] |
 | D16 | Tempat halaman log | Tab "Agent" di dialog Pengaturan: Aktivitas, Perangkat, serta Persetujuan dan masa simpan. Hanya untuk akun yang login | Tampilan baris log dibuat bisa dibuka-tutup supaya muat di ponsel | Cek tampilan oleh pemilik di browser |
 
+## Keputusan untuk ekstensi browser (Fase 3)
+
+Dijawab pada 18 November 2026 sebelum [rencana 3A](plans/2026-11-18-extension-core.md) ditulis. Pemilik menyetujui D17 dan D18 sesuai rekomendasi, dan untuk D19 memilih opsi C (rekomendasinya A).
+
+| ID | Keputusan | Jawaban | Akibat langsung | Yang masih harus dicek |
+|---|---|---|---|---|
+| D17 | Alat bangun ekstensi | Vite dengan `manifest.json` yang ditulis sendiri | Izin di manifest bisa dikunci langsung lewat uji | Tidak ada |
+| D18 | Kerangka tampilan side panel | React dan TypeScript, sama dengan `website/` | Pola komponen dan aksesibilitas bisa dipakai ulang | Tidak ada |
+| D19 | Pemeriksaan tiket Ed25519 di ekstensi | WebCrypto bawaan browser, dengan pustaka `@noble/ed25519` sebagai cadangan kalau browser belum mendukung Ed25519 | Kedua jalur diuji dengan vektor uji yang sama dari server | Dicek 18 November 2026: Chrome mendukung Ed25519 di WebCrypto sejak versi 137 (stabil Mei 2025). Audit Cure53 (Februari 2022) hanya untuk `@noble/ed25519` v1; README versi sekarang menyebut versi ini belum diaudit independen. Jadi cadangan hanya dipakai di browser di bawah Chrome 137, dan pilihan pustakanya diputuskan ulang di rencana 3A |
+
 ## Yang belum diputuskan dan memakai usulan sampai diubah
 
 Angka dan pilihan ini ditulis sebagai usulan di dokumen masing-masing. Pemilik belum memutuskannya satu per satu.

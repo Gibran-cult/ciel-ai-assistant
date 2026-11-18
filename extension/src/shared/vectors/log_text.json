@@ -1,0 +1,246 @@
+{
+  "actions": {
+    "tab_open": "Membuka halaman",
+    "tab_read": "Membaca halaman",
+    "tab_click": "Mengklik",
+    "tab_type": "Mengetik di kolom",
+    "tab_select": "Memilih di daftar",
+    "tab_scroll": "Menggulir halaman",
+    "tab_close": "Menutup tab",
+    "form_submit": "Mengirim formulir",
+    "ask_user": "Bertanya kepadamu",
+    "finish": "Selesai dan melapor"
+  },
+  "reasons": {
+    "not_listed": "Situs ini belum ada di daftar toko resmi Ciel.",
+    "no_official_badge": "Toko ini tidak punya label resmi dari marketplace, jadi aku nggak bisa memastikan barangnya asli.",
+    "lookalike_domain": "Alamat situs ini mirip toko resmi tetapi berbeda. Situs seperti ini sering dipakai untuk menipu.",
+    "automation_forbidden": "Aturan situs ini melarang alat otomatis.",
+    "underage": "Fitur pembelian hanya untuk pengguna 18 tahun ke atas.",
+    "purchases_off": "Fitur pembelian belum kamu aktifkan.",
+    "limit_exceeded": "Total ini melewati batas belanja yang kamu atur.",
+    "ask_mode": "Mode \"Tanya dulu\": setiap perubahan menunggu persetujuanmu.",
+    "submits": "Aksi ini mengirim data, jadi butuh persetujuanmu.",
+    "tainted_target": "Alamat tujuan ini berasal dari isi halaman, jadi butuh persetujuanmu.",
+    "scope_host": "Situs ini di luar rencana tugas.",
+    "scope_kind": "Jenis aksi ini di luar rencana tugas.",
+    "secret_field": "Kolom ini meminta data rahasia, jadi kamu yang mengisinya sendiri.",
+    "secret_text": "Teks ini tampak berisi data rahasia, jadi tidak dikirim.",
+    "possible_secret": "Teks ini mungkin berisi data rahasia, jadi butuh persetujuanmu.",
+    "blocked_host": "Situs ini selalu diblokir untuk agent.",
+    "blocked_app": "Aplikasi ini selalu diblokir untuk agent.",
+    "stopped": "Tugas sudah dihentikan.",
+    "bad_ticket": "Perangkat sudah tidak tersambung atau sudah dicabut.",
+    "unknown_ref": "Kontrol yang dimaksud tidak ada di halaman.",
+    "no_page": "Belum ada halaman yang terbuka.",
+    "bad_args": "Permintaan model tidak sesuai aturan, jadi ditolak.",
+    "bad_call": "Permintaan model tidak sesuai aturan, jadi ditolak.",
+    "tool_unavailable": "Aksi ini tidak tersedia untuk agent."
+  },
+  "chain": {
+    "ok": "Log utuh",
+    "broken": "Log rusak: ada catatan yang berubah",
+    "missing": "Ada catatan yang hilang",
+    "extra": "Catatan terakhir belum terkunci",
+    "unchecked": "Belum diperiksa"
+  },
+  "results": [
+    {
+      "decision": "allow",
+      "result": "ok",
+      "text": "Selesai"
+    },
+    {
+      "decision": "allow",
+      "result": "failed",
+      "text": "Gagal"
+    },
+    {
+      "decision": "allow",
+      "result": "declined",
+      "text": "Kamu tolak"
+    },
+    {
+      "decision": "allow",
+      "result": "expired",
+      "text": "Kedaluwarsa"
+    },
+    {
+      "decision": "allow",
+      "result": "widened",
+      "text": "Lingkup diperluas"
+    },
+    {
+      "decision": "allow",
+      "result": "handed_over",
+      "text": "Dikirim"
+    },
+    {
+      "decision": "allow",
+      "result": null,
+      "text": "Dikirim"
+    },
+    {
+      "decision": "confirm",
+      "result": "ok",
+      "text": "Disetujui kamu"
+    },
+    {
+      "decision": "confirm",
+      "result": "failed",
+      "text": "Gagal"
+    },
+    {
+      "decision": "confirm",
+      "result": "declined",
+      "text": "Kamu tolak"
+    },
+    {
+      "decision": "confirm",
+      "result": "expired",
+      "text": "Kedaluwarsa"
+    },
+    {
+      "decision": "confirm",
+      "result": "widened",
+      "text": "Lingkup diperluas"
+    },
+    {
+      "decision": "confirm",
+      "result": "handed_over",
+      "text": "Dikirim"
+    },
+    {
+      "decision": "confirm",
+      "result": null,
+      "text": "Dikirim"
+    },
+    {
+      "decision": "block",
+      "result": "ok",
+      "text": "Diblokir"
+    },
+    {
+      "decision": "block",
+      "result": "failed",
+      "text": "Gagal"
+    },
+    {
+      "decision": "block",
+      "result": "declined",
+      "text": "Kamu tolak"
+    },
+    {
+      "decision": "block",
+      "result": "expired",
+      "text": "Kedaluwarsa"
+    },
+    {
+      "decision": "block",
+      "result": "widened",
+      "text": "Lingkup diperluas"
+    },
+    {
+      "decision": "block",
+      "result": "handed_over",
+      "text": "Diblokir"
+    },
+    {
+      "decision": "block",
+      "result": null,
+      "text": "Diblokir"
+    },
+    {
+      "decision": "handover",
+      "result": "ok",
+      "text": "Kamu tolak"
+    },
+    {
+      "decision": "handover",
+      "result": "failed",
+      "text": "Gagal"
+    },
+    {
+      "decision": "handover",
+      "result": "declined",
+      "text": "Kamu tolak"
+    },
+    {
+      "decision": "handover",
+      "result": "expired",
+      "text": "Kedaluwarsa"
+    },
+    {
+      "decision": "handover",
+      "result": "widened",
+      "text": "Lingkup diperluas"
+    },
+    {
+      "decision": "handover",
+      "result": "handed_over",
+      "text": "Kamu kerjakan sendiri"
+    },
+    {
+      "decision": "handover",
+      "result": null,
+      "text": "Kamu tolak"
+    },
+    {
+      "decision": null,
+      "result": "ok",
+      "text": "Selesai"
+    },
+    {
+      "decision": null,
+      "result": "failed",
+      "text": "Gagal"
+    },
+    {
+      "decision": null,
+      "result": "declined",
+      "text": "Kamu tolak"
+    },
+    {
+      "decision": null,
+      "result": "expired",
+      "text": "Kedaluwarsa"
+    },
+    {
+      "decision": null,
+      "result": "widened",
+      "text": "Lingkup diperluas"
+    },
+    {
+      "decision": null,
+      "result": "handed_over",
+      "text": "Dikirim"
+    },
+    {
+      "decision": null,
+      "result": null,
+      "text": "Dikirim"
+    }
+  ],
+  "unknown_action": "Aksi lain ({kind})",
+  "unknown_reason": "Diblokir aturan keamanan ({reason}).",
+  "explained_decisions": [
+    "block",
+    "confirm",
+    "handover"
+  ],
+  "max_target": 60,
+  "months": [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "Mei",
+    "Jun",
+    "Jul",
+    "Agu",
+    "Sep",
+    "Okt",
+    "Nov",
+    "Des"
+  ]
+}

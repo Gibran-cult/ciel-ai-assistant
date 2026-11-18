@@ -1,0 +1,411 @@
+@import "../theme.css";
+
+/* Huruf dibundel di paket (docs/design-system.md bagian 3). Lisensi: licenses/Geist-OFL.txt */
+@font-face {
+  font-family: "Geist";
+  src: url("../../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../../node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font: 400 0.875rem/1.55 "Geist", system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+code {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 0.86em;
+  overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Bilah atas: judul, status, dan Stop yang selalu terlihat. */
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-control);
+}
+
+.top-text {
+  min-width: 0;
+}
+
+.app-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+}
+
+.status-mark {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--c-control);
+}
+
+.status.active .status-mark {
+  background: var(--c-agent-active);
+}
+
+.status.wait .status-mark {
+  background: var(--c-agent-wait);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-raised);
+  border-radius: 16px;
+}
+
+.card.wait,
+.dialog.wait {
+  border-color: var(--c-agent-wait);
+}
+
+.dialog {
+  border-radius: 20px;
+}
+
+.section-title,
+.dialog-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.sentence {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.label {
+  display: block;
+  margin: 0;
+  padding: 0;
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.note {
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.error {
+  color: var(--c-err);
+}
+
+.notice {
+  padding: 12px 16px;
+  border-left: 3px solid var(--c-warn);
+  background: var(--c-surface);
+  border-radius: 8px;
+}
+
+.risk {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--c-control);
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.address,
+.typed,
+.report {
+  display: block;
+  padding: 8px 12px;
+  background: var(--c-raised);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.compare > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--c-err);
+  border-radius: 8px;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chips li {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--c-raised);
+}
+
+.choice {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  column-gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.choice input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--c-accent);
+}
+
+.choice-name {
+  font-weight: 600;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.choice-hint {
+  grid-column: 2;
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+}
+
+textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--c-control);
+  border-radius: 8px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  font: inherit;
+  resize: vertical;
+}
+
+/* Tombol: utama, sekunder, tenang, Stop. Minimal 44px tinggi. */
+button {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font: 600 0.92rem/1.2 "Geist", system-ui, sans-serif;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+button:focus-visible,
+textarea:focus-visible,
+input:focus-visible,
+[tabindex="-1"]:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+.primary {
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+}
+
+.secondary {
+  background: var(--c-surface);
+  color: var(--c-accent);
+  border-color: var(--c-accent);
+}
+
+.quiet {
+  align-self: flex-start;
+  background: transparent;
+  color: var(--c-accent);
+  padding: 0 8px;
+}
+
+.primary:not(:disabled):hover,
+.secondary:not(:disabled):hover,
+.quiet:not(:disabled):hover {
+  box-shadow: inset 0 0 0 999px rgb(127 127 127 / 0.14);
+}
+
+.primary:not(:disabled):active,
+.secondary:not(:disabled):active {
+  box-shadow: inset 0 0 0 999px rgb(127 127 127 / 0.24);
+}
+
+.stop {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 88px;
+  background: var(--c-stop-bg);
+  color: var(--c-stop-ink);
+}
+
+.stop:not(:disabled):hover {
+  box-shadow: inset 0 0 0 999px rgb(0 0 0 / 0.12);
+}
+
+.stop-square {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.actions.even > button {
+  flex: 1 1 0;
+}
+
+.block > .primary {
+  align-self: flex-start;
+}
+
+/* Log: satu baris per aksi. */
+.log {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.log-line {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  column-gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--c-raised);
+  font-size: 0.8125rem;
+}
+
+.log-time {
+  color: var(--c-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.log-target {
+  grid-column: 2;
+  color: var(--c-muted);
+}
+
+.log-result {
+  grid-column: 3;
+  grid-row: 1;
+  color: var(--c-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
