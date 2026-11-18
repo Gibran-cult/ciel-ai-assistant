@@ -127,6 +127,16 @@ def run_task(owner, task_id, device, instruction, *, model, client, store, confi
     if not isinstance(instruction, str) or not instruction.strip() or len(instruction) > MAX_INSTRUCTION:
         return TaskResult("refused", "bad_instruction", 0, "")
 
+    # Sakelar dan plafon biaya dicek sebelum tugas dibuat, supaya tugas
+    # baru tidak memanggil model saat agent sedang dimatikan.
+    try:
+        switch = still_allowed()
+    except Exception:
+        switch = "switch_error"
+
+    if switch is not None:
+        return TaskResult("refused", switch, 0, "")
+
     run = None
 
     try:
@@ -290,13 +300,7 @@ class Run:
         if reason:
             raise End("failed", reason)
 
-        try:
-            switch = self.still_allowed()
-        except Exception:
-            raise End("failed", "switch_error") from None
-
-        if switch is not None:
-            raise End("stopped", switch)
+        self.check_switch()
 
         view = TaskView(self.instruction, self.plan_steps, tuple(self.history), tuple(self.notes), self.observation)
         output = self.ask_model(self.model.act, view)
@@ -423,6 +427,10 @@ class Run:
         if approved_by:
             self.recheck(action)
 
+        # Sakelar bisa dinyalakan selama model berpikir. Dicek lagi tepat
+        # sebelum aksi dicatat dan dikirim.
+        self.check_switch()
+
         # Baris log ditulis sebelum aksi dikirim. Kalau log tidak bisa
         # ditulis, self.log mengakhiri tugas dan klien tidak pernah dipanggil.
         self.log(action, decision, approved_by)
@@ -481,6 +489,15 @@ class Run:
             raise End("stopped", "stop") if decision.reason == "stopped" else End("failed", "client_gone")
 
         return decision
+
+    def check_switch(self):
+        try:
+            switch = self.still_allowed()
+        except Exception:
+            raise End("failed", "switch_error") from None
+
+        if switch is not None:
+            raise End("stopped", switch)
 
     def recheck(self, action):
         """Hentikan tugas kalau stop ditekan, klien hilang, atau waktu habis selama dialog."""

@@ -683,20 +683,33 @@ class GateTest2B(unittest.TestCase):
         self.assertEqual((store.load_task(ALICE, TASK)["status"], store.load_task(ALICE, TASK)["reason"]), ("failed", "internal_error"))
 
     def test_the_switch_and_the_cost_cap_are_read_every_turn(self):
-        answers = iter([None, None, "agent_off"])
-        result, _, client, store = run([OPEN, READ, READ, finish()], still_allowed=lambda: next(answers))
+        # Sakelar menyala setelah dua aksi terkirim: tugas berhenti di putaran berikutnya.
+        client = FakeClient()
+        result, _, client, store = run([OPEN, READ, READ, finish()], client=client,
+                                       still_allowed=lambda: "agent_off" if len(client.ran) >= 2 else None)
         self.assertEqual((result.status, result.reason, len(client.ran)), ("stopped", "agent_off", 2))
         self.assertEqual(store.load_task(ALICE, TASK)["status"], "stopped")
 
+        # Plafon yang sudah terlewati sejak awal menolak tugas sebelum dibuat.
         result, _, client, _ = run([OPEN, finish()], still_allowed=lambda: "cost_cap")
-        self.assertEqual((result.status, result.reason, client.ran), ("stopped", "cost_cap", []))
+        self.assertEqual((result.status, result.reason, client.ran), ("refused", "cost_cap", []))
 
     def test_a_broken_switch_check_stops_the_task(self):
         def broken():
             raise OSError("disk")
 
-        result, _, client, _ = run([OPEN, finish()], still_allowed=broken)
-        self.assertEqual((result.status, client.ran), ("failed", []))
+        result, _, client, store = run([OPEN, finish()], still_allowed=broken)
+        self.assertEqual((result.status, result.reason, client.ran, store.tasks), ("refused", "switch_error", [], {}))
+
+        # Rusak di tengah tugas: tugas gagal dan tidak ada aksi lagi.
+        client = FakeClient()
+
+        def breaks_later():
+            if client.ran:
+                raise OSError("disk")
+
+        result, _, client, _ = run([OPEN, READ, finish()], client=client, still_allowed=breaks_later)
+        self.assertEqual((result.status, result.reason, len(client.ran)), ("failed", "switch_error", 1))
 
     def test_long_or_empty_instructions_are_refused_before_a_task_exists(self):
         for text in ("", "   ", "a" * 2001, None):
@@ -738,6 +751,18 @@ class ModelCostTest(unittest.TestCase):
         self.assertEqual((result.status, result.reason), ("failed", "model_error"))
         self.assertEqual(store.load_task(ALICE, TASK)["cost"], 1 + 1 + 5)  # rencana, satu aksi, panggilan yang gagal
 
+
+class SwitchBeforeSendTest(unittest.TestCase):
+    def test_the_switch_is_read_before_the_task_and_before_every_send(self):
+        result, model, client, store = run([OPEN, finish()], still_allowed=lambda: "agent_off")
+        self.assertEqual(result, TaskResult("refused", "agent_off", 0, ""))
+        self.assertEqual((model.instructions, client.ran, store.tasks), ([], [], {}))
+
+        # Sakelar dinyalakan saat model sedang berpikir: aksi itu tidak dikirim.
+        answers = iter([None, None, "agent_off"])
+        result, _, client, store = run([OPEN, finish()], still_allowed=lambda: next(answers, "agent_off"))
+        self.assertEqual((result.status, result.reason, client.ran), ("stopped", "agent_off", []))
+        self.assertEqual([row["result"] for row in rows(store)], [])
 
 if __name__ == "__main__":
     unittest.main()

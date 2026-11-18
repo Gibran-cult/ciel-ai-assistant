@@ -42,7 +42,7 @@ CLIENT_MESSAGES = {
     "hello": {"type", "token", "client", "version"},
     "start": {"type", "instruction"},
     "answer": {"type", "id", "value"},
-    "result": {"type", "seq", "observation"},
+    "result": {"type", "task", "seq", "observation"},
     "stop": {"type"},
 }
 CLIENTS = frozenset({"extension", "desktop"})
@@ -125,19 +125,27 @@ class Connection:
         self.counter = 0
         self.task_id = None       # tugas yang sedang berjalan di koneksi ini
 
-    async def send(self, message):
-        async with self.lock:
-            await self.websocket.send_json(message)
+    async def send(self, message, action=False):
+        """Kirim satu pesan. Aksi tidak dikirim lagi setelah stop atau koneksi ditutup."""
 
-    def send_from_thread(self, message):
-        """Kirim dari thread tugas. False kalau koneksi sudah tidak bisa dipakai."""
+        async with self.lock:
+            # Pesan stop diproses di thread event loop yang sama, jadi
+            # pemeriksaan ini dan penandaan stop tidak bisa saling menyalip.
+            if action and (self.stopped or self.closed):
+                return False
+
+            await self.websocket.send_json(message)
+            return True
+
+    def send_from_thread(self, message, action=False):
+        """Kirim dari thread tugas. False kalau pesan tidak terkirim."""
 
         if self.closed:
             return False
 
         try:
-            asyncio.run_coroutine_threadsafe(self.send(message), self.loop).result(timeout=SEND_SECONDS)
-            return True
+            future = asyncio.run_coroutine_threadsafe(self.send(message, action), self.loop)
+            return future.result(timeout=SEND_SECONDS) is True
         except Exception:
             self.close()
             return False
@@ -152,12 +160,19 @@ class Connection:
             self.waiting[key] = [threading.Event(), None]
 
     def deliver(self, key, value):
-        """Serahkan balasan ke penunggunya. Balasan yang tidak sedang ditunggu diabaikan."""
+        """Serahkan balasan ke penunggunya.
+
+        Balasan yang tidak sedang ditunggu diabaikan, dan hanya balasan
+        pertama yang dihitung. Slot tetap ada sampai wait mengambilnya,
+        supaya balasan yang datang lebih cepat dari wait tidak hilang.
+        """
 
         with self.guard:
-            slot = self.waiting.pop(key, None)
+            slot = self.waiting.get(key)
 
-        if slot is not None:
+            if slot is None or slot[0].is_set():
+                return
+
             slot[1] = value
             slot[0].set()
 
@@ -165,15 +180,16 @@ class Connection:
         with self.guard:
             slot = self.waiting.get(key)
 
-        if slot is None or self.closed or self.stopped:
+        if slot is None:
             return None
 
-        slot[0].wait(seconds)
+        if not (self.closed or self.stopped):
+            slot[0].wait(seconds)
 
         with self.guard:
             self.waiting.pop(key, None)
 
-        return slot[1]
+        return None if self.closed or self.stopped else slot[1]
 
     def cancel_all(self):
         with self.guard:
@@ -239,13 +255,20 @@ class WsClient:
         if reached is not True or full:
             return Observation(False)
 
-        signed = self.signer.sign(make_ticket(self.task_id, self.device, seq, tool, args, host, self.now()))
-        self.conn.expect(("result", seq))
-
-        if not self.conn.send_from_thread({"type": "action", **signed}):
+        if self.conn.stopped or self.conn.closed:
             return None
 
-        return observation_from(self.conn.wait(("result", seq), RUN_SECONDS))
+        # Nomor urut mulai dari 1 di setiap tugas, jadi penunggunya dikunci
+        # dengan ID tugas juga: hasil terlambat dari tugas lama tidak pernah
+        # dipakai untuk tugas berikutnya di koneksi yang sama.
+        key = ("result", self.task_id, seq)
+        signed = self.signer.sign(make_ticket(self.task_id, self.device, seq, tool, args, host, self.now()))
+        self.conn.expect(key)
+
+        if not self.conn.send_from_thread({"type": "action", **signed}, action=True):
+            return None
+
+        return observation_from(self.conn.wait(key, RUN_SECONDS))
 
 
 class TaskRunner:
@@ -364,6 +387,7 @@ def ws_router(settings, store, model, signer, runner, clock):
                 return
 
             owner, device = found
+            token = hello["token"]
             await conn.send({"type": "ready", "device": device})
 
             while True:
@@ -374,6 +398,15 @@ def ws_router(settings, store, model, signer, runner, clock):
                     return
 
                 if message["type"] == "start":
+                    # Token dan perangkat diperiksa lagi di setiap start:
+                    # perangkat yang sudah dicabut tidak boleh memakai
+                    # kuota atau biaya model lewat koneksi lama.
+                    again = await asyncio.to_thread(authenticate, store, token, int(clock().timestamp()))
+
+                    if again != (owner, device):
+                        await websocket.close(code=4401)
+                        return
+
                     if task is not None and task.is_alive():
                         await conn.send({"type": "end", "status": "refused", "reason": "busy", "steps": 0, "report": ""})
                         continue
@@ -389,8 +422,8 @@ def ws_router(settings, store, model, signer, runner, clock):
                     if type(message["id"]) is int:
                         conn.deliver(("answer", message["id"]), message["value"])
                 elif message["type"] == "result":
-                    if type(message["seq"]) is int:
-                        conn.deliver(("result", message["seq"]), message["observation"])
+                    if isinstance(message["task"], str) and type(message["seq"]) is int:
+                        conn.deliver(("result", message["task"], message["seq"]), message["observation"])
                 else:
                     # Stop: penantian dihentikan dulu, lalu server menolak
                     # semua aksi berikutnya lewat stop_requested.

@@ -676,6 +676,29 @@ def test_a_result_that_is_not_an_observation_is_a_failed_step(self):
 
 ---
 
+## Hasil tinjauan cabang (18 November 2026)
+
+Cabang ini dibaca reviewer terpisah (Opus 5.5) setelah kesepuluh task selesai. Temuan yang diperbaiki, masing-masing dengan uji yang gagal dulu:
+
+1. Hasil terlambat dari satu tugas bisa dipakai tugas berikutnya di koneksi yang sama, karena nomor urut mulai lagi dari 1 di setiap tugas. Sekarang `result` wajib membawa `task`, dan penunggunya dikunci `(task, seq)`.
+2. Aksi masih bisa terkirim kalau stop datang saat baris log sedang ditulis. Sekarang pengiriman aksi ditolak di thread event loop, tempat stop juga diproses.
+3. Perangkat yang dicabut atau token yang kedaluwarsa masih bisa memulai tugas di koneksi yang sudah terbuka. Sekarang token diperiksa lagi di setiap `start` (4401).
+4. Sakelar mati tidak menahan tugas baru. Sekarang sakelar dan plafon biaya dicek sebelum tugas dibuat, di setiap putaran, dan tepat sebelum setiap aksi dikirim.
+5. Balasan yang datang sebelum thread mulai menunggu bisa hilang. Sekarang slot penunggu tetap ada sampai diambil, dan hanya balasan pertama yang dihitung.
+6. Batas per IP juga mengenai penyegaran token, padahal banyak mahasiswa berbagi satu IP. Sekarang penyegaran dibatasi per akun (60 per 10 menit).
+
+Dua temuan Minor dinaikkan dan diperbaiki karena akibatnya nyata: fungsi database dipanggil dengan `Prefer: return=minimal` (bisa membuat pencabutan perangkat dan pembersih gagal di PostgREST), dan Uvicorn menampung frame WebSocket sampai 16 MB sebelum batas 256 KB dicek (`--ws-max-size 262144`).
+
+Yang dicatat untuk rencana berikutnya, belum diperbaiki:
+
+- Frame yang rusak (`client` berupa daftar, frame biner) dan `state` login berisi karakter non-ASCII menghasilkan 1011 atau 500, tidak 4400 atau 400.
+- `end` dikirim sebelum thread tugas selesai, jadi `start` yang langsung menyusul bisa menerima `busy` palsu.
+- Saat layanan dimatikan, baris tugas yang sedang berjalan tidak ditutup. Akun itu terkunci sampai pembersih berjalan (sekitar 15 menit setelah deploy).
+- Kalau Claude dan Gemini sama-sama gagal, biaya penolakan Claude tidak ikut terhitung.
+- `start` belum dibatasi lajunya.
+- `plain_text` menyisakan `)` untuk tautan `javascript:` dan tidak menangani tautan gaya rujukan. Klien tetap menampilkan teks biasa.
+- State login tidak terikat ke browser yang memulainya. Berarti hanya kalau aplikasi lain di laptop membajak skema `ciel://`.
+
 ## Langkah pemilik sebelum dan sesudah deploy
 
 Langkah ini dijalankan Ciel sendiri. Agent tidak mengetik nilai rahasia, tidak membuka konsol penyedia, dan tidak menyalakan agent untuk pengguna.

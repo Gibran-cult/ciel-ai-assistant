@@ -189,7 +189,7 @@ class AgentServiceTest(unittest.TestCase):
         copied = re.findall(r"(?m)^COPY (?:--chown=\S+ )?(\S+) ", dockerfile)
         self.assertEqual(sorted(copied), sorted(["requirements-agent.txt", "agent_api", "guard", "chat_store.py", "account_settings.py", "account_ids.py"]))
         command = re.search(r"(?m)^CMD (.+)$", dockerfile).group(1)
-        for part in ('"agent_api.main:production_app"', '"--factory"', '"--workers", "1"', '"--proxy-headers"', '"--forwarded-allow-ips", "*"', '"--port", "8000"'):
+        for part in ('"agent_api.main:production_app"', '"--factory"', '"--ws-max-size", "262144"', '"--workers", "1"', '"--proxy-headers"', '"--forwarded-allow-ips", "*"', '"--port", "8000"'):
             self.assertIn(part, command)
 
     def test_agent_env_examples_list_every_setting_without_values(self):

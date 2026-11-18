@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ from agent_api.tickets import TicketSigner, verify_ticket  # noqa: E402
 from agent_api.tools import Control, Observation  # noqa: E402
 from agent_api.ws import observation_from  # noqa: E402
 from guard.audit import AuditEvent, verify_chain  # noqa: E402
+from tests.agent_fakes import MemoryStore  # noqa: E402
 from tests.agent_service_fakes import ENV, NOW  # noqa: E402
 from tests.test_agent_devices import Service  # noqa: E402
 
@@ -57,7 +59,7 @@ def start(ws, mode="auto"):
 def answer_action(ws, observation=SHOP_PAGE):
     action = ws.receive_json()
     assert action["type"] == "action", action
-    ws.send_json({"type": "result", "seq": action["ticket"]["seq"], "observation": observation})
+    ws.send_json({"type": "result", "task": action["ticket"]["task"], "seq": action["ticket"]["seq"], "observation": observation})
     return action
 
 
@@ -212,12 +214,12 @@ class SocketSafetyTest(unittest.TestCase):
             start(ws)
             first = ws.receive_json()
             seq = first["ticket"]["seq"]
-            ws.send_json({"type": "result", "seq": seq + 50, "observation": other_page})
-            ws.send_json({"type": "result", "seq": seq, "observation": SHOP_PAGE})
+            ws.send_json({"type": "result", "task": first["ticket"]["task"], "seq": seq + 50, "observation": other_page})
+            ws.send_json({"type": "result", "task": first["ticket"]["task"], "seq": seq, "observation": SHOP_PAGE})
             second = ws.receive_json()
-            ws.send_json({"type": "result", "seq": seq, "observation": other_page})
+            ws.send_json({"type": "result", "task": first["ticket"]["task"], "seq": seq, "observation": other_page})
             ws.send_json({"type": "answer", "id": 999, "value": True})
-            ws.send_json({"type": "result", "seq": second["ticket"]["seq"], "observation": other_page})
+            ws.send_json({"type": "result", "task": second["ticket"]["task"], "seq": second["ticket"]["seq"], "observation": other_page})
             end = ws.receive_json()
 
         self.assertGreater(second["ticket"]["seq"], seq)
@@ -235,7 +237,7 @@ class SocketSafetyTest(unittest.TestCase):
             start(ws)
             first = ws.receive_json()
             ws.send_json({"type": "stop"})
-            ws.send_json({"type": "result", "seq": first["ticket"]["seq"], "observation": SHOP_PAGE})
+            ws.send_json({"type": "result", "task": first["ticket"]["task"], "seq": first["ticket"]["seq"], "observation": SHOP_PAGE})
             end = ws.receive_json()
 
         self.assertEqual((end["type"], end["status"], end["reason"]), ("end", "stopped", "stop"))
@@ -250,7 +252,7 @@ class SocketSafetyTest(unittest.TestCase):
             start(ws)
             first = ws.receive_json()
             svc.store.revoke_device(ALICE, tokens["device"])
-            ws.send_json({"type": "result", "seq": first["ticket"]["seq"], "observation": SHOP_PAGE})
+            ws.send_json({"type": "result", "task": first["ticket"]["task"], "seq": first["ticket"]["seq"], "observation": SHOP_PAGE})
             end = ws.receive_json()
 
         self.assertEqual((end["status"], end["reason"]), ("failed", "client_gone"))
@@ -279,7 +281,7 @@ class SocketSafetyTest(unittest.TestCase):
             start(ws)
             first = ws.receive_json()
             Path(switch).touch()
-            ws.send_json({"type": "result", "seq": first["ticket"]["seq"], "observation": SHOP_PAGE})
+            ws.send_json({"type": "result", "task": first["ticket"]["task"], "seq": first["ticket"]["seq"], "observation": SHOP_PAGE})
             end = ws.receive_json()
 
         self.assertEqual((end["status"], end["reason"]), ("stopped", "agent_off"))
@@ -293,7 +295,7 @@ class SocketSafetyTest(unittest.TestCase):
             start(ws)
             first = ws.receive_json()
             svc.store.cost_today = 5_000_000
-            ws.send_json({"type": "result", "seq": first["ticket"]["seq"], "observation": SHOP_PAGE})
+            ws.send_json({"type": "result", "task": first["ticket"]["task"], "seq": first["ticket"]["seq"], "observation": SHOP_PAGE})
             end = ws.receive_json()
 
         self.assertEqual((end["status"], end["reason"]), ("stopped", "cost_cap"))
@@ -336,6 +338,119 @@ class ObservationTest(unittest.TestCase):
             with self.subTest(bad=bad):
                 self.assertIsNone(observation_from(bad))
 
+
+class ReviewFindingsTest(unittest.TestCase):
+    """Temuan tinjauan cabang 2B."""
+
+    def test_a_late_result_from_one_task_never_reaches_the_next(self):
+        later = {**SHOP_PAGE, "text": "HASIL TUGAS A"}
+        svc = service([OPEN, FINISH, OPEN, FINISH])
+        tokens = svc.login()
+
+        with patch.object(ws_module, "RUN_SECONDS", 0.3), connect(svc) as ws:
+            hello(ws, tokens)
+            start(ws)
+            first = ws.receive_json()
+            self.assertEqual(ws.receive_json()["type"], "end")
+            start(ws)
+            second = ws.receive_json()
+            self.assertEqual(second["ticket"]["seq"], first["ticket"]["seq"])
+            ws.send_json({"type": "result", "task": first["ticket"]["task"], "seq": first["ticket"]["seq"], "observation": later})
+            ws.send_json({"type": "result", "task": second["ticket"]["task"], "seq": second["ticket"]["seq"], "observation": SHOP_PAGE})
+            ws.receive_json()
+
+        views = svc.client.app.state.models.views
+        self.assertNotIn("HASIL TUGAS A", repr(views))
+        self.assertIn("Beranda toko", views[-1].observation)
+
+    def test_a_result_without_its_task_closes_the_connection(self):
+        svc = service([OPEN, FINISH])
+        tokens = svc.login()
+
+        def steps(ws):
+            hello(ws, tokens)
+            start(ws)
+            action = ws.receive_json()
+            ws.send_json({"type": "result", "seq": action["ticket"]["seq"], "observation": SHOP_PAGE})
+
+        closed_with(self, svc, 4400, steps)
+
+    def test_a_revoked_or_expired_device_cannot_start_a_task_on_an_open_socket(self):
+        for case in ("revoked", "expired"):
+            with self.subTest(case=case):
+                svc = service([OPEN, FINISH])
+                tokens = svc.login()
+
+                def steps(ws, svc=svc, tokens=tokens, case=case):
+                    hello(ws, tokens)
+
+                    if case == "revoked":
+                        svc.store.revoke_device(ALICE, tokens["device"])
+                    else:
+                        svc.clock.time = NOW + timedelta(seconds=901)
+
+                    ws.send_json({"type": "start", "instruction": INSTRUCTION})
+
+                closed_with(self, svc, 4401, steps)
+                self.assertEqual((svc.client.app.state.models.instructions, svc.store.tasks), ([], {}))
+
+    def test_the_kill_switch_refuses_a_new_task_before_any_model_call(self):
+        folder = tempfile.mkdtemp()
+        switch = os.path.join(folder, "agent_off")
+        Path(switch).touch()
+        svc = service([OPEN, FINISH], settings=load_settings({**ENV, "AGENT_SWITCH_FILE": switch})[0])
+        tokens = svc.login()
+
+        with connect(svc) as ws:
+            hello(ws, tokens)
+            ws.send_json({"type": "start", "instruction": INSTRUCTION})
+            end = ws.receive_json()
+
+        self.assertEqual((end["type"], end["status"], end["reason"]), ("end", "refused", "agent_off"))
+        self.assertEqual((svc.client.app.state.models.instructions, svc.store.tasks), ([], {}))
+
+
+class ConnectionTest(unittest.TestCase):
+    """Kotak balasan dan pengiriman aksi, tanpa jaringan."""
+
+    def setUp(self):
+        import asyncio
+        import threading
+
+        self.loop = asyncio.new_event_loop()
+        self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
+        self.thread.start()
+        self.sent = []
+
+        class Socket:
+            async def send_json(inner, message):
+                self.sent.append(message)
+
+        self.conn = ws_module.Connection(Socket(), self.loop)
+
+    def tearDown(self):
+        self.loop.call_soon_threadsafe(self.loop.stop)
+        self.thread.join(2)
+
+    def test_a_reply_that_arrives_before_the_wait_is_kept(self):
+        self.conn.expect(("answer", 1))
+        self.conn.deliver(("answer", 1), "auto")
+        self.assertEqual(self.conn.wait(("answer", 1), 0.1), "auto")
+
+    def test_only_the_first_reply_counts(self):
+        self.conn.expect(("answer", 1))
+        self.conn.deliver(("answer", 1), "auto")
+        self.conn.deliver(("answer", 1), "ask")
+        self.assertEqual(self.conn.wait(("answer", 1), 0.1), "auto")
+        self.conn.deliver(("answer", 1), "ask")
+        self.assertEqual(self.conn.waiting, {})
+
+    def test_no_action_is_sent_after_stop(self):
+        store = MemoryStore()
+        client = ws_module.WsClient(self.conn, ALICE, "d1", "t1", SIGNER, store, lambda: NOW)
+        self.conn.stopped = True
+        self.assertIsNone(client.run("tab_read", {}, 1, "shopee.co.id"))
+        self.assertEqual(self.sent, [])
 
 if __name__ == "__main__":
     unittest.main()

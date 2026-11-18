@@ -338,5 +338,18 @@ class DeviceTokenTest(unittest.TestCase):
         self.assertEqual(self.devices(tokens).status_code, 401)
 
 
+class RefreshLimitTest(unittest.TestCase):
+    def test_refresh_is_limited_per_account_not_per_address(self):
+        service = Service()
+        tokens = service.login()
+        service.store.full = "agent-ip:testclient"
+        response = service.client.post("/v1/device/refresh", json={"refresh_token": tokens["refresh_token"]})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn({"agent-refresh:" + ALICE: (60, 600)}, service.store.hits)
+
+        service.store.full = "agent-refresh:" + ALICE
+        response = service.client.post("/v1/device/refresh", json={"refresh_token": response.json()["refresh_token"]})
+        self.assertEqual(response.status_code, 429)
+
 if __name__ == "__main__":
     unittest.main()

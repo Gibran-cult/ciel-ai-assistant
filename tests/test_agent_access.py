@@ -45,7 +45,7 @@ class CrossAccountTest(unittest.TestCase):
             plan = ws.receive_json()
             ws.send_json({"type": "answer", "id": plan["id"], "value": "auto"})
             action = ws.receive_json()
-            ws.send_json({"type": "result", "seq": action["ticket"]["seq"], "observation": SHOP_PAGE})
+            ws.send_json({"type": "result", "task": action["ticket"]["task"], "seq": action["ticket"]["seq"], "observation": SHOP_PAGE})
             ws.receive_json()
 
         owners = {key[0] for key in self.svc.store.tasks}

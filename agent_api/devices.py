@@ -40,6 +40,7 @@ CODE_SECONDS = 60
 ACCESS_SECONDS = 900
 REFRESH_SECONDS = 30 * 86400
 ADDRESS_LIMIT = (10, 600)   # permintaan login per IP per 10 menit
+REFRESH_LIMIT = (60, 600)   # penyegaran token per akun per 10 menit
 
 PREFIXES = {"code": "cdc1", "access": "cat1", "refresh": "crt1"}
 CHALLENGE_RE = re.compile(r"[A-Za-z0-9_-]{43}")
@@ -285,11 +286,6 @@ def device_router(settings, store, google, clock):
 
     @router.post("/v1/device/refresh")
     async def refresh(request: Request):
-        limited = address_limit(request)
-
-        if limited:
-            return limited
-
         try:
             body = RefreshRequest.model_validate(await request.json())
         except (ValidationError, ValueError):
@@ -301,6 +297,17 @@ def device_router(settings, store, google, clock):
             return refuse(401, "invalid_grant")
 
         owner, hash_ = parsed
+
+        # Banyak mahasiswa berbagi satu IP (CGNAT operator, Wi-Fi kampus),
+        # dan setiap perangkat menyegarkan token tiap 15 menit. Batasnya
+        # per akun, supaya satu kampus tidak saling mengunci.
+        reached, full = store.rate_limit_hit({f"agent-refresh:{owner}": REFRESH_LIMIT}, now())
+
+        if reached is not True:
+            return refuse(503, "unavailable")
+
+        if full:
+            return refuse(429, "rate_limited")
         row = store.find_token(owner, hash_)
 
         if row is None or row.get("kind") != "refresh" or expired(row, now()) or not isinstance(row.get("device"), str):

@@ -328,5 +328,15 @@ class DeviceStoreTest(unittest.TestCase):
         post.assert_not_called()
 
 
+class RpcHeaderTest(unittest.TestCase):
+    def test_database_functions_are_asked_for_their_answer(self):
+        calls = ((lambda s: s.sweep(900), 2), (lambda s: s.revoke_device(ALICE, "d1"), True),
+                 (lambda s: s.cost_since("2026-11-18T00:00:00+07:00"), 5))
+
+        for call, payload in calls:
+            with patch("requests.post", return_value=Response(payload)) as post:
+                call(store())
+            self.assertNotEqual(post.call_args.kwargs["headers"].get("Prefer"), "return=minimal")
+
 if __name__ == "__main__":
     unittest.main()

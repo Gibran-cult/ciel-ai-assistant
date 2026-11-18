@@ -38,18 +38,20 @@ Token tidak pernah dikirim di URL. Pesan pertama harus `hello` dalam 10 detik.
 | Arah | `type` | Kunci lain (persis) | Balasan |
 |---|---|---|---|
 | Klien | `hello` | `token`, `client` (`extension` atau `desktop`), `version` (`x.y.z`) | `ready` dengan `device` |
-| Klien | `start` | `instruction` (1 sampai 2.000 karakter) | Tugas dimulai. Kalau sudah ada tugas berjalan: `end` dengan status `refused`, alasan `busy` |
+| Klien | `start` | `instruction` (1 sampai 2.000 karakter) | Tugas dimulai. Kalau sudah ada tugas berjalan: `end` dengan status `refused`, alasan `busy`. Kalau agent sedang dimatikan atau plafon biaya harian terlewati: `end` dengan status `refused`, alasan `agent_off` atau `cost_cap`. Token dan perangkat diperiksa lagi di setiap `start`: token kedaluwarsa atau perangkat yang dicabut menutup koneksi dengan 4401 |
 | Server | `plan` | `id`, `steps`, `scope` | `answer` dengan `id` dan `value`: `"ask"`, `"auto"`, atau `null` untuk menolak |
 | Server | `confirm` | `id`, `prompt` | `answer` dengan `value` `true` atau `false` |
 | Server | `handover` | `id`, `prompt` | `answer` dengan `value` `true` (pengguna sudah mengerjakannya sendiri) atau `false` |
 | Server | `ask` | `id`, `question` | `answer` dengan `value` teks |
-| Server | `action` | `ticket`, `kid`, `sig` | `result` dengan `seq` (sama dengan `ticket.seq`) dan `observation` |
+| Server | `action` | `ticket`, `kid`, `sig` | `result` dengan `task` dan `seq` (sama dengan `ticket.task` dan `ticket.seq`) dan `observation` |
 | Server | `end` | `status`, `reason`, `steps`, `report` | Tidak ada |
 | Klien | `stop` | Tidak ada | Tugas berakhir `stopped`. Server menolak semua aksi berikutnya |
 
 Pesan yang bukan JSON, lebih dari 256 KB, `type`-nya tidak dikenal, atau membawa kunci di luar daftar di atas menutup koneksi dengan kode 4400. Balasan dengan `id` atau `seq` yang tidak sedang ditunggu diabaikan.
 
-Kode penutupan lain: 4401 token tidak sah atau perangkat dicabut, 4403 `Origin` tidak terdaftar, 4408 tidak ada `hello`, 4426 versi klien di bawah `AGENT_MIN_CLIENT_VERSION` (klien harus diperbarui).
+Nomor urut mulai lagi dari 1 di setiap tugas, karena itu `result` wajib membawa `task`. Hasil untuk tugas yang sudah selesai diabaikan.
+
+Kode penutupan lain: 4401 token tidak sah atau perangkat dicabut (dicek saat `hello` dan setiap `start`), 4403 `Origin` tidak terdaftar, 4408 tidak ada `hello`, 4426 versi klien di bawah `AGENT_MIN_CLIENT_VERSION` (klien harus diperbarui).
 
 Batas waktu menunggu balasan: rencana dan pertanyaan 300 detik, konfirmasi dan serah terima 130 detik (jawaban setelah 120 detik tidak berlaku), hasil aksi 60 detik. Yang lewat batas dihitung "tidak".
 

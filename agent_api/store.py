@@ -37,13 +37,19 @@ def valid_owner(value):
 
 class AgentStore(ChatStore):
 
-    def _post(self, action, path, body):
-        """Kirim satu POST. Kembalikan response, atau None kalau jaringan gagal."""
+    def _post(self, action, path, body, prefer="return=minimal"):
+        """Kirim satu POST. Kembalikan response, atau None kalau jaringan gagal.
+
+        Fungsi database (rpc/...) dipanggil dengan prefer=None, karena
+        jawabannya yang dibutuhkan.
+        """
+
+        headers = {**self.headers, "Prefer": prefer} if prefer else dict(self.headers)
 
         try:
             return requests.post(
                 f"{self.base}/{path}",
-                headers={**self.headers, "Prefer": "return=minimal"},
+                headers=headers,
                 json=body,
                 timeout=TIMEOUT,
             )
@@ -182,7 +188,7 @@ class AgentStore(ChatStore):
         if not isinstance(since_iso, str) or not since_iso:
             return None
 
-        response = self._post("cost_since", "rpc/ciel_agent_cost_since", {"p_since": since_iso})
+        response = self._post("cost_since", "rpc/ciel_agent_cost_since", {"p_since": since_iso}, prefer=None)
 
         if response is None or response.status_code >= 400:
             return None
@@ -199,7 +205,7 @@ class AgentStore(ChatStore):
     def _rpc(self, action, name, body):
         """Jawaban JSON fungsi database, atau None kalau gagal."""
 
-        response = self._post(action, f"rpc/{name}", body)
+        response = self._post(action, f"rpc/{name}", body, prefer=None)
 
         if response is None or response.status_code >= 400:
             return None

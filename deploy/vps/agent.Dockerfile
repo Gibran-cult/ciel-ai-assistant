@@ -23,4 +23,5 @@ USER ciel
 
 # One worker: running tasks and their sockets live in this process.
 # Port 8000 is reached only by Caddy, so its X-Forwarded-For is trusted.
-CMD ["uvicorn", "agent_api.main:production_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# WebSocket frames above 256 KB are refused before they are buffered.
+CMD ["uvicorn", "agent_api.main:production_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*", "--ws-max-size", "262144"]
