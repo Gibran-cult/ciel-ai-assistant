@@ -55,6 +55,7 @@ const REFUSE_TEXT: Record<string, string> = {
   blocked_host: "Situs ini selalu diblokir untuk agent.",
   no_permission: "Ciel belum diberi izin untuk situs ini. Izin bisa diberikan dari panel Ciel.",
   no_tab: "Tab tugas sudah ditutup.",
+  keys_unavailable: "Kunci tiket tidak bisa diambil, jadi aksi ini tidak dijalankan.",
   stopped: "Tugas sudah dihentikan, jadi aksi ini tidak dijalankan.",
   handover: "Kamu sedang mengerjakan langkah ini sendiri (serah terima), jadi Ciel tidak membaca atau menyentuh tab.",
   no_script: "Halaman sudah berubah sejak dibaca. Baca ulang dulu.",
@@ -127,6 +128,7 @@ function callInPage(tool: string, args: unknown, generation: number): unknown {
 }
 
 const READ_ATTEMPTS = 20;
+const KEYS_SECONDS = 600;
 const PAGE_TOOLS = new Set(["tab_read", "tab_click", "form_submit", "tab_type", "tab_select", "tab_scroll"]);
 
 export class Runner {
@@ -137,6 +139,7 @@ export class Runner {
   private generation = 0;
   private documentId: string | undefined;
   private cachedKeys: unknown = null;
+  private keysAt = 0;
   // Naik setiap begin() dan end(). Aksi yang pemeriksaannya masih berjalan
   // saat Stop ditekan tidak boleh jalan sesudahnya.
   private epoch = 0;
@@ -164,7 +167,14 @@ export class Runner {
   }
 
   private async keys(fresh: boolean): Promise<unknown> {
-    if (fresh || this.cachedKeys === null) this.cachedKeys = await this.deps.keys();
+    // Kunci yang dirotasi atau dicabut tidak dipercaya lebih lama dari ini.
+    const now = this.deps.now();
+
+    if (fresh || this.cachedKeys === null || now - this.keysAt > KEYS_SECONDS) {
+      this.cachedKeys = await this.deps.keys();
+      this.keysAt = now;
+    }
+
     return this.cachedKeys;
   }
 
@@ -200,9 +210,16 @@ export class Runner {
       hasPermission: this.deps.hasPermission,
     });
 
-    let reason = device === null ? "wrong_device" : await checkAction(signed, await context(false));
-    // Kunci baru setelah rotasi: ambil daftar kunci sekali lagi.
-    if (reason === "unknown_key") reason = await checkAction(signed, await context(true));
+    let reason: string | null;
+
+    try {
+      reason = device === null ? "wrong_device" : await checkAction(signed, await context(false));
+      // Kunci baru setelah rotasi: ambil daftar kunci sekali lagi.
+      if (reason === "unknown_key") reason = await checkAction(signed, await context(true));
+    } catch {
+      // Kunci tidak bisa diambil: tetap dijawab, supaya layanan tidak menunggu.
+      reason = "keys_unavailable";
+    }
 
     // Stop atau tugas baru di tengah pemeriksaan: jangan jalankan, jangan ikat tugas.
     if (epoch !== this.epoch) {

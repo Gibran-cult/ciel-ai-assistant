@@ -384,3 +384,39 @@ describe("readStart (task 3.27)", () => {
     }
   });
 });
+
+describe("review minors (task 4)", () => {
+  function make(keys: () => Promise<unknown>, now: () => number = () => NOW) {
+    const executeScript = vi.fn(async (): Promise<{ result?: unknown }[]> =>
+      [{ result: { observation: { ok: true, source: "page", text: "", host: "shopee.co.id", controls: {} }, generation: 1 } }]);
+    const result = vi.fn(() => true);
+    const runner = new Runner({
+      keys, device: async () => "d1", now,
+      tabs: { get: vi.fn(async () => ({ id: 1, windowId: 9, url: "https://shopee.co.id/" })), create: vi.fn(), remove: vi.fn() },
+      scripting: { executeScript }, hasPermission: async () => true, waitForLoad: async () => undefined, result,
+      needPermission: vi.fn(), pause: async () => undefined,
+    });
+    runner.begin(1);
+    return { runner, executeScript, result };
+  }
+
+  test("a failed ticket-key fetch still answers the action", async () => {
+    const { runner, executeScript, result } = make(async () => { throw new TypeError("Failed to fetch"); });
+    await runner.onAction(sign());
+    expect(executeScript).not.toHaveBeenCalled();
+    expect(result).toHaveBeenCalledWith("t1", 3, expect.objectContaining({ ok: false }));
+  });
+
+  test("ticket keys are fetched again after ten minutes", async () => {
+    let now = NOW;
+    const keys = vi.fn(async () => KEYS);
+    const { runner } = make(keys, () => now);
+    await runner.onAction(sign({ seq: 3 }));
+    now = NOW + 300;
+    await runner.onAction(sign({ seq: 4, exp: now + 60 }));
+    expect(keys).toHaveBeenCalledTimes(1);
+    now = NOW + 601;
+    await runner.onAction(sign({ seq: 5, exp: now + 60 }));
+    expect(keys).toHaveBeenCalledTimes(2);
+  });
+});
