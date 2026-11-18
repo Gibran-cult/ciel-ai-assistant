@@ -198,6 +198,7 @@ jobs:
         run: |
           python -m unittest -v \
             tests.test_agent_api_health \
+            tests.test_agent_tickets \
             tests.test_agent_store \
             tests.test_agent_envelope \
             tests.test_agent_model \

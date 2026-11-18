@@ -7,6 +7,8 @@ memakai tiruan dan tidak pernah menyentuh jaringan.
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from agent_api.tickets import TicketSigner
+
 
 def create_app(settings, *, store, models, google, clock, missing=()):
     """Aplikasi FastAPI. `settings` None berarti pengaturan belum lengkap."""
@@ -19,5 +21,14 @@ def create_app(settings, *, store, models, google, clock, missing=()):
             return JSONResponse({"ok": False, "missing": list(missing)}, status_code=503)
 
         return {"ok": True}
+
+    if settings is None:
+        return app
+
+    signer = TicketSigner(settings.ticket_keys)
+
+    @app.get("/v1/ticket-keys")
+    def ticket_keys():
+        return {"keys": signer.public_keys()}
 
     return app
