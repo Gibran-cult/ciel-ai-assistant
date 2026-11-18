@@ -164,3 +164,48 @@ jobs:
 
       - name: Check VPS shell scripts
         run: bash -n deploy/vps/*.sh
+
+  # The Ciel Agent API runs in its own container with its own lockfile
+  # (requirements-agent.txt). This job proves that lock is enough for the
+  # service and for the agent loop it wraps.
+  agent-service:
+    name: Agent Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Install service dependencies (the lock the container installs)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --require-hashes -r requirements-agent.txt
+
+      - name: Audit service dependencies for known vulnerabilities
+        run: |
+          python -m pip install pip-audit
+          pip-audit -r requirements-agent.txt
+
+      - name: Run agent service tests
+        run: |
+          python -m unittest -v \
+            tests.test_agent_api_health \
+            tests.test_agent_store \
+            tests.test_agent_envelope \
+            tests.test_agent_model \
+            tests.test_agent_tools \
+            tests.test_agent_plan \
+            tests.test_agent_limits \
+            tests.test_agent_journal \
+            tests.test_agent_loop \
+            tests.test_agent_redteam \
+            tests.test_guard_audit \
+            tests.test_guard_decide

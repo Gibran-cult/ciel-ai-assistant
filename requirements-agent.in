@@ -1,0 +1,10 @@
+# Ciel Agent API (agent_api/main.py). Locked to requirements-agent.txt with:
+#   uv pip compile requirements-agent.in --universal --python-version 3.14 --generate-hashes -o requirements-agent.txt
+# The Streamlit app does not use this file; requirements.txt stays separate.
+fastapi
+uvicorn
+anthropic>=2
+cryptography
+requests
+# fastapi.testclient needs httpx (tests and tools/agent_smoke.py)
+httpx
