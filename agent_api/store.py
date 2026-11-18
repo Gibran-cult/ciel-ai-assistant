@@ -7,6 +7,7 @@ supaya loop agent bisa berhenti dengan rapi.
 """
 
 import logging
+import re
 
 import requests
 
@@ -19,6 +20,11 @@ logger = logging.getLogger("ciel.agent_store")
 TASK_FIELDS = frozenset({"plan", "scope", "mode", "status", "reason", "steps", "cost", "head_hash"})
 
 ACTION_LIMIT = 500
+HASH_RE = re.compile(r"[0-9a-f]{64}")
+TOKEN_KINDS = frozenset({"code", "access", "refresh"})
+PLATFORMS = frozenset({"extension", "desktop"})
+MAX_DEVICE_NAME = 60
+DEVICE_COLUMNS = "id,name,platform,created_at,last_seen_at,revoked_at"
 
 
 def valid_id(value):
@@ -187,3 +193,125 @@ class AgentStore(ChatStore):
             return None
 
         return total if type(total) is int and total >= 0 else None
+
+    # Perangkat dan token (rencana 2B) ------------------------------------
+
+    def _rpc(self, action, name, body):
+        """Jawaban JSON fungsi database, atau None kalau gagal."""
+
+        response = self._post(action, f"rpc/{name}", body)
+
+        if response is None or response.status_code >= 400:
+            return None
+
+        try:
+            return response.json()
+        except ValueError:
+            return None
+
+    def create_device(self, owner, device, name, platform):
+        if not valid_owner(owner) or not valid_id(device) or platform not in PLATFORMS:
+            logger.error("agent_store_rejected action=create_device")
+            return False
+
+        if not isinstance(name, str) or not 0 < len(name) <= MAX_DEVICE_NAME:
+            return False
+
+        row = {"owner": owner, "id": device, "name": name, "platform": platform}
+        response = self._post("create_device", "agent_devices", row)
+        return response is not None and response.status_code < 400
+
+    def load_devices(self, owner):
+        return self._rows("load_devices", owner, "agent_devices", select=DEVICE_COLUMNS, order="created_at.asc")
+
+    def device_active(self, owner, device):
+        """True kalau perangkat ada dan belum dicabut, False kalau tidak, None kalau tidak terbaca."""
+
+        if not valid_id(device):
+            return False
+
+        rows = self._rows("device_active", owner, "agent_devices", device, select="revoked_at")
+
+        if rows is None:
+            return None
+
+        return bool(rows) and isinstance(rows[0], dict) and rows[0].get("revoked_at") is None
+
+    def touch_device(self, owner, device):
+        if not valid_id(device):
+            return False
+
+        # "now" adalah nilai khusus timestamptz di Postgres: waktu transaksi.
+        response = self._request(
+            "PATCH", "touch_device", owner, "agent_devices", device, json={"last_seen_at": "now"},
+            headers={"Prefer": "return=representation"}, params={"select": "id"},
+        )
+
+        if response is None:
+            return False
+
+        try:
+            rows = response.json()
+        except ValueError:
+            return False
+
+        return isinstance(rows, list) and len(rows) == 1
+
+    def revoke_device(self, owner, device):
+        if not valid_owner(owner) or not valid_id(device):
+            return False
+
+        return self._rpc("revoke_device", "ciel_agent_revoke_device", {"p_owner": owner, "p_device": device}) is True
+
+    def save_token(self, owner, hash_, kind, expires_at, device=None, challenge=None, redirect=None):
+        if not valid_owner(owner) or not isinstance(hash_, str) or not HASH_RE.fullmatch(hash_) or kind not in TOKEN_KINDS:
+            logger.error("agent_store_rejected action=save_token")
+            return False
+
+        if not isinstance(expires_at, str) or not expires_at or (device is not None and not valid_id(device)):
+            return False
+
+        row = {
+            "owner": owner, "hash": hash_, "kind": kind, "expires_at": expires_at,
+            "device": device, "challenge": challenge, "redirect": redirect,
+        }
+        response = self._post("save_token", "agent_device_tokens", row)
+        return response is not None and response.status_code < 400
+
+    def find_token(self, owner, hash_):
+        if not isinstance(hash_, str) or not HASH_RE.fullmatch(hash_):
+            return None
+
+        rows = self._rows("find_token", owner, "agent_device_tokens", hash=f"eq.{hash_}", select="*")
+        return rows[0] if rows and len(rows) == 1 and isinstance(rows[0], dict) else None
+
+    def use_token(self, owner, hash_):
+        """Tandai token terpakai dan kembalikan barisnya, hanya kalau belum pernah dipakai."""
+
+        if not isinstance(hash_, str) or not HASH_RE.fullmatch(hash_):
+            return None
+
+        response = self._request(
+            "PATCH", "use_token", owner, "agent_device_tokens", json={"used_at": "now"},
+            headers={"Prefer": "return=representation"},
+            params={"hash": f"eq.{hash_}", "used_at": "is.null", "select": "*"},
+        )
+
+        if response is None:
+            return None
+
+        try:
+            rows = response.json()
+        except ValueError:
+            return None
+
+        return rows[0] if isinstance(rows, list) and len(rows) == 1 and isinstance(rows[0], dict) else None
+
+    def sweep(self, idle_seconds):
+        """Jumlah tugas macet yang ditutup, atau None kalau gagal."""
+
+        if type(idle_seconds) is not int or idle_seconds < 1:
+            return None
+
+        swept = self._rpc("sweep", "ciel_agent_sweep", {"p_idle_seconds": idle_seconds})
+        return swept if type(swept) is int and swept >= 0 else None

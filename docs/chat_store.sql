@@ -355,3 +355,103 @@ $$;
 
 -- Hanya service key (Ciel Agent API) yang boleh memanggilnya.
 revoke execute on function public.ciel_agent_cost_since(timestamptz) from public, anon, authenticated;
+
+-- Ciel Agent API, rencana 2B. Perangkat (ekstensi atau desktop) milik satu
+-- akun, dan tokennya. Token hanya disimpan sebagai hash SHA-256.
+create table if not exists public.agent_devices (
+    owner text not null,
+    id text not null,
+    name text not null check (char_length(name) between 1 and 60),
+    platform text not null check (platform in ('extension', 'desktop')),
+    created_at timestamptz not null default now(),
+    last_seen_at timestamptz,
+    revoked_at timestamptz,
+    primary key (owner, id)
+);
+
+alter table public.agent_devices enable row level security;
+
+create table if not exists public.agent_device_tokens (
+    owner text not null,
+    hash text not null check (hash ~ '^[0-9a-f]{64}$'),
+    kind text not null check (kind in ('code', 'access', 'refresh')),
+    device text,
+    challenge text,
+    redirect text,
+    expires_at timestamptz not null,
+    used_at timestamptz,
+    created_at timestamptz not null default now(),
+    primary key (owner, hash)
+);
+
+alter table public.agent_device_tokens enable row level security;
+
+create index if not exists agent_device_tokens_expires on public.agent_device_tokens (expires_at);
+
+-- Waktu aktivitas terakhir tugas, untuk pembersih tugas macet. Diisi
+-- database di setiap perubahan baris, jadi loop tidak perlu mengirimnya.
+alter table public.agent_tasks add column if not exists updated_at timestamptz not null default now();
+
+create or replace function public.ciel_touch_updated_at()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+    new.updated_at = now();
+    return new;
+end;
+$$;
+
+drop trigger if exists agent_tasks_touch on public.agent_tasks;
+create trigger agent_tasks_touch
+    before update on public.agent_tasks
+    for each row execute function public.ciel_touch_updated_at();
+
+create index if not exists agent_tasks_active_updated on public.agent_tasks (updated_at) where status in ('planning', 'running');
+
+-- Tutup tugas yang tidak bergerak lebih dari p_idle_seconds. Stop dan status
+-- dipasang dalam satu pernyataan, jadi loop yang ternyata masih hidup
+-- melihat stop di aksi berikutnya. Token yang sudah lewat sehari dibuang.
+create or replace function public.ciel_agent_sweep(p_idle_seconds integer)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    swept integer;
+begin
+    update public.agent_tasks
+       set stop_requested = true, status = 'failed', reason = 'swept'
+     where status in ('planning', 'running')
+       and updated_at < now() - make_interval(secs => p_idle_seconds);
+    get diagnostics swept = row_count;
+    delete from public.agent_device_tokens where expires_at < now() - interval '1 day';
+    return swept;
+end;
+$$;
+
+revoke execute on function public.ciel_agent_sweep(integer) from public, anon, authenticated;
+
+-- Cabut satu perangkat dan semua tokennya sekaligus. True kalau perangkat
+-- itu ada dan milik pemilik ini.
+create or replace function public.ciel_agent_revoke_device(p_owner text, p_device text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    found_device boolean;
+begin
+    update public.agent_devices
+       set revoked_at = now()
+     where owner = p_owner and id = p_device and revoked_at is null;
+    found_device := exists (select 1 from public.agent_devices where owner = p_owner and id = p_device);
+    delete from public.agent_device_tokens where owner = p_owner and device = p_device;
+    return found_device;
+end;
+$$;
+
+revoke execute on function public.ciel_agent_revoke_device(text, text) from public, anon, authenticated;
