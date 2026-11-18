@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { PanelCommand, PanelState } from "../controller";
+import { httpsHost, isBlockedHost } from "../hosts";
 import { Ask } from "./Ask";
 import { Confirm } from "./Confirm";
 import { Handover } from "./Handover";
@@ -14,7 +15,8 @@ import { TEXT } from "./strings";
 interface Props {
   state: PanelState;
   send: (command: PanelCommand) => void;
-  activeTab: () => Promise<number | null>;
+  /** Tab aktif di jendela panel, dilacak sebelum klik supaya izin bisa diminta langsung dari klik. */
+  currentTab: { id: number; url?: string } | null;
   requestPermission: (host: string) => Promise<boolean>;
 }
 
@@ -29,7 +31,7 @@ function statusTone(state: PanelState): string {
   return "quiet";
 }
 
-export function App({ state, send, activeTab, requestPermission }: Props) {
+export function App({ state, send, currentTab, requestPermission }: Props) {
   const [instruction, setInstruction] = useState(state.instruction);
   const busy = state.phase === "running" || state.phase === "paused" || state.phase === "handover";
   const signedIn = state.auth === "signed_in";
@@ -38,8 +40,14 @@ export function App({ state, send, activeTab, requestPermission }: Props) {
   useEffect(() => setInstruction(state.instruction), [state.instruction]);
 
   async function start() {
-    const tabId = await activeTab();
-    if (tabId !== null && instruction.trim()) send({ type: "start", instruction: instruction.trim(), tabId });
+    if (currentTab === null || !instruction.trim()) return;
+    // Izin situs diminta paling awal di klik ini (Chrome hanya mengizinkan
+    // permintaan dari gerakan pengguna). Ditolak pun tugas tetap jalan, hanya
+    // tanpa halaman awal.
+    // Situs yang selalu diblokir tidak pernah dimintai izin.
+    const host = httpsHost(currentTab.url);
+    if (host && !isBlockedHost(host)) await requestPermission(host);
+    send({ type: "start", instruction: instruction.trim(), tabId: currentTab.id });
   }
 
   async function allow(host: string) {
@@ -123,6 +131,7 @@ export function App({ state, send, activeTab, requestPermission }: Props) {
             <textarea id="instruction" rows={4} maxLength={2000} value={instruction}
               aria-describedby="instruction-hint" onChange={(event) => setInstruction(event.target.value)} />
             <p id="instruction-hint" className="note">{TEXT.commandHint}</p>
+            {currentTab !== null && !currentTab.url && <p className="note">{TEXT.tabUnreadable}</p>}
             <button type="submit" className="primary" disabled={!instruction.trim() || state.connection !== "ready"}>{TEXT.start}</button>
           </form>
         )}

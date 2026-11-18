@@ -29,7 +29,7 @@ const SECRET_LABEL = /\b(otp|cvv|cvc|pin|mpin|password|passcode|sandi|kata sandi
 
 // Efek tombol, diperiksa berurutan. "pay" tidak pernah dijalankan agent.
 const EFFECTS: [string, RegExp][] = [
-  ["pay", /\b(bayar|pay|place order|buat pesanan|konfirmasi pembayaran)\b/],
+  ["pay", /\b(bayar|pay|place order|place your order|buat pesanan|pesan sekarang|selesaikan pesanan|konfirmasi pembayaran|complete (your )?purchase|confirm order)\b/],
   ["order_cancel", /\b(batalkan|cancel order)\b/],
   ["checkout_prepare", /\b(checkout|check out|beli sekarang|buy now|lanjut ke pembayaran|proceed to checkout)\b/],
   ["cart_add", /(tambahkan ke keranjang|tambah ke keranjang|masukkan (ke )?keranjang|\+ ?keranjang|add to (cart|bag|basket))/],

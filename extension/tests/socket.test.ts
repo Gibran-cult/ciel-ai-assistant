@@ -207,3 +207,97 @@ test("stop while offline is sent as soon as the connection is ready again", asyn
   ws.receive({ type: "ready", device: "d1" });
   expect(ws.sent).toEqual([expect.objectContaining({ type: "hello" }), { type: "stop" }]);
 });
+
+test("task 3.27: start carries the page only when there is one", async () => {
+  const { socket } = setup();
+  socket.start();
+  await flush();
+  const ws = FakeWs.made[0]!;
+  ws.open();
+  ws.receive({ type: "ready", device: "d1" });
+  const page = { ok: true, source: "page" as const, text: "x", host: "toko.test", controls: {} };
+  socket.startTask("Isi nama", page);
+  socket.startTask("Isi nama", null);
+  expect(ws.sent.slice(1)).toEqual([
+    { type: "start", instruction: "Isi nama", page },
+    { type: "start", instruction: "Isi nama" },
+  ]);
+});
+
+function setupWithRefresh(refreshed: (string | null)[], tokens: (string | null)[] = ["cat1.a.OLD"]) {
+  const base = setup(tokens);
+  const refresh = vi.fn(async () => refreshed.shift() ?? null);
+  (base.socket as unknown as { options: { refresh: typeof refresh } }).options.refresh = refresh;
+  return { ...base, refresh };
+}
+
+test("review: 4401 forces one fresh token, then connects with it", async () => {
+  const { socket, timers, refresh } = setupWithRefresh(["cat1.a.FRESH"]);
+  socket.start();
+  await flush();
+  FakeWs.made[0]!.drop(4401);
+  await flush();
+  timers.at(-1)?.run();
+  await flush();
+  expect(refresh).toHaveBeenCalledTimes(1);
+  FakeWs.made[1]!.open();
+  expect(FakeWs.made[1]!.sent[0]).toMatchObject({ type: "hello", token: "cat1.a.FRESH" });
+});
+
+test("review: a 4401 right after a forced refresh backs off instead of signing out", async () => {
+  // Layanan sedang bermasalah (misalnya database): token baru pun ditolak sebentar.
+  const { socket, timers, states } = setupWithRefresh(["cat1.a.FRESH"]);
+  socket.start();
+  await flush();
+  FakeWs.made[0]!.drop(4401);
+  await flush();
+  FakeWs.made[1]!.drop(4401);
+  await flush();
+  expect(states).not.toContain("signed_out");
+  expect(states.at(-1)).toBe("closed");
+  expect(timers.length).toBeGreaterThan(0);
+});
+
+test("review: after signing out and back in, a 4401 again forces a fresh token first", async () => {
+  const { socket, states, refresh } = setupWithRefresh([null, "cat1.a.NEW"], ["cat1.a.OLD", "cat1.a.OLD2"]);
+  socket.start();
+  await flush();
+  FakeWs.made[0]!.drop(4401);
+  await flush();
+  expect(states.at(-1)).toBe("signed_out");
+
+  socket.start();
+  await flush();
+  FakeWs.made.at(-1)!.drop(4401);
+  await flush();
+  expect(refresh).toHaveBeenCalledTimes(2);
+  FakeWs.made.at(-1)!.open();
+  expect(FakeWs.made.at(-1)!.sent[0]).toMatchObject({ type: "hello", token: "cat1.a.NEW" });
+});
+
+test("review: 4401 with no fresh token signs out", async () => {
+  const { socket, states } = setupWithRefresh([null]);
+  socket.start();
+  await flush();
+  FakeWs.made[0]!.drop(4401);
+  await flush();
+  expect(states.at(-1)).toBe("signed_out");
+  expect(FakeWs.made).toHaveLength(1);
+});
+
+test("review: 4403 (origin refused) stops reconnecting", async () => {
+  const { socket, timers, states } = setup();
+  socket.start();
+  await flush();
+  FakeWs.made[0]!.drop(4403);
+  expect(states.at(-1)).toBe("origin_refused");
+  expect(timers).toEqual([]);
+});
+
+test("review: end messages carry their task", () => {
+  const base = { type: "end", status: "done", reason: null, steps: 1, report: "" };
+  expect(parseServerMessage(JSON.stringify({ ...base, task: "t1" }))).not.toBeNull();
+  expect(parseServerMessage(JSON.stringify({ ...base, task: null }))).not.toBeNull();
+  expect(parseServerMessage(JSON.stringify(base))).toBeNull();
+  expect(parseServerMessage(JSON.stringify({ ...base, task: 5 }))).toBeNull();
+});

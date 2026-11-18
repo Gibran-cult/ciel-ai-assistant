@@ -19,6 +19,13 @@ export function Plan({ steps, scope, onStart, onEdit }: Props) {
         {steps.map((step, index) => <li key={index}>{step}</li>)}
       </ol>
 
+      {scope.start_host && (
+        <div className="field-group">
+          <h3 className="label">{TEXT.planStart}</h3>
+          <p><code>{scope.start_host}</code></p>
+        </div>
+      )}
+
       {scope.hosts.length > 0 && (
         <div className="field-group">
           <h3 className="label">{TEXT.planScope}</h3>

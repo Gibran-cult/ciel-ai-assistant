@@ -1,12 +1,16 @@
 // Service worker Ciel Agent: menyambungkan login, WebSocket, pemeriksa aksi,
 // dan panel. Satu-satunya tempat token disegarkan (lihat auth.ts).
-import { accessToken, handleAlarm, login, logout } from "./auth";
+import { accessToken, handleAlarm, login, logout, refresh } from "./auth";
 import { showBadge } from "./badge";
 import { apiBase } from "./config";
 import { Controller, type PanelCommand, type PanelState } from "./controller";
 import { hasPermission } from "./permissions";
 import { Runner } from "./runner";
 import { Socket } from "./socket";
+
+// Token pembaruan ada di storage.local, yang bawaannya terbaca content script.
+// Content script Ciel berjalan di halaman toko, jadi aksesnya ditutup.
+void chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" }).catch(() => undefined);
 
 const panels = new Set<chrome.runtime.Port>();
 const PANEL_URL = chrome.runtime.getURL("panel/index.html");
@@ -49,6 +53,7 @@ let controller: Controller;
 const socket = new Socket({
   base: () => apiBase(),
   token: () => accessToken(),
+  refresh: () => refresh(),
   version: chrome.runtime.getManifest().version,
   onMessage: (message) => controller.onServer(message),
   onState: (state) => controller?.onSocketState(state),

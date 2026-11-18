@@ -354,3 +354,69 @@ test("review: a navigation that lands on a blocked or non-https site is never re
     expect(observation.text).toMatch(/tidak dibaca/);
   }
 });
+
+describe("readStart (task 3.27)", () => {
+  function starter(url: string | undefined, permitted = true) {
+    const reading = { observation: { ok: true, source: "page", text: "Daftar", host: "shopee.co.id", controls: {} }, generation: 7, document: "dd" };
+    const executeScript = vi.fn(async (details: { files?: string[] }): Promise<{ result?: unknown }[]> =>
+      details.files ? [{ result: undefined }] : [{ result: reading }]);
+    const runner = new Runner({
+      keys: async () => KEYS, device: async () => "d1", now: () => NOW,
+      tabs: { get: vi.fn(async () => ({ id: 1, windowId: 9, url })), create: vi.fn(), remove: vi.fn() },
+      scripting: { executeScript }, hasPermission: async () => permitted, waitForLoad: async () => undefined,
+      result: vi.fn(() => true), needPermission: vi.fn(), pause: async () => undefined,
+    });
+    runner.begin(1);
+    return { runner, executeScript, reading };
+  }
+
+  test("the open https tab is read and becomes the first page", async () => {
+    const { runner, reading } = starter("https://shopee.co.id/daftar");
+    expect(await runner.readStart()).toEqual(reading.observation);
+  });
+
+  test("an http, blocked, hidden or unpermitted tab is never read", async () => {
+    for (const [url, permitted] of [["http://shopee.co.id/", true], ["https://ib.klikbca.com/", true], [undefined, true],
+      ["https://shopee.co.id/", false]] as const) {
+      const { runner, executeScript } = starter(url, permitted);
+      expect(await runner.readStart()).toBeNull();
+      expect(executeScript).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe("review minors (task 4)", () => {
+  function make(keys: () => Promise<unknown>, now: () => number = () => NOW) {
+    const executeScript = vi.fn(async (): Promise<{ result?: unknown }[]> =>
+      [{ result: { observation: { ok: true, source: "page", text: "", host: "shopee.co.id", controls: {} }, generation: 1 } }]);
+    const result = vi.fn(() => true);
+    const runner = new Runner({
+      keys, device: async () => "d1", now,
+      tabs: { get: vi.fn(async () => ({ id: 1, windowId: 9, url: "https://shopee.co.id/" })), create: vi.fn(), remove: vi.fn() },
+      scripting: { executeScript }, hasPermission: async () => true, waitForLoad: async () => undefined, result,
+      needPermission: vi.fn(), pause: async () => undefined,
+    });
+    runner.begin(1);
+    return { runner, executeScript, result };
+  }
+
+  test("a failed ticket-key fetch still answers the action", async () => {
+    const { runner, executeScript, result } = make(async () => { throw new TypeError("Failed to fetch"); });
+    await runner.onAction(sign());
+    expect(executeScript).not.toHaveBeenCalled();
+    expect(result).toHaveBeenCalledWith("t1", 3, expect.objectContaining({ ok: false }));
+  });
+
+  test("ticket keys are fetched again after ten minutes", async () => {
+    let now = NOW;
+    const keys = vi.fn(async () => KEYS);
+    const { runner } = make(keys, () => now);
+    await runner.onAction(sign({ seq: 3 }));
+    now = NOW + 300;
+    await runner.onAction(sign({ seq: 4, exp: now + 60 }));
+    expect(keys).toHaveBeenCalledTimes(1);
+    now = NOW + 601;
+    await runner.onAction(sign({ seq: 5, exp: now + 60 }));
+    expect(keys).toHaveBeenCalledTimes(2);
+  });
+});

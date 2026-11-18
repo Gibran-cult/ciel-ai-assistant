@@ -42,6 +42,12 @@ Dijawab pada 18 November 2026 sebelum [rencana 3A](plans/2026-11-18-extension-co
 | D18 | Kerangka tampilan side panel | React dan TypeScript, sama dengan `website/` | Pola komponen dan aksesibilitas bisa dipakai ulang | Tidak ada |
 | D19 | Pemeriksaan tiket Ed25519 di ekstensi | WebCrypto bawaan browser, dengan pustaka `@noble/ed25519` sebagai cadangan kalau browser belum mendukung Ed25519 | Kedua jalur diuji dengan vektor uji yang sama dari server | Dicek 18 November 2026: Chrome mendukung Ed25519 di WebCrypto sejak versi 137 (stabil Mei 2025). Audit Cure53 (Februari 2022) hanya untuk `@noble/ed25519` v1; README versi sekarang menyebut versi ini belum diaudit independen. Jadi cadangan hanya dipakai di browser di bawah Chrome 137, dan pilihan pustakanya diputuskan ulang di rencana 3A |
 
+Catatan 18 November 2026 (rencana 3A, Task 3): pustaka cadangan D19 menjadi `@noble/curves` 2.4.0, bukan `@noble/ed25519`, karena `@noble/curves` punya audit independen. Status auditnya ada di `docs/security.md` bagian 10.
+
+| ID | Keputusan | Jawaban | Akibat langsung | Yang masih harus dicek |
+|---|---|---|---|---|
+| D20 | Situs tab awal dan lingkup tugas (task 3.27) | Opsi A, dijawab pemilik 18 November 2026: host tab awal otomatis masuk lingkup dan ditampilkan di kartu rencana ("Mulai di"). Isi halaman sampai ke model setelah rencana disetujui. Perencana tetap hanya membaca perintah | Tugas yang dimulai di halaman tidak butuh dialog perluasan lingkup. Situs yang selalu diblokir tidak pernah masuk lewat jalur ini | Tidak ada |
+
 ## Yang belum diputuskan dan memakai usulan sampai diubah
 
 Angka dan pilihan ini ditulis sebagai usulan di dokumen masing-masing. Pemilik belum memutuskannya satu per satu.

@@ -30,7 +30,7 @@ from agent_api.envelope import flags_injection, wrap
 from agent_api.journal import Journal
 from agent_api.limits import CONFIRM_SECONDS, MAX_INSTRUCTION, day_start, over_limit, start_refusal, task_rate_limits
 from agent_api.model import ModelReply, Step, TaskView
-from agent_api.plan import parse_plan, scope_to_json, widened
+from agent_api.plan import allowed_host, parse_plan, scope_to_json, widened
 from agent_api.tools import TYPING, Observation, Rejected, bind
 from guard.audit import target_of
 from guard.decide import Context, Decision, decide
@@ -118,7 +118,7 @@ def plain_text(text):
 
 
 def run_task(owner, task_id, device, instruction, *, model, client, store, config, account, clock, chain_key,
-             still_allowed=lambda: None):
+             still_allowed=lambda: None, start_page=None):
     """Jalankan satu tugas. Selalu mengembalikan TaskResult.
 
     still_allowed dipanggil di awal setiap putaran: alasan selain None
@@ -143,6 +143,7 @@ def run_task(owner, task_id, device, instruction, *, model, client, store, confi
     try:
         run = Run(owner, task_id, device, instruction, model, client, store, config, account, clock, chain_key)
         run.still_allowed = still_allowed
+        run.start_page = start_page
         refusal = run.start()
 
         if refusal:
@@ -207,6 +208,7 @@ class Run:
         self.plan_steps = ()
         self.started = None
         self.page = None            # pengamatan terakhir yang berhasil, sumber fakta untuk bind
+        self.start_page = None      # bacaan tab yang sedang dibuka saat tugas dimulai (task 3.27)
         self.observation = ""       # amplop yang dilihat model di putaran berikutnya
         self.untrusted = []         # semua isi tidak tepercaya yang sudah dilihat tugas ini
         self.still_allowed = lambda: None
@@ -282,16 +284,34 @@ class Run:
         if plan is None:
             raise End("failed", "bad_plan")
 
-        choice = self.from_client(self.client.show_plan, plan.steps, scope_to_json(plan.scope))
+        # Keputusan D20: situs tab awal masuk lingkup dan ditunjukkan di kartu
+        # rencana. Perencana tidak pernah membaca isi halaman itu.
+        start_host = self.start_host()
+        scope = replace(plan.scope, hosts=plan.scope.hosts | {start_host}) if start_host else plan.scope
+        choice = self.from_client(self.client.show_plan, plan.steps, {**scope_to_json(scope), "start_host": start_host})
 
         if not isinstance(choice, str) or choice not in ("ask", "auto"):
             raise End("stopped", "plan_rejected")
 
         self.mode = choice
-        self.scope = plan.scope
+        self.scope = scope
         self.plan_steps = plan.steps
-        self.save(plan={"steps": list(plan.steps)}, scope=scope_to_json(plan.scope), mode=choice, status="running")
+        self.save(plan={"steps": list(plan.steps)}, scope=scope_to_json(scope), mode=choice, status="running")
         self.started = self.clock()
+
+        # Isi halaman awal baru sampai ke model setelah rencana disetujui.
+        if start_host:
+            self.see_page(self.start_page, Step("tab_read", "allow", "start_page", "ok"))
+
+    def start_host(self):
+        """Host tab awal yang boleh masuk lingkup, atau None."""
+
+        page = self.start_page
+
+        if not isinstance(page, Observation) or page.ok is not True or page.source != "page":
+            return None
+
+        return allowed_host(page.host)
 
     # Satu putaran -------------------------------------------------------
 
@@ -445,9 +465,14 @@ class Run:
             self.missed(tool, decision.outcome, decision.reason, "failed")
             return
 
+        self.repairs = 0
+        self.see_page(result, Step(tool, decision.outcome, decision.reason, "ok"))
+
+    def see_page(self, result, step):
+        """Simpan hasil yang berhasil sebagai halaman sekarang, dan tunjukkan ke model kalau boleh."""
+
         text = result.text if isinstance(result.text, str) else ""
         self.page = result
-        self.repairs = 0
 
         # Klik atau pengalihan bisa membawa tab ke situs di luar lingkup.
         # Faktanya disimpan untuk menilai aksi berikutnya, tetapi isinya
@@ -455,12 +480,12 @@ class Run:
         # tab_read, dan itu meminta persetujuan pengguna untuk situs tersebut.
         if result.host is not None and not self.inside(result.host):
             self.observation = ""
-            self.history.append(Step(tool, decision.outcome, decision.reason, "outside_scope"))
+            self.history.append(replace(step, result="outside_scope"))
             return
 
         self.observation = wrap(result.source, text)
         self.untrusted.append(text)
-        self.history.append(Step(tool, decision.outcome, decision.reason, "ok"))
+        self.history.append(step)
 
         # Isi yang memuat perintah untuk AI: sisa tugas berjalan di "Tanya dulu".
         if self.mode != "ask" and flags_injection(text):

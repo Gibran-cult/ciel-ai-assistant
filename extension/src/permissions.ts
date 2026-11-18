@@ -15,9 +15,10 @@ export async function hasPermission(host: string): Promise<boolean> {
   }
 }
 
+// Langsung meminta, tanpa menunggu apa pun lebih dulu: Chrome menolak
+// permintaan yang tidak lagi dianggap bagian dari klik pengguna. Kalau izinnya
+// sudah ada, Chrome menjawab true tanpa bertanya lagi.
 export async function ensurePermission(host: string): Promise<boolean> {
-  if (await hasPermission(host)) return true;
-
   try {
     return await chrome.permissions.request({ origins: [origin(host)] });
   } catch {

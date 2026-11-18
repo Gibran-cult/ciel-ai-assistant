@@ -15,6 +15,7 @@ export const TEXT = {
   signOut: "Keluar",
   commandLabel: "Apa yang perlu Ciel kerjakan di tab ini?",
   commandHint: "Ciel menunjukkan rencananya dulu sebelum mulai.",
+  tabUnreadable: "Ciel belum bisa melihat alamat tab ini, jadi tugas dimulai tanpa membaca halaman ini. Klik ikon Ciel di toolbar saat tab ini terbuka, lalu tekan Mulai.",
   start: "Mulai",
   edit: "Ubah",
   stop: "Stop",
@@ -22,6 +23,7 @@ export const TEXT = {
   offline: "Koneksi putus. Ciel berhenti dulu sampai tersambung lagi.",
   connecting: "Menyambung ke Ciel…",
   updateRequired: "Versi ekstensi ini sudah terlalu lama. Perbarui ekstensi dulu.",
+  originRefused: "Layanan menolak ekstensi ini. Pasang ulang ekstensi dari Chrome Web Store.",
   status: {
     idle: "Siap",
     running: "Ciel sedang bekerja",
@@ -31,6 +33,7 @@ export const TEXT = {
     stopped: "Dihentikan",
   },
   planTitle: "Rencana Ciel",
+  planStart: "Mulai di",
   planScope: "Situs yang akan dibuka",
   planKinds: "Yang akan dilakukan",
   planMode: "Cara kerja",

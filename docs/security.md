@@ -273,7 +273,7 @@ Yang tidak ditangani: laptop yang sudah terinfeksi malware dengan hak admin, dan
 - Identitas tetap dari login Google yang sudah ada. Ciel tidak menyimpan kata sandi.
 - Setiap pemasangan ekstensi atau desktop adalah satu perangkat dengan ID sendiri. Pendaftaran perangkat memakai alur login di browser dengan PKCE (cara pertukaran kode yang aman untuk aplikasi tanpa rahasia tersimpan).
 - Token akses berumur 15 menit (usulan). Token pembaruan berganti setiap dipakai. Kalau token pembaruan lama muncul lagi, semua token perangkat itu dicabut.
-- Token disimpan di Windows Credential Manager atau macOS Keychain untuk desktop. Di ekstensi, token akses disimpan di memori sesi dan token pembaruan di penyimpanan ekstensi.
+- Token disimpan di Windows Credential Manager atau macOS Keychain untuk desktop. Di ekstensi, token akses disimpan di memori sesi dan token pembaruan di penyimpanan ekstensi (`chrome.storage.local`). Bawaannya penyimpanan itu terbaca content script, jadi service worker membatasinya ke konteks ekstensi (`setAccessLevel` dengan `TRUSTED_CONTEXTS`) setiap mulai. Uji ujung ke ujung memastikan skrip di tab toko tidak bisa membaca token pembaruan. Token pembaruan yang baru disimpan sebelum token akses, dan perangkat yang dicabut (4401 dua kali) keluar tanpa menyambung terus.
 - Login ulang wajib untuk mengaktifkan pembelian, menaikkan batas belanja, menambah perangkat, dan menghapus akun.
 - Setiap permintaan ke Ciel Agent API diperiksa pemiliknya di server. ID pemilik tidak pernah diambil dari model atau dari isi permintaan yang bisa diubah klien.
 

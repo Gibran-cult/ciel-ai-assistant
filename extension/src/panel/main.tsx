@@ -11,6 +11,33 @@ const INITIAL: PanelState = {
   needPermission: null, ended: null, instruction: "",
 };
 
+// Tab aktif di jendela panel ini. Alamatnya hanya terlihat kalau ekstensi
+// boleh melihatnya (activeTab dari klik ikon, atau izin situs).
+function useActiveTab(): { id: number; url?: string } | null {
+  const [tab, setTab] = useState<{ id: number; url?: string } | null>(null);
+
+  useEffect(() => {
+    const refresh = async () => {
+      const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+      setTab(active?.id !== undefined ? { id: active.id, url: active.url } : null);
+    };
+
+    void refresh();
+    const onActivated = () => void refresh();
+    const onUpdated = (_id: number, change: { url?: string; status?: string }) => {
+      if (change.url !== undefined || change.status === "complete") void refresh();
+    };
+    chrome.tabs.onActivated.addListener(onActivated);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    return () => {
+      chrome.tabs.onActivated.removeListener(onActivated);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+    };
+  }, []);
+
+  return tab;
+}
+
 // Panel tersambung ke service worker lewat satu port. Semua keadaan datang
 // dari sana; panel hanya menampilkan dan mengirim perintah.
 function Root() {
@@ -43,12 +70,8 @@ function Root() {
   const send = useCallback((command: PanelCommand) => port?.postMessage(command), [port]);
   useKeepalive(state.phase !== "idle", send);
 
-  const activeTab = async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    return tab?.id ?? null;
-  };
-
-  return <App state={state} send={send} activeTab={activeTab} requestPermission={ensurePermission} />;
+  const currentTab = useActiveTab();
+  return <App state={state} send={send} currentTab={currentTab} requestPermission={ensurePermission} />;
 }
 
 createRoot(document.getElementById("root")!).render(<Root />);

@@ -75,8 +75,11 @@ async function post(path: string, body: object): Promise<Response> {
 
 async function save(tokens: Tokens, now: number): Promise<void> {
   const expires = now + tokens.expires_in * 1000;
-  await chrome.storage.session.set({ accessToken: tokens.access_token, accessExpires: expires });
+  // Token pembaruan lama sudah tidak berlaku begitu yang baru diterima, jadi
+  // yang baru disimpan paling dulu. Kalau service worker berhenti di sini,
+  // token akses yang hilang bisa diminta lagi; token pembaruan yang hilang tidak.
   await chrome.storage.local.set({ refreshToken: tokens.refresh_token, device: tokens.device });
+  await chrome.storage.session.set({ accessToken: tokens.access_token, accessExpires: expires });
   await chrome.alarms.create(REFRESH_ALARM, { when: expires - MARGIN_MS });
 }
 

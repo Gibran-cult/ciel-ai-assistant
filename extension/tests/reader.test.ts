@@ -154,3 +154,10 @@ test("review: a page restored from the back-forward cache drops its refs", () =>
   window.dispatchEvent(event);
   expect(pageRefs.resolve(cart)).toBeNull();
 });
+
+test("review: common final-order buttons are pay buttons", () => {
+  const labels = ["Pesan sekarang", "Selesaikan pesanan", "Place your order", "Complete purchase", "Confirm order"];
+  document.documentElement.innerHTML = `<body>${labels.map((label) => `<button>${label}</button>`).join("")}</body>`;
+  const seen = readPage(document);
+  for (const label of labels) expect(seen.controls[refOf(seen.text, label)]!.effect, label).toBe("pay");
+});
