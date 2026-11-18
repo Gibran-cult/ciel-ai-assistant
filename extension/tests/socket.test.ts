@@ -192,3 +192,18 @@ test("ws:// is used only for a local development server", async () => {
   await flush();
   expect(FakeWs.made[0]!.url).toBe("ws://localhost:8600/v1/ws");
 });
+
+test("stop while offline is sent as soon as the connection is ready again", async () => {
+  const { socket, timers } = setup();
+  socket.start();
+  await flush();
+  FakeWs.made[0]!.drop(1006);
+  expect(socket.sendStop()).toBe(false);
+
+  timers[0]!.run();
+  await flush();
+  const ws = FakeWs.made[1]!;
+  ws.open();
+  ws.receive({ type: "ready", device: "d1" });
+  expect(ws.sent).toEqual([expect.objectContaining({ type: "hello" }), { type: "stop" }]);
+});

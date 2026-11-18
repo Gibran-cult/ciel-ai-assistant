@@ -35,3 +35,8 @@ test("every file the manifest names exists in the build", () => {
 
   for (const file of named) expect(existsSync(resolve(dist, file)), file).toBe(true);
 });
+
+test("Alt+Shift+S stops the agent", () => {
+  expect(manifest.commands["stop-agent"].suggested_key.default).toBe("Alt+Shift+S");
+  expect(manifest.permissions).not.toContain("commands");
+});

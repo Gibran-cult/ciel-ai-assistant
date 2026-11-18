@@ -187,3 +187,21 @@ describe("Runner", () => {
     expect(result).not.toHaveBeenCalled();
   });
 });
+
+test("refuse answers a held or late action without touching the tab", async () => {
+  const result = vi.fn(() => true);
+  const executeScript = vi.fn();
+  const runner = new Runner({
+    keys: async () => KEYS, device: async () => "d1", now: () => NOW,
+    tabs: { get: vi.fn(), create: vi.fn(), remove: vi.fn() }, scripting: { executeScript },
+    hasPermission: async () => true, waitForLoad: async () => undefined, result, needPermission: vi.fn(),
+  });
+  runner.refuse(sign(), "stopped");
+  runner.refuse(sign({ seq: 4 }), "handover");
+  runner.refuse({ ticket: "x" }, "stopped");
+  expect(result.mock.calls).toEqual([
+    ["t1", 3, expect.objectContaining({ ok: false, text: expect.stringContaining("dihentikan") })],
+    ["t1", 4, expect.objectContaining({ ok: false, text: expect.stringContaining("serah terima") })],
+  ]);
+  expect(executeScript).not.toHaveBeenCalled();
+});

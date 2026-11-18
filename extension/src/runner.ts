@@ -55,6 +55,8 @@ const REFUSE_TEXT: Record<string, string> = {
   blocked_host: "Situs ini selalu diblokir untuk agent.",
   no_permission: "Ciel belum diberi izin untuk situs ini. Izin bisa diberikan dari panel Ciel.",
   no_tab: "Tab tugas sudah ditutup.",
+  stopped: "Tugas sudah dihentikan, jadi aksi ini tidak dijalankan.",
+  handover: "Kamu sedang mengerjakan langkah ini sendiri (serah terima), jadi Ciel tidak membaca atau menyentuh tab.",
   no_script: "Halaman sudah berubah sejak dibaca. Baca ulang dulu.",
   unknown_tool: "Aksi ini tidak dikenal ekstensi.",
   failed: "Aksi gagal dijalankan di tab.",
@@ -186,6 +188,15 @@ export class Runner {
 
     const observation = reason === null ? await this.run(ticket!.tool as string, ticket!.args) : refusal(reason);
     if (replyTo) this.deps.result(replyTo.task, replyTo.seq, observation);
+  }
+
+  /** Jawab aksi dengan {ok: false} tanpa memeriksa atau menyentuh tab (tugas dihentikan, serah terima). */
+  refuse(signed: unknown, reason: "stopped" | "handover"): void {
+    const ticket = isObject(signed) && isObject(signed.ticket) ? signed.ticket : null;
+
+    if (ticket && typeof ticket.task === "string" && typeof ticket.seq === "number" && Number.isSafeInteger(ticket.seq)) {
+      this.deps.result(ticket.task, ticket.seq, refusal(reason));
+    }
   }
 
   private async call(tool: string, args: unknown): Promise<Reading | null> {
