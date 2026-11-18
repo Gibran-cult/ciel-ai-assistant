@@ -3,6 +3,9 @@
 # The Streamlit app does not use this file; requirements.txt stays separate.
 fastapi
 uvicorn
+# uvicorn serves /v1/ws only when a WebSocket library is installed;
+# tools/agent_smoke.py uses its client too
+websockets
 anthropic>=2
 cryptography
 requests

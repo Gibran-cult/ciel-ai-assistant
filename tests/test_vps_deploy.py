@@ -1,4 +1,5 @@
 import re
+import sys
 import unittest
 from pathlib import Path
 
@@ -139,7 +140,7 @@ class ComposeTest(unittest.TestCase):
         )
 
     def test_every_service_restarts(self):
-        self.assertEqual(COMPOSE.count("restart: unless-stopped"), 5)
+        self.assertEqual(COMPOSE.count("restart: unless-stopped"), 7)
         for name in SERVICES:
             self.assertIn("restart: unless-stopped", service_block(name))
 
@@ -160,7 +161,68 @@ class ComposeTest(unittest.TestCase):
             self.assertIn("${" + name + "}", COMPOSE)
 
 
+class AgentServiceTest(unittest.TestCase):
+    """Ciel Agent API dan salinan staging-nya (rencana 2B, Task 10)."""
+
+    def test_two_agent_services_build_from_the_repository(self):
+        for name, env_file, volume in (("agent", "agent.env", "agent_data"), ("agent-staging", "agent-staging.env", "agent_staging_data")):
+            with self.subTest(name=name):
+                block = service_block(name)
+                self.assertRegex(block, r"build:\n\s+context: \.\./\.\.\n\s+dockerfile: deploy/vps/agent\.Dockerfile")
+                self.assertIn(f"env_file: {env_file}", block)
+                self.assertIn("read_only: true", block)
+                self.assertIn("restart: unless-stopped", block)
+                self.assertIn(f"{volume}:/data", block)
+                self.assertIn("/tmp", block)
+                self.assertIn("healthcheck:", block)
+                self.assertIn("http://127.0.0.1:8000/healthz", block)
+                self.assertNotIn("ports:", block)
+                self.assertNotIn("image:", block)
+                self.assertRegex(COMPOSE, rf"(?m)^  {volume}:")
+
+    def test_the_dockerfile_installs_only_the_service_lock_and_runs_unprivileged(self):
+        dockerfile = read(VPS / "agent.Dockerfile")
+        self.assertRegex(dockerfile, r"(?m)^FROM python:3\.14\.\d+-slim$")
+        self.assertIn("--require-hashes -r requirements-agent.txt", dockerfile)
+        self.assertNotIn("requirements.txt ", dockerfile.replace("requirements-agent.txt", ""))
+        self.assertRegex(dockerfile, r"(?m)^USER (?!root)\w+")
+        copied = re.findall(r"(?m)^COPY (?:--chown=\S+ )?(\S+) ", dockerfile)
+        self.assertEqual(sorted(copied), sorted(["requirements-agent.txt", "agent_api", "guard", "chat_store.py", "account_settings.py", "account_ids.py"]))
+        command = re.search(r"(?m)^CMD (.+)$", dockerfile).group(1)
+        for part in ('"agent_api.main:production_app"', '"--factory"', '"--workers", "1"', '"--proxy-headers"', '"--forwarded-allow-ips", "*"', '"--port", "8000"'):
+            self.assertIn(part, command)
+
+    def test_agent_env_examples_list_every_setting_without_values(self):
+        sys.path.insert(0, str(ROOT))
+        from agent_api.settings import KEYS, REQUIRED_LISTS, REQUIRED_TEXT
+
+        expected = set(REQUIRED_TEXT) | set(REQUIRED_LISTS) | {name for name, _, _ in KEYS} | {
+            "AGENT_TICKET_KEY_OLD", "AGENT_MIN_CLIENT_VERSION", "AGENT_ENABLED", "AGENT_DAILY_COST_CAP",
+            "AGENT_TASKS_PER_MONTH_FREE", "AGENT_TASKS_PER_MONTH_PRO",
+        }
+
+        for name in ("agent.env.example", "agent-staging.env.example"):
+            with self.subTest(name=name):
+                lines = [line for line in read(VPS / name).splitlines() if line and not line.startswith("#")]
+                self.assertEqual({line.partition("=")[0] for line in lines}, expected)
+                self.assertTrue(all(line.partition("=")[2] == "" for line in lines))
+
+        for name in ("deploy/vps/agent.env", "deploy/vps/agent-staging.env"):
+            self.assertIn(name, GITIGNORE)
+
+    def test_the_runbook_has_the_agent_steps(self):
+        section = README[README.index("## 13. Ciel Agent API"):]
+        for text in ("agent.env", "agent-staging.env", "openssl rand -hex 32", "agent.ciel-ai.web.id", "agent-staging.ciel-ai.web.id",
+                     "/v1/device/callback", "docker compose up -d agent agent-staging", "tools/agent_smoke.py", "AGENT_ENABLED",
+                     "touch /data/agent_off"):
+            self.assertIn(text, section)
+
+
 class CaddyfileTest(unittest.TestCase):
+    def test_proxies_the_agent_hosts_to_their_services(self):
+        self.assertRegex(CADDYFILE, r"(?m)^agent\.ciel-ai\.web\.id\s*\{\s*reverse_proxy agent:8000\s*\}")
+        self.assertRegex(CADDYFILE, r"(?m)^agent-staging\.ciel-ai\.web\.id\s*\{\s*reverse_proxy agent-staging:8000\s*\}")
+
     def test_proxies_the_api_host_to_the_internal_nginx(self):
         self.assertRegex(
             CADDYFILE, r"api\.ciel-ai\.web\.id\s*\{\s*reverse_proxy nginx:8080\s*\}"

@@ -329,11 +329,14 @@ def ws_router(settings, store, model, signer, runner, clock):
     async def socket(websocket: WebSocket):
         origin = websocket.headers.get("origin")
 
+        # Koneksi diterima dulu lalu ditutup dengan kode, supaya klien dan uji
+        # asap melihat 4403. Menutup sebelum accept hanya menjadi HTTP 403.
+        await websocket.accept()
+
         if origin is not None and origin not in settings.ws_origins:
             await websocket.close(code=4403)
             return
 
-        await websocket.accept()
         conn = Connection(websocket, asyncio.get_running_loop())
         task = None
 

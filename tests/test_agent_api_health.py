@@ -2,6 +2,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -50,6 +51,24 @@ class SettingsTest(unittest.TestCase):
             settings, missing = load_settings(env)
             self.assertIsNone(settings)
             self.assertTrue(missing)
+
+
+class ProductionAppTest(unittest.TestCase):
+    def test_the_production_app_is_built_from_the_environment_without_network(self):
+        from agent_api.main import build_app
+
+        with patch("requests.Session.request") as request:
+            client = TestClient(build_app(ENV))
+            self.assertEqual(client.get("/healthz").json(), {"ok": True})
+            self.assertEqual(len(client.get("/v1/ticket-keys").json()["keys"]), 1)
+        request.assert_not_called()
+
+        self.assertEqual(TestClient(build_app({})).get("/healthz").status_code, 503)
+
+    def test_uvicorn_can_serve_websockets(self):
+        import importlib.util
+
+        self.assertIsNotNone(importlib.util.find_spec("websockets"), "uvicorn needs websockets to serve /v1/ws")
 
 
 class HealthTest(unittest.TestCase):
