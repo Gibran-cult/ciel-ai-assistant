@@ -8,7 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from agent_consent import AGENT_CONSENT_VERSION  # noqa: E402
 from tests.test_chat_store import SIGNED_IN, SIGNED_IN_OWNER, Response  # noqa: E402
-from tests.test_settings_app import FEATURES, SettingsAppTest  # noqa: E402
+from tests import test_settings_app as settings_tests  # noqa: E402
+
+FEATURES = settings_tests.FEATURES
 
 AGENT = {**FEATURES, "AGENT_WEB_ENABLED": "1"}
 CONSENT = {"choice": {"accepted": True}, "version": AGENT_CONSENT_VERSION}
@@ -26,11 +28,13 @@ DEVICE = {"id": "a1b2c3d4e5f60718", "name": "Chrome di laptop", "platform": "ext
           "last_seen_at": "2026-11-18T03:43:00+00:00", "revoked_at": None}
 
 
+# Helper dipinjam lewat modul, tidak lewat nama kelas: kelas uji yang
+# diimpor langsung ikut dijalankan lagi oleh unittest di modul ini.
 class AgentSettingsAppTest(unittest.TestCase):
-    start = SettingsAppTest.start
-    database = SettingsAppTest.database
-    text = SettingsAppTest.text
-    keys = SettingsAppTest.keys
+    start = settings_tests.SettingsAppTest.start
+    database = settings_tests.SettingsAppTest.database
+    text = settings_tests.SettingsAppTest.text
+    keys = settings_tests.SettingsAppTest.keys
 
     def open_tab(self, secrets=AGENT, rows=None, user=SIGNED_IN, down=()):
         at = self.start(user=user, secrets=secrets, rows=rows, query={"page": "settings", "tab": "agent"}, down=down)
@@ -125,6 +129,21 @@ class AgentSettingsAppTest(unittest.TestCase):
         self.assertIn("dan data agentmu", " ".join(md.value for md in on.markdown))
         off = self.start(user=SIGNED_IN, secrets=FEATURES, env=memory, query={"page": "settings", "tab": "data"})
         self.assertNotIn("data agent", " ".join(md.value for md in off.markdown))
+
+
+    # Tinjauan 2C temuan 3: penarikan yang gagal setengah jalan bisa diulang dari tab.
+    def test_live_devices_without_consent_can_still_be_revoked(self):
+        withdrawn = {"choice": {"accepted": False}, "version": AGENT_CONSENT_VERSION}
+        at = self.open_tab(rows={"consent_events": [withdrawn], "agent_devices": [DEVICE]})
+        self.assertIn("masih terhubung", self.everything(at))
+        at.button(key="agent_revoke_all").click().run()
+        self.assertFalse(at.exception)
+        self.assertEqual(self.posts("/rpc/ciel_agent_withdraw"), [{"p_owner": SIGNED_IN_OWNER}])
+
+    def test_no_extra_button_when_nothing_is_live(self):
+        revoked = {**DEVICE, "revoked_at": "2026-11-18T05:00:00+00:00"}
+        at = self.open_tab(rows={"agent_devices": [revoked]})
+        self.assertNotIn("agent_revoke_all", self.keys(at))
 
 
 if __name__ == "__main__":

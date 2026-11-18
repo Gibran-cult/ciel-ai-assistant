@@ -5921,6 +5921,15 @@ def render_agent_settings():
         st.caption("Agent aktif.")
         st.button("Matikan agent", key="agent_withdraw", icon=":material/power_settings_new:", on_click=withdraw_agent)
     else:
+        devices = CHAT_STORE.load_agent_devices(owner) or []
+
+        # Penarikan yang gagal setengah jalan, atau versi persetujuan yang
+        # naik, bisa menyisakan perangkat yang belum dicabut. Pencabutannya
+        # tetap bisa diulang dari sini.
+        if any(not device.get("revoked_at") for device in devices):
+            st.warning("Agent tidak aktif, tetapi ada perangkat yang masih terhubung.")
+            st.button("Cabut semua perangkat", key="agent_revoke_all", icon=":material/link_off:", on_click=withdraw_agent)
+
         st.checkbox("Saya mengerti dan ingin mengaktifkan agent", key="agent_consent_box")
         st.button(
             "Aktifkan agent",
