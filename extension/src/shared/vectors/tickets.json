@@ -1,0 +1,989 @@
+{
+  "cases": [
+    {
+      "name": "valid",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": null
+    },
+    {
+      "name": "valid at the last second",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000060
+      },
+      "expect": null
+    },
+    {
+      "name": "expired one second later",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000061
+      },
+      "expect": "expired"
+    },
+    {
+      "name": "args changed",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 6
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_signature"
+    },
+    {
+      "name": "host changed",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "evil.example",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_signature"
+    },
+    {
+      "name": "tool changed",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "form_submit",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_signature"
+    },
+    {
+      "name": "signature changed",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1AA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_signature"
+    },
+    {
+      "name": "signature not base64",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "%%%"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_signature"
+    },
+    {
+      "name": "signature empty",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": ""
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_signature"
+    },
+    {
+      "name": "same seq again",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 3,
+        "now": 1795000000
+      },
+      "expect": "old_seq"
+    },
+    {
+      "name": "other task",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t2",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "wrong_task"
+    },
+    {
+      "name": "other device",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d2",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "wrong_device"
+    },
+    {
+      "name": "unknown key",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "1a328229bd1fdf26",
+          "alg": "Ed25519",
+          "key": "D4avK6rAhNgg5NlS57qIymr3mQxFEuhzFaayKOsTh9w"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "unknown_key"
+    },
+    {
+      "name": "key with another algorithm",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "RS256",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "unknown_key"
+    },
+    {
+      "name": "broken public key",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "AAAA"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_signature"
+    },
+    {
+      "name": "rotation: new key signs, both listed",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "1a328229bd1fdf26",
+        "sig": "BiaQ4k7suaEazLLfdF7VSaKIdaiRQXkbHvaOb2Uc86f3iUmEfplDvfWlAsnKVF9zDz7QM_pEzJxLxnSwlmLGDg"
+      },
+      "keys": [
+        {
+          "kid": "1a328229bd1fdf26",
+          "alg": "Ed25519",
+          "key": "D4avK6rAhNgg5NlS57qIymr3mQxFEuhzFaayKOsTh9w"
+        },
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": null
+    },
+    {
+      "name": "rotation: old key still listed",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "1a328229bd1fdf26",
+          "alg": "Ed25519",
+          "key": "D4avK6rAhNgg5NlS57qIymr3mQxFEuhzFaayKOsTh9w"
+        },
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": null
+    },
+    {
+      "name": "rotation: new key, old list",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "1a328229bd1fdf26",
+        "sig": "BiaQ4k7suaEazLLfdF7VSaKIdaiRQXkbHvaOb2Uc86f3iUmEfplDvfWlAsnKVF9zDz7QM_pEzJxLxnSwlmLGDg"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "unknown_key"
+    },
+    {
+      "name": "non-ASCII and control text",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_type",
+          "args": {
+            "ref": 4,
+            "text": "Kaos ✓ ukuran L, café 😀 baris\u001f\n\"kutip\" \\ /"
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "XsL8BRMwxfBvVQkIB_bxfLFDGIxyhXWXOpxC0X0kyYLzvxZkH441X3dwe3ieAIw_4J-EglDVmJ-ZPC_YufViBQ"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": null
+    },
+    {
+      "name": "keys sorted by code point",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_select",
+          "args": {
+            "value": "Merah",
+            "ref": 2,
+            "Zeta": 1,
+            "alpha": "a",
+            "é": 1,
+            "😀": 2,
+            "ｗ": 3
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "tNeqXM6eQUv1etJHlkFMnNO1qPla84NKdO7WKPIFsnPEbhr8q2uU0BLY8gjo4yVE2R6PJpB-UyAjXQRgtzW0CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": null
+    },
+    {
+      "name": "seq as boolean",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": true,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "uvS7d04CUP3TVj2PWjprxgFIT5Psd1sBmVzOYl3uEKuO2cm_4efey7pjNOMcf2FHf0sKCDiNaq8cTXPw7QiYDQ"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "old_seq"
+    },
+    {
+      "name": "missing exp",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id"
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "-CfV53MbOcOY5nFvvq5yp-GRJf_Gf21xaNz6BnJvSY53aCF6pruzF7WBoOjXvUmf-bScCvtfmkd7GmRE19n8CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "expired"
+    },
+    {
+      "name": "null",
+      "signed": null,
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_form"
+    },
+    {
+      "name": "list",
+      "signed": [],
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_form"
+    },
+    {
+      "name": "empty object",
+      "signed": {},
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_form"
+    },
+    {
+      "name": "extra field",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA",
+        "extra": 1
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_form"
+    },
+    {
+      "name": "kid not a string",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": 7,
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_form"
+    },
+    {
+      "name": "sig not a string",
+      "signed": {
+        "ticket": {
+          "v": 1,
+          "task": "t1",
+          "device": "d1",
+          "seq": 3,
+          "tool": "tab_click",
+          "args": {
+            "ref": 5
+          },
+          "host": "shopee.co.id",
+          "exp": 1795000060
+        },
+        "kid": "9c4358b59f5952d0",
+        "sig": 7
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_form"
+    },
+    {
+      "name": "ticket not an object",
+      "signed": {
+        "ticket": "x",
+        "kid": "9c4358b59f5952d0",
+        "sig": "IyMbW-oMsdL5D8okkMxjt16zG4SmZNxilYLfWrEnhXxBk853YmGG1wIB8cQ28RDam_DQkyn6lM13LLsQMsw1CA"
+      },
+      "keys": [
+        {
+          "kid": "9c4358b59f5952d0",
+          "alg": "Ed25519",
+          "key": "96z1qBfaaeGVYbTI7STIT4vnoLu6Fs5W72zOVXJ4Lsc"
+        }
+      ],
+      "context": {
+        "task": "t1",
+        "device": "d1",
+        "last_seq": 2,
+        "now": 1795000000
+      },
+      "expect": "bad_form"
+    }
+  ],
+  "canonical": [
+    {
+      "value": {
+        "v": 1,
+        "task": "t1",
+        "device": "d1",
+        "seq": 3,
+        "tool": "tab_click",
+        "args": {
+          "ref": 5
+        },
+        "host": "shopee.co.id",
+        "exp": 1795000060
+      },
+      "canonical": "{\"args\":{\"ref\":5},\"device\":\"d1\",\"exp\":1795000060,\"host\":\"shopee.co.id\",\"seq\":3,\"task\":\"t1\",\"tool\":\"tab_click\",\"v\":1}"
+    },
+    {
+      "value": {
+        "v": 1,
+        "task": "t1",
+        "device": "d1",
+        "seq": 3,
+        "tool": "tab_type",
+        "args": {
+          "ref": 4,
+          "text": "Kaos ✓ ukuran L, café 😀 baris\u001f\n\"kutip\" \\ /"
+        },
+        "host": "shopee.co.id",
+        "exp": 1795000060
+      },
+      "canonical": "{\"args\":{\"ref\":4,\"text\":\"Kaos ✓ ukuran L, café 😀 baris\\u001f\\n\\\"kutip\\\" \\\\ /\"},\"device\":\"d1\",\"exp\":1795000060,\"host\":\"shopee.co.id\",\"seq\":3,\"task\":\"t1\",\"tool\":\"tab_type\",\"v\":1}"
+    },
+    {
+      "value": {
+        "v": 1,
+        "task": "t1",
+        "device": "d1",
+        "seq": 3,
+        "tool": "tab_select",
+        "args": {
+          "value": "Merah",
+          "ref": 2,
+          "Zeta": 1,
+          "alpha": "a",
+          "é": 1,
+          "😀": 2,
+          "ｗ": 3
+        },
+        "host": "shopee.co.id",
+        "exp": 1795000060
+      },
+      "canonical": "{\"args\":{\"Zeta\":1,\"alpha\":\"a\",\"ref\":2,\"value\":\"Merah\",\"é\":1,\"ｗ\":3,\"😀\":2},\"device\":\"d1\",\"exp\":1795000060,\"host\":\"shopee.co.id\",\"seq\":3,\"task\":\"t1\",\"tool\":\"tab_select\",\"v\":1}"
+    },
+    {
+      "value": {
+        "b": [
+          1,
+          {
+            "d": null,
+            "c": true
+          }
+        ],
+        "a": ""
+      },
+      "canonical": "{\"a\":\"\",\"b\":[1,{\"c\":true,\"d\":null}]}"
+    }
+  ]
+}
