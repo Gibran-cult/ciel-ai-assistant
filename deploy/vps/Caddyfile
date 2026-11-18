@@ -7,3 +7,13 @@
 api.ciel-ai.web.id {
 	reverse_proxy nginx:8080
 }
+
+# Ciel Agent API and its staging copy. WebSockets pass through reverse_proxy
+# as they are. DNS-only records, like api.
+agent.ciel-ai.web.id {
+	reverse_proxy agent:8000
+}
+
+agent-staging.ciel-ai.web.id {
+	reverse_proxy agent-staging:8000
+}

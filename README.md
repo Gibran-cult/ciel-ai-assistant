@@ -27,7 +27,7 @@ Live at **https://ciel-ai.web.id/** (landing page, GitHub Pages) and **https://a
 
 ```text
 Streamlit app (app.py)  --ngrok-->  Langflow (host PC)
-  session per chat                    Chat Input -> Ciel Vision Router -> Agent (DeepSeek)
+  session per chat                    Chat Input -> Ciel Vision Router -> Agent (DeepSeek, Gemini if it fails)
   tweaks: memory owner,                 +-- Ciel Memory Search / Store  (Chroma + Ollama embeddings)
           user tables, images           +-- Ciel Table Analyst          (user CSV/TSV, built-in dataset)
                                         +-- Ciel ML Analyst             (models on user CSV/TSV)
@@ -74,6 +74,7 @@ schtasks /Create /TN "Ciel prune chat history" /SC DAILY /ST 03:00 /TR "cmd /c c
 ├── flow/
 │   ├── v1.0.0/ … v1.7.0/        main flow snapshots (latest: v1.7.0)
 │   ├── memory_admin/            Ciel Memory Admin flow ("Data saya")
+│   ├── image_ai/                Ciel Image AI flow (Pro: Edit AI and Ilustrasi)
 │   └── components/              custom component sources embedded in the flow
 ├── tests/                       offline tests, live quality scripts, results
 ├── tools/
@@ -119,6 +120,7 @@ Optional:
 - `[auth]` block (Google OAuth client): enables "Masuk dengan Google". Long-term memory is only available to signed-in users and is private to each account; without `[auth]` memory is disabled.
 - `MEMORY_SEARCH_ID`, `MEMORY_STORE_ID` (defaults match `flow/v1.3.0` and later) `TABLE_ANALYST_ID` (default matches `flow/v1.5.0` and later) `ML_ANALYST_ID` (default matches `flow/v1.6.0` and later) and `DATASET_STORE_ID` (default matches `flow/v1.7.0` and later): component IDs the app sends tweaks to. Langflow ignores tweaks for nodes or fields a flow does not have.
 - `MEMORY_ADMIN_FLOW_ID` (and `MEMORY_ADMIN_NODE_ID`, default `CielMemoryAdmin-adm1n`): the Ciel Memory Admin flow behind the "Data saya" panel. Without it, signed-in users cannot view or delete their data from the app, and the privacy page says so.
+- `IMAGE_FLOW_ID`: the Ciel Image AI flow (`flow/image_ai/v1.0.0`) behind Edit AI and Ilustrasi (Ciel Pro). Without it those are hidden; manual photo editing in "Edit gambar" still works. `AI_IMAGE_PER_DAY` (default 3) is their shared daily quota per Pro account.
 - `CHAT_RETENTION_DAYS` (default 30): how long server-side chat history is kept, as stated on the privacy page. Use the same value for `tools/prune_chat_history.py`.
 
 A template is provided in `.streamlit/secrets.toml.example`. For local runs copy it to `.streamlit/secrets.toml` (git-ignored) or use a `.env` file.
@@ -126,7 +128,7 @@ A template is provided in `.streamlit/secrets.toml.example`. For local runs copy
 ## Deployment (Streamlit Community Cloud)
 
 1. Start the backend on the host machine: Langflow (port 7860) with its Ollama and Chroma dependencies, then the ngrok tunnel pointing at `localhost:7860` with the Basic Auth traffic policy.
-2. Import `flow/v1.12.0/Ciel_AI_Long-Term_Memory_Master.json` (latest) into Langflow and set `FLOW_ID` to the imported flow. The flow calls two sub-flows by Run Flow (Math Tutor Agent, Knowledge Retriever), which are not in this repository, and Ciel Table Analyst reads the built-in dataset from `~/.ciel_ai/builtin_datasets/200_sales_data.csv`; see `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
+2. Import `flow/v1.13.0/Ciel_AI_Long-Term_Memory_Master.json` (latest) into Langflow and set `FLOW_ID` to the imported flow. The flow calls two sub-flows by Run Flow (Math Tutor Agent, Knowledge Retriever), which are not in this repository, and Ciel Table Analyst reads the built-in dataset from `~/.ciel_ai/builtin_datasets/200_sales_data.csv`; see `docs/BACKUP_AND_DISASTER_RECOVERY.md`.
 3. Deploy `app.py` from the `main` branch of this repository.
 4. Paste the variables above into App settings -> Secrets, using the template format. For Google login, create an OAuth client (Web application) in Google Cloud Console with `https://<your-app>.streamlit.app/oauth2callback` as the redirect URI, and keep the `[auth]` block at the end of the secrets.
 5. Open the app and send a test message. If the backend host or tunnel is down, the app shows an error card with a Request ID and a Retry button.

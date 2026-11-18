@@ -103,7 +103,7 @@ class BerandaAppTest(unittest.TestCase):
         self.assertIn("Skripsi ojol · 1 chat · 1 file proyek", self.text(at))
         self.assertEqual(at.chat_input[0].placeholder, "Tanya soal skripsimu")
         tpl = [key for key in self.keys(at) if key.startswith("tpl_")]
-        self.assertEqual(tpl, ["tpl_cari_jurnal", "tpl_jelasin", "tpl_analisis", "tpl_cek_referensi", "tpl_ringkas_file", "tpl_kerangka"])
+        self.assertEqual(tpl, ["tpl_cari_jurnal", "tpl_jelasin", "tpl_analisis", "tpl_cek_referensi", "tpl_ringkas_file", "tpl_kerangka", "tpl_edit_gambar"])
         self.assertEqual(at.button(key="tpl_cari_jurnal").label, "Cari jurnal · Pro")
 
     def test_kerangka_template_opens_the_latest_map(self):

@@ -20,6 +20,7 @@ PASSWORD = "p" * 32
 FLOW = "11111111-2222-3333-4444-555555555555"
 ADMIN = "66666666-7777-8888-9999-000000000000"
 RESEARCH = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+IMAGE = "0f0f0f0f-1111-2222-3333-444444444444"
 
 
 def build(*args, **kwargs):
@@ -110,6 +111,20 @@ class BuildNginxConfigTest(unittest.TestCase):
     def test_optional_flows_only_when_configured(self):
         self.assertNotIn(RESEARCH, build(FLOW, ADMIN))
         self.assertIn(f"location = /api/v1/run/{RESEARCH} {{", build(FLOW, ADMIN, research_flow_id=RESEARCH))
+
+    def test_image_flow_run_is_allowed_but_not_upload(self):
+        conf = build(FLOW, ADMIN, image_flow_id=IMAGE.replace("-", ""))
+        for form in (IMAGE, IMAGE.replace("-", "")):
+            block = conf.split(f"location = /api/v1/run/{form} {{", 1)[1].split("\n    }", 1)[0]
+            self.assertIn("limit_except POST", block)
+            self.assertIn("limit_req zone=ciel_api burst=20 nodelay;", block)
+            self.assertNotIn(f"/api/v1/files/upload/{form}", conf)
+
+    def test_no_image_flow_keeps_policy_identical(self):
+        self.assertEqual(build(FLOW, ADMIN, image_flow_id=None), build(FLOW, ADMIN))
+        self.assertEqual(build(FLOW, ADMIN, image_flow_id=""), build(FLOW, ADMIN))
+        with self.assertRaises(nginx_tool.PolicyError):
+            build(FLOW, ADMIN, image_flow_id="image-ai")
 
     def test_weak_settings_raise(self):
         with self.assertRaises(nginx_tool.PolicyError):
@@ -226,7 +241,14 @@ class MainTest(unittest.TestCase):
         self.assertIn(f"MEMORY_ADMIN_FLOW_ID={ADMIN}", output)
         self.assertIn(f"RESEARCH_FLOW_ID={RESEARCH}", output)
         self.assertIn("WRITER_FLOW_ID=-", output)
+        self.assertIn("IMAGE_FLOW_ID=-", output)
         self.assertNotIn(PASSWORD, output)
+
+    def test_image_flow_id_comes_from_the_env_file(self):
+        code, conf, _, output = self.run_main(self.env(IMAGE_FLOW_ID=IMAGE.upper()))
+        self.assertEqual(code, 0)
+        self.assertIn(f"location = /api/v1/run/{IMAGE} {{", conf.read_text(encoding="utf-8"))
+        self.assertIn(f"IMAGE_FLOW_ID={IMAGE}", output)
 
     def test_bad_rate_limit_writes_nothing(self):
         code, conf, htpasswd, _ = self.run_main(self.env(GATEWAY_RUN_PER_MINUTE="banyak"))

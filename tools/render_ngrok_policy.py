@@ -18,6 +18,10 @@ Settings come from the environment, then the repository's .env:
                                empty the policy is the same as without it
   WRITER_FLOW_ID               optional: Ciel Penulis flow (Pro, Kerangka Bab
                                1-3); same rule
+  IMAGE_FLOW_ID                optional: Ciel Image AI flow (Pro, Edit AI and
+                               Ilustrasi); same rule. Only its run path is
+                               allowed: the photo travels inside the run JSON,
+                               so no upload path is added for it
   NGROK_POLICY_FILE            default %USERPROFILE%\\ngrok-ciel-policy.yml
 
 The file is JSON, which ngrok reads like YAML. Nothing secret is printed.
@@ -56,9 +60,9 @@ def id_forms(flow_id):
     return [flow_id, flow_id.replace("-", "")]
 
 
-def allowed_requests(flow_id, admin_flow_id, research_flow_id=None, writer_flow_id=None):
+def allowed_requests(flow_id, admin_flow_id, research_flow_id=None, writer_flow_id=None, image_flow_id=None):
     """(method, path) pairs the app and the watchdog use."""
-    optional = [fid for fid in (research_flow_id, writer_flow_id) if fid]
+    optional = [fid for fid in (research_flow_id, writer_flow_id, image_flow_id) if fid]
     return [
         *(("POST", f"/api/v1/run/{form}") for form in id_forms(flow_id)),
         *(("POST", f"/api/v1/run/{form}") for form in id_forms(admin_flow_id)),
@@ -87,7 +91,8 @@ def rate_limit(name, capacity):
     }
 
 
-def check_settings(user, password, flow_id, admin_flow_id, research_flow_id=None, writer_flow_id=None):
+def check_settings(user, password, flow_id, admin_flow_id, research_flow_id=None, writer_flow_id=None,
+                   image_flow_id=None):
     if not user or not password:
         raise PolicyError("NGROK_USER dan NGROK_PASSWORD wajib diisi.")
     if ":" in user:
@@ -105,17 +110,21 @@ def check_settings(user, password, flow_id, admin_flow_id, research_flow_id=None
         flows.append(("RESEARCH_FLOW_ID", research_flow_id))
     if writer_flow_id:
         flows.append(("WRITER_FLOW_ID", writer_flow_id))
+    if image_flow_id:
+        flows.append(("IMAGE_FLOW_ID", image_flow_id))
     for name, value in flows:
         if not UUID.match(str(value or "")):
             raise PolicyError(f"{name} harus UUID flow Langflow (huruf kecil, boleh tanpa tanda hubung).")
 
 
-def build_policy(user, password, flow_id, admin_flow_id, research_flow_id=None, writer_flow_id=None):
-    check_settings(user, password, flow_id, admin_flow_id, research_flow_id, writer_flow_id)
+def build_policy(user, password, flow_id, admin_flow_id, research_flow_id=None, writer_flow_id=None,
+                 image_flow_id=None):
+    check_settings(user, password, flow_id, admin_flow_id, research_flow_id, writer_flow_id, image_flow_id)
     flow_id, admin_flow_id = str(uuid.UUID(flow_id)), str(uuid.UUID(admin_flow_id))
     research_flow_id = str(uuid.UUID(research_flow_id)) if research_flow_id else None
     writer_flow_id = str(uuid.UUID(writer_flow_id)) if writer_flow_id else None
-    allowed = allowed_requests(flow_id, admin_flow_id, research_flow_id, writer_flow_id)
+    image_flow_id = str(uuid.UUID(image_flow_id)) if image_flow_id else None
+    allowed = allowed_requests(flow_id, admin_flow_id, research_flow_id, writer_flow_id, image_flow_id)
     costly = [r for r in allowed if r[1].startswith(("/api/v1/run/", "/api/v1/files/upload/"))]
     return {
         "on_http_request": [
@@ -153,6 +162,7 @@ def main(argv=None):
             settings.get("MEMORY_ADMIN_FLOW_ID", "").strip().lower(),
             settings.get("RESEARCH_FLOW_ID", "").strip().lower() or None,
             settings.get("WRITER_FLOW_ID", "").strip().lower() or None,
+            settings.get("IMAGE_FLOW_ID", "").strip().lower() or None,
         )
     except PolicyError as error:
         print(f"Policy tidak ditulis: {error}", file=sys.stderr)

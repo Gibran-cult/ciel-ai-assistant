@@ -22,6 +22,8 @@ EMBEDDED = {
     BUILDER_ID: "ciel_reference_builder.py",
 }
 SUPERSEDED = {
+    # Guard: changed in main flow v1.13.0 (unlisted [n] markers).
+    GUARD_ID: "1e081c38bf116baba58d8d85e505f6f2b0598f7556738a9c3a58265c023892ab",
     SEARCH_ID: "c1fc5ea5a6c26b0db3b71589e840c97cecd877dd48c429eb091f0337a5284923",
     BUILDER_ID: "a92c41de66e55f7438aa5a6ff5da0b0144c3b66da87bb44e56a9473dbb3a84ce",
 }
@@ -78,7 +80,7 @@ class RisetFlowContractTest(unittest.TestCase):
             with self.subTest(node=node_id):
                 code = self.template(node_id)["code"]["value"]
                 if node_id in SUPERSEDED:
-                    # Changed in v1.1.0 (excerpts); this snapshot keeps the code it shipped with.
+                    # Changed later (see SUPERSEDED); this snapshot keeps the code it shipped with.
                     self.assertEqual(hashlib.sha256(code.encode("utf-8")).hexdigest(), SUPERSEDED[node_id])
                 else:
                     self.assertEqual(code, (COMPONENTS / filename).read_text(encoding="utf-8"))

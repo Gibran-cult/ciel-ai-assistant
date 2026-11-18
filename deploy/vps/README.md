@@ -210,13 +210,14 @@ a fresh pull of `:latest` can be a newer build.
 
 ## 9. Open the Langflow UI
 
-Langflow is not public. From your own machine:
+Langflow is not public. From your own machine, open a tunnel on local port 17860 (until the
+cutover the laptop's own Langflow is still using 7860):
 
 ```bash
-ssh -L 7860:127.0.0.1:7860 root@<vps-ip>
+ssh -L 17860:127.0.0.1:7860 root@<vps-ip>
 ```
 
-then open http://127.0.0.1:7860 and sign in with `LANGFLOW_SUPERUSER` and
+then open http://127.0.0.1:17860 and sign in with `LANGFLOW_SUPERUSER` and
 `LANGFLOW_SUPERUSER_PASSWORD`.
 
 ## 10. Migrate the flows and create the API key
@@ -224,8 +225,8 @@ then open http://127.0.0.1:7860 and sign in with `LANGFLOW_SUPERUSER` and
 1. In the VPS Langflow UI (step 9): create an API key and put it in `.env` as
    `LANGFLOW_API_KEY`. Create the global variables `DEEPSEEK_API_KEY` and `EXA_API_KEY`
    and the `GEMINI_API_KEY` credential (the settings are not in Git).
-2. On the **laptop**, with the laptop's Langflow running, open a tunnel to the VPS
-   Langflow on another local port (7860 is the laptop's own Langflow):
+2. On the **laptop**, with the laptop's Langflow running, keep the tunnel from step 9 open,
+   or open it again (7860 is the laptop's own Langflow):
 
    ```bash
    ssh -L 17860:127.0.0.1:7860 root@<vps-ip>
@@ -235,7 +236,8 @@ then open http://127.0.0.1:7860 and sign in with `LANGFLOW_SUPERUSER` and
    Langflow) and `TARGET_LANGFLOW_API_KEY` (the VPS key from 1) in the environment or the
    laptop's `.env`, then copy the four flows and the sub-flows they call. The `--flow-id`
    values are the laptop's `FLOW_ID`, `RESEARCH_FLOW_ID`, `WRITER_FLOW_ID` and
-   `MEMORY_ADMIN_FLOW_ID`:
+   `MEMORY_ADMIN_FLOW_ID`. On Windows run this in Git Bash: PowerShell rejects `mkdir -p`
+   and the `\` line continuation:
 
    ```bash
    mkdir -p ~/.ciel_ai/flow_backups
@@ -359,6 +361,43 @@ repository's Settings, Secrets and variables, Actions:
 
 GitHub disables scheduled workflows after 60 days without activity in the repository. If
 the alerts stop, re-enable the workflow in the Actions tab.
+
+## 13. Ciel Agent API
+
+Do this last, after steps 1 to 12 work. The plan is `docs/plans/2026-11-18-agent-service.md`; its
+"Langkah pemilik" section is the order. The agent stays off for users until the owner fills in
+`AGENT_ENABLED`.
+
+1. DNS: add DNS-only A records `agent` and `agent-staging` pointing at the VPS (like `api`).
+2. Google Cloud Console, the app's OAuth client: add the redirect URIs
+   `https://agent.ciel-ai.web.id/v1/device/callback` and
+   `https://agent-staging.ciel-ai.web.id/v1/device/callback`.
+3. Supabase: run the agent sections at the end of `docs/chat_store.sql` in the production
+   project, and the whole file in the staging project.
+4. Copy `agent.env.example` to `agent.env` and `agent-staging.env.example` to
+   `agent-staging.env`, then fill them in. Make every `AGENT_*_KEY` with `openssl rand -hex 32`,
+   different for production and staging. Leave `AGENT_ENABLED` empty in `agent.env`.
+
+       chmod 600 agent.env agent-staging.env
+
+5. Build and start both services, then check them from the laptop:
+
+       docker compose up -d agent agent-staging
+       docker compose ps agent agent-staging
+
+       python tools/agent_smoke.py --base https://agent-staging.ciel-ai.web.id --origin chrome-extension://<extension id>
+       python tools/agent_smoke.py --base https://agent.ciel-ai.web.id --origin chrome-extension://<extension id>
+
+   The smoke check takes about 15 seconds (it waits for the hello timeout) and spends no model
+   money. It prints `ok` or the list of problems.
+
+Kill switch for running tasks (takes effect at the next turn of every task):
+
+       docker compose exec agent touch /data/agent_off
+       docker compose exec agent rm /data/agent_off
+
+Stopping the service (`docker compose stop agent`) also ends every running task; the sweeper
+closes their rows within 15 minutes of the next start.
 
 ## Rollback to the laptop
 

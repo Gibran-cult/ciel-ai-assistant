@@ -71,6 +71,10 @@ jobs:
             tests.test_flow_v1102_contract \
             tests.test_flow_v1110_contract \
             tests.test_flow_v1120_contract \
+            tests.test_flow_v1130_contract \
+            tests.test_flow_v1140_contract \
+            tests.test_flow_v1141_contract \
+            tests.test_flow_v1142_contract \
             tests.test_flow_riset_v100_contract \
             tests.test_flow_riset_v110_contract \
             tests.test_riset_components \
@@ -79,6 +83,8 @@ jobs:
             tests.test_kerangka_app \
             tests.test_draft_check \
             tests.test_answer_cache \
+            tests.test_visuals \
+            tests.test_answer_pdf \
             tests.test_answer_cache_app \
             tests.test_cek_kutipan_app \
             tests.test_gateway_policy \
@@ -88,6 +94,7 @@ jobs:
             tests.test_secrets \
             tests.test_supply_chain \
             tests.test_source_guard \
+            tests.test_fallback_model \
             tests.test_vision_images \
             tests.test_vision_router \
             tests.test_personal_datasets \
@@ -95,6 +102,7 @@ jobs:
             tests.test_rate_limit \
             tests.test_project_context \
             tests.test_live_scripts \
+            tests.test_website \
             tests.test_app_hygiene \
             tests.test_performance_snapshot \
             tests.test_pricing \
@@ -120,6 +128,32 @@ jobs:
             tests.test_app_deploy \
             tests.test_migrate_flows \
             tests.test_backend_health \
+            tests.test_safe_expr \
+            tests.test_answer_blocks \
+            tests.test_image_edit \
+            tests.test_illustration \
+            tests.test_image_ai_component \
+            tests.test_flow_image_ai_v100_contract \
+            tests.test_image_edit_app \
+            tests.test_guard_domains \
+            tests.test_guard_registry \
+            tests.test_guard_stores \
+            tests.test_guard_risk \
+            tests.test_guard_scope \
+            tests.test_guard_limits \
+            tests.test_guard_purchase \
+            tests.test_guard_audit \
+            tests.test_guard_decide \
+            tests.test_guard_redteam \
+            tests.test_agent_store \
+            tests.test_agent_envelope \
+            tests.test_agent_model \
+            tests.test_agent_tools \
+            tests.test_agent_plan \
+            tests.test_agent_limits \
+            tests.test_agent_journal \
+            tests.test_agent_loop \
+            tests.test_agent_redteam \
             tests.test_ci_coverage
 
       # Node that comes with the runner (no extra setup): the Edge Function's
@@ -131,3 +165,56 @@ jobs:
 
       - name: Check VPS shell scripts
         run: bash -n deploy/vps/*.sh deploy/app/*.sh
+
+  # The Ciel Agent API runs in its own container with its own lockfile
+  # (requirements-agent.txt). This job proves that lock is enough for the
+  # service and for the agent loop it wraps.
+  agent-service:
+    name: Agent Service
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Install service dependencies (the lock the container installs)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --require-hashes -r requirements-agent.txt
+
+      - name: Audit service dependencies for known vulnerabilities
+        run: |
+          python -m pip install pip-audit
+          pip-audit -r requirements-agent.txt
+
+      - name: Run agent service tests
+        run: |
+          python -m unittest -v \
+            tests.test_agent_api_health \
+            tests.test_agent_tickets \
+            tests.test_agent_smoke \
+            tests.test_agent_access \
+            tests.test_agent_ws \
+            tests.test_agent_claude \
+            tests.test_agent_gemini \
+            tests.test_agent_devices \
+            tests.test_account_ids \
+            tests.test_agent_store \
+            tests.test_agent_envelope \
+            tests.test_agent_model \
+            tests.test_agent_tools \
+            tests.test_agent_plan \
+            tests.test_agent_limits \
+            tests.test_agent_journal \
+            tests.test_agent_loop \
+            tests.test_agent_redteam \
+            tests.test_guard_audit \
+            tests.test_guard_decide

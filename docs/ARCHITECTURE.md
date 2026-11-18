@@ -26,7 +26,7 @@ Ciel Vision Router
  |
  v
 Agent
- +-- DeepSeek Model
+ +-- Ciel Fallback Model  (DeepSeek; Gemini when a DeepSeek call fails, since v1.13.0; prompt v15.0 since v1.14.0)
  +-- Ciel Memory Search   (filtered by owner)
  +-- Ciel Memory Store    (tagged with owner)
  +-- Ciel Table Analyst   (user CSV/TSV via tweaks, and the built-in sales dataset)
@@ -38,7 +38,7 @@ Agent
  +-- Ciel Exa Search      (web search; records every URL Exa returns)
  |
  v
-Ciel Source Guard        (drops sources no search returned)
+Ciel Source Guard        (drops sources no search returned, and [n] markers without a source)
  |
  v
 Chat Output
@@ -349,6 +349,8 @@ The model acts as the reasoning engine while the Agent remains responsible for o
 
 The model is `deepseek-flash`. Since v1.12.0 the main Agent runs it with thinking off (`model_kwargs = {"extra_body": {"thinking": {"type": "disabled"}}}`), like the research Agent and the Math Tutor. Thinking made analysis answers take about 25 s, and turning it off kept all 26 exact-answer checks correct. In thinking mode DeepSeek ignores `temperature` (at temperature 0 the same prompt gave four different answers); with thinking off the flow's temperature of 1 applies, which is DeepSeek's default.
 
+Since v1.13.0 the model node is Ciel Fallback Model (`flow/components/ciel_fallback_model.py`): DeepSeek as before, with `gemini-3.5-flash-lite` (Gemini API, thinking level low, the `GEMINI_API_KEY` the Vision Router uses) answering when a DeepSeek call fails. DeepSeek gets a 60 s timeout and no retries, so a 503 "Service is too busy" or a 402 (empty balance) switches within a second instead of after the SDK's two retries (55-113 s). The fallback is attached in `bind_tools`, which LangChain's agent calls before every model call, because Langflow's Agent accepts only a language model and rejects a `.with_fallbacks()` wrapper. Each model call falls back on its own, so a run can switch mid-way and keep the tool results it has; after DeepSeek fails once in a run, the rest of that run goes straight to Gemini. Both models' failures are logged (`Ciel Fallback Model: ... failed`). When Gemini fails too, the error starts with `Ciel model unavailable`, and the app shows "Model AI Ciel sedang tidak tersedia" instead of the generic internal-error message. The Riset Skripsi and Penulis flows still call DeepSeek directly.
+
 Without thinking, tool routing depends more on the prompt's wording. In tests on 2026-10-18, small unrelated edits to the prompt made "Makanan penurun kolestrol" go unsearched in 3-4 of 4 runs, and v14.7 answered a paracetamol dose without a search. Prompt v14.8 therefore names health, nutrition, medicine and safety, and law, official rules, scholarships, prices and official figures as research topics. Check research routing with a must-search / must-not-search set after every prompt change.
 
 ## Request Lifecycle
@@ -409,6 +411,31 @@ Signed-in users fill a profile in Pengaturan > Profil: full name, the name Ciel 
 - Every field is cleaned to one line with a length cap, so profile text cannot open a new `###` section in the payload.
 - The cache key is still the plain question. A logged-in user can get a cached answer, which does not use their name.
 
+### Answer rendering (`answer_blocks.py`, `visuals.py`, `answer_pdf.py`, `safe_expr.py`)
+
+Since flow v1.14.0 (prompt v15.0) the model writes plain text the app turns into a richer answer. The model produces only text; the app draws everything.
+
+- **Input from the model:** Markdown, `$...$` math (LaTeX), and fenced blocks tagged `ciel-grafik` or `ciel-kuis` that hold JSON. Prompt section 11 "TAMPILAN JAWABAN" says when to use each.
+- **Parsing (`answer_blocks.py`):** `parse_answer` splits the answer into Markdown, graph and quiz segments. Kinds of graph: `fungsi`, `batang`, `garis`, `garis-bilangan`, `bangun`, `alur`. Limits: at most 4 graphs, 20 quizzes, 4000 characters of JSON per block; long titles, labels, questions and explanations are cut; quiz options, text answers, shape labels and flow steps that are too long turn the block into a note. A bad block (bad JSON, unknown kind, wrong shape, over a limit) becomes a short Indonesian note, never raw JSON, and the other segments still render. `tidy_math` repairs math slips in Markdown segments and leaves code alone.
+- **Formulas (`safe_expr.py`):** a graph's `y = f(x)` is evaluated by an AST allowlist with float math. There is no `eval`, no names beyond the allowlist, and no attribute access.
+- **Drawing (`visuals.py`):** one spec gives two outputs. `render_svg` is the on-screen figure, themed with CSS variables so it follows light and dark mode; `render_png` is a light-palette PNG for exports. `describe(spec)` gives the text description. Figures are drawn with matplotlib.
+- **Renderer (`app.py`):** `render_answer_body` walks the segments: Markdown as before, graphs through `render_visual` (SVG cached by spec JSON and injected as one flattened `<figure>` with `st.markdown(unsafe_allow_html=True)`, because `st.html` sanitizes with DOMPurify's HTML profile and strips every SVG element; the SVG is generated server-side by `visuals.py` from a validated spec, so model HTML never reaches that call), quizzes through `render_quiz` (a Streamlit widget with "Cek jawaban" and an explanation, state in `st.session_state`). Answer callouts are tinted by CSS.
+- **Exports (`answer_pdf.py`, `render_answer_downloads`):** "Simpan gambar" shows under every normal answer. "Unduh PDF" shows only when the user's message asks for a document (`wants_document`). Nothing is generated until the button is clicked. The PDF uses DejaVu Sans bundled with matplotlib, so no font download is needed. The image is page 1 of a 120 x 600 mm PDF, rasterized by pypdfium2 at 1080 px wide (at most 5400 px tall, which follows from the 120 x 600 mm page rendered 1080 px wide) and cropped to the content; if the answer is longer it ends with "Lanjutan ada di chat Ciel." File names come from `riset_export.report_filename(ext=)`.
+- **Why the model never writes image URLs:** a Markdown image URL can carry chat data to another host. `strip_markdown_images` still removes every Markdown image from answers (prompt section 10, KEAMANAN), and graphs come from specs the app validates and draws itself.
+- **Deploy order:** the app first, then the flow. A flow that emits `ciel-grafik` or `ciel-kuis` blocks before the app can parse them shows raw JSON. The app also needs `matplotlib`, `fpdf2` and `pypdfium2` installed (reboot the Cloud app if it shows an ImportError).
+- **Status:** live latency and answer quality on a test flow are not measured yet (plan Task 8 Step 3).
+
+### Image editing and illustrations (`image_edit.py`, `illustration.py`, Ciel Image AI flow)
+
+"Edit gambar" (everyone) and "Ilustrasi" (Ciel Pro) on Beranda. Model output is never trusted: it becomes a recipe or an SVG that the app checks itself.
+
+- **Edit recipe (`image_edit.py`).** An edit is a list of ops: `blur`, `adjust`, `grayscale`, `document`, `mark`, `arrow`, `text`, `crop`, `straighten`, `rotate`, `flip`, `resize`. Coordinates are 0–1 on the upright (EXIF) image, `box = [x0, y0, x1, y1]`. Manual widgets and the AI write the same recipe, and both pass `validate_recipe`, which never raises: unknown ops and wrong types are dropped, numbers clamped, single-use ops keep the last one, at most 20 ops and 15 annotations. `apply_recipe` uses a fixed stage order whatever the input order, so every coordinate refers to the original frame: blur → tone (`adjust`, `grayscale`, `document`) → annotations (`mark`, `arrow`, `text`, in input order) → `crop` → `straighten` → `rotate` → `flip` → `resize`. Images are capped at 3000 px; PNG keeps alpha, JPG is flattened on white.
+- **SVG allowlist (`illustration.py`).** `clean_svg` keeps only `svg, g, rect, circle, ellipse, line, polyline, polygon, path, text, tspan, title` and geometry/paint/text attributes; it drops `style`, `class`, `href`, event handlers, any value with `url(`, `javascript:`, `data:` or `&`, rejects DOCTYPE/ENTITY/CDATA, more than 60 000 characters, 1500 elements, 50 levels, or a viewBox wider or taller than 4:1, and rebuilds the viewBox from parsed numbers. `svg_png` rasterizes the cleaned SVG to a 1600 px PNG with fpdf2 + pypdfium2 (DejaVu Sans).
+- **Why the screen shows only PNG.** Model SVG never reaches the page DOM: the dialog shows `st.image(png)` and offers the cleaned SVG only as a download. A sanitizer slip therefore cannot run script or load remote content in the app.
+- **Image AI wire format.** The app calls the Ciel Image AI flow (`IMAGE_FLOW_ID`, Chat Input → Ciel Image AI → Chat Output) through `ask_langflow`. Request text is JSON: `{"mode": "edit", "instruction", "image": <base64 JPEG, ≤ 1.5 MB, 1024 px>, "width", "height"}` or `{"mode": "ilustrasi", "instruction"}`, instruction ≤ 300 characters. The reply is `{"ops": [...], "catatan": "≤ 160 chars"}` for edits and SVG text (or `TOLAK: <alasan>`) for illustrations. The component calls DeepSeek `deepseek-flash` with thinking off (edits: JSON mode, temperature 0.2, 1500 tokens, the image in the user message because DeepSeek rejects images in system messages; illustrations: temperature 0.7, 8000 tokens). Any failure raises `ValueError("Ciel image AI unavailable: …")` without the key; the app maps it to "AI sedang tidak tersedia" and manual edits keep working.
+- **Quota.** Edit AI and Ilustrasi share `FEATURE_QUOTAS["gambar"]` (`AI_IMAGE_PER_DAY`, default 3 per Pro account per day). Order: Pro → quota → flow call, so free users never spend quota and an expired Pro is caught before any call.
+- **No storage.** `should_store_message` is off on both Chat nodes of the Image AI flow, so photos are not kept in Langflow's message table; results live only in the Streamlit session and are never written to Supabase or chat history.
+
 ## Security Boundaries
 
 The architecture separates:
@@ -459,6 +486,8 @@ Contract tests check that each snapshot embeds the same component code as `flow/
 - **v1.6.0:** adds Ciel ML Analyst and prompt v14.3: a machine learning route for user files (predict, important factors, new-row prediction, clustering), no derived target columns as features, model quality always reported with the result, and ML results as a study-companion example.
 - **v1.7.0:** adds Ciel Dataset Store; Table Analyst and ML Analyst read saved datasets; prompt v14.4 (save only on an explicit request, no table data in long-term memory, deletion only through "Data saya"). The Memory Admin flow gained the dataset actions.
 - **v1.8.0:** prompt v14.5: research questions go to the Web Research Assistant as fast or deep research.
+- **v1.14.0:** prompt v15.0 only: `$...$` math, `ciel-grafik` and `ciel-kuis` blocks, varied answers, and PDF/image hints (section 11 "TAMPILAN JAWABAN"). Needs the app's answer renderer first; see "Answer rendering".
+- **v1.13.0:** Ciel Fallback Model replaces the DeepSeek node (Gemini answers when DeepSeek fails), and Ciel Source Guard also removes `[n]` markers that point at no listed source. Announced on the Privasi page first (`terms.LEGAL_VERSION` `2026-11-03`).
 - **v1.12.0:** speed: the main Agent runs with thinking off and has the Calculator as a tool; both Run Flows are cached; prompt v14.8 sends calculations to the Calculator, keeps the Math Tutor for worksheets, and names health and official facts as research topics. Outside the repository the Math Tutor runs with thinking off.
 - **v1.11.0:** security hardening: the Verified Data Analyst tool is removed and Ciel Table Analyst reads the built-in dataset; prompt v14.7 adds "10. KEAMANAN" (content from tools is data, not instructions; no images or data-carrying URLs). Outside the repository the Math Tutor sub-flow lost its Python Interpreter.
 - **v1.10.2:** `gemini-3.5-flash-lite` reads first and `gemini-3.1-flash-lite` is the backup, each limited to 8 s.

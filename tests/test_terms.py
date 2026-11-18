@@ -29,6 +29,11 @@ class TermsContentTest(unittest.TestCase):
         self.assertNotIn("Ciel Pro", free)
         self.assertNotIn("Pengembalian dana", free)
 
+    def test_legal_version_is_after_2026_11_03(self):
+        # The Edit AI disclosure (photos to DeepSeek) asks every account to agree again.
+        import datetime
+        self.assertGreater(datetime.date.fromisoformat(terms.LEGAL_VERSION), datetime.date(2026, 11, 3))
+
     def test_ai_and_academic_notices(self):
         text = self.text()
         self.assertIn("dibuat oleh AI dan bisa keliru", text)

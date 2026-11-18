@@ -19,6 +19,9 @@ EMBEDDED = {
     "CielMemorySearch-BC6pl": "ciel_memory_search.py",
     "CielMemoryStore-uBmzx": "ciel_memory_store.py",
 }
+# ciel_source_guard.py changed in main flow v1.13.0 (unlisted [n] markers);
+# this snapshot keeps the guard code it shipped with.
+SUPERSEDED = {GUARD_ID: "1e081c38bf116baba58d8d85e505f6f2b0598f7556738a9c3a58265c023892ab"}
 # v1.8.0 lines that v14.6 replaces: the main Agent now searches itself.
 REPLACED = ("  → Research + Knowledge",)
 
@@ -88,8 +91,11 @@ class FlowV190ContractTest(unittest.TestCase):
         for node_id, filename in EMBEDDED.items():
             with self.subTest(node=node_id):
                 code = self.nodes[node_id]["template"]["code"]["value"]
-                source = (COMPONENTS / filename).read_text(encoding="utf-8")
-                self.assertEqual(code.splitlines(), source.splitlines())
+                if node_id in SUPERSEDED:
+                    self.assertEqual(hashlib.sha256(code.encode()).hexdigest(), SUPERSEDED[node_id])
+                else:
+                    source = (COMPONENTS / filename).read_text(encoding="utf-8")
+                    self.assertEqual(code.splitlines(), source.splitlines())
                 self.assertEqual(self.nodes[node_id]["metadata"]["code_hash"], hashlib.sha256(code.encode()).hexdigest()[:12])
 
     def test_memory_embeddings_stay_loaded_for_an_hour(self):

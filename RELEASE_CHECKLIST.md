@@ -10,6 +10,9 @@
 - [ ] App changes that touch rendering are checked in a browser or with Streamlit's `AppTest`.
 - [ ] Prompt or flow changes are tried on a separate test flow in Langflow first (import a copy without its `id`), never on the production flow.
 - [ ] A live quality run (`python tests/collect_quality.py`) shows no regression in response quality, and failed cases are explained.
+- [ ] The agent guard and red-team tests (`tests.test_guard_*`, `tests.test_agent_*`) pass, and every new case from an incident or finding is added to `tests/redteam/`.
+- [ ] Before the Ciel Agent API is deployed for the first time: the agent sections at the end of `docs/chat_store.sql` have been run in Supabase, the owner steps at the end of `docs/plans/2026-11-18-agent-service.md` are done in order, and `AGENT_ENABLED` stays unset until the owner turns the agent on.
+- [ ] Changes to the agent protocol keep `docs/agent-protocol.md` in step, and old clients keep working (or `AGENT_MIN_CLIENT_VERSION` is raised on purpose).
 - [ ] `CHANGELOG.md` describes the change and its measurements.
 - [ ] Changes to Privasi or Ketentuan bump `terms.LEGAL_VERSION` and the page dates; open items in `docs/LEGAL.md` are reviewed.
 
@@ -45,6 +48,21 @@ Rollback: remove `RESEARCH_FLOW_ID` from the Streamlit secrets (the button disap
 4. Add `WRITER_FLOW_ID` to the Streamlit Cloud secrets, above `[auth]`.
 
 Rollback: remove `WRITER_FLOW_ID` from the app secrets; the button disappears.
+
+### First deployment of the Ciel Image AI flow, then main flow v1.14.2
+
+Order matters: the gateway and the app first, the main flow prompt last. Each step is checked before the next. DeepSeek is prepaid: check the balance first.
+
+1. Import `flow/image_ai/v1.0.0/Ciel_Image_AI.json` into Langflow as "Ciel Image AI" (it uses the `DEEPSEEK_API_KEY` global variable). Confirm both Chat nodes still have "Store Messages" off. Note the flow ID.
+2. In the Langflow playground, run one edit request and one illustration request (the JSON shapes in `docs/ARCHITECTURE.md`, "Image editing and illustrations"). The edit reply must be `{"ops": [...], "catatan": ...}`; the illustration must be one `<svg>`.
+3. Add `IMAGE_FLOW_ID` to `.env`, run `python tools/render_ngrok_policy.py`, stop ngrok (the watchdog starts it with the new policy; never start ngrok as admin), then run `python tools/check_gateway.py`. On the VPS: add it to `deploy/vps/.env` and re-render with `tools/render_nginx_gateway.py --env-file deploy/vps/.env`.
+4. If the rollout date is not 2026-11-05, set `terms.LEGAL_VERSION`, `privacy.PRIVACY_UPDATED` and the privacy change note to the real date first (merge that before the app ships).
+5. Add `IMAGE_FLOW_ID` (and optionally `AI_IMAGE_PER_DAY`) to the Streamlit Cloud secrets, above `[auth]`. Reboot the Cloud app if an ImportError shows.
+6. Check the live app: a manual edit as a guest (download PNG and JPG); an AI edit and an illustration on a Pro account; the 4th AI request of the day shows the quota message; a free account sees the Pro lock and no flow call is made.
+7. Back up the production main flow to `~/.ciel_ai/flow_backups/main_before_v1.14.2_<timestamp>.json`, PATCH only the Agent `system_prompt` from `flow/v1.14.2` into the live data, and check that no other template value changed.
+8. Re-test "bisa edit foto gak?" and "hapus background foto ini" live: Ciel names Edit gambar / Ilustrasi and never claims it can remove backgrounds or paint.
+
+Rollback: restore the main flow backup with the same `PATCH`, then remove `IMAGE_FLOW_ID` from the Streamlit secrets (the AI parts disappear; manual editing stays), then from `.env`, and re-render the policy.
 
 ### Riset Skripsi flow v1.1.0 (source excerpts for Cek kutipan)
 

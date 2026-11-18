@@ -132,6 +132,7 @@ class ProGateTest(unittest.TestCase):
             RISET_SKRIPSI_PER_DAY=5,
             KERANGKA_PER_DAY=10,
             CEK_KUTIPAN_PER_DAY=20,
+            AI_IMAGE_PER_DAY=3,
             RATE_LIMIT_ANON_TOTAL_PER_HOUR=60,
             RATE_LIMIT_ANON_TOTAL_PER_DAY=300,
             RATE_LIMIT_TOTAL_PER_DAY=1500,

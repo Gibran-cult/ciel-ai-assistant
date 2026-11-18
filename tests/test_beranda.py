@@ -18,10 +18,10 @@ class TemplatesTest(unittest.TestCase):
         return [template.key for template in templates_for(*args)]
 
     def test_templates_follow_the_context(self):
-        self.assertEqual(self.keys(False, False, True, True), ["cari_jurnal", "jelasin", "analisis", "cek_referensi"])
+        self.assertEqual(self.keys(False, False, True, True), ["cari_jurnal", "jelasin", "analisis", "cek_referensi", "edit_gambar"])
         self.assertEqual(
-            self.keys(True, True, True, True),
-            ["cari_jurnal", "jelasin", "analisis", "cek_referensi", "ringkas_file", "kerangka"],
+            self.keys(True, True, True, True, True),
+            ["cari_jurnal", "jelasin", "analisis", "cek_referensi", "ringkas_file", "kerangka", "edit_gambar", "ilustrasi"],
         )
         self.assertNotIn("cari_jurnal", self.keys(True, True, False, True))
         self.assertNotIn("kerangka", self.keys(True, True, True, False))
@@ -39,7 +39,19 @@ class TemplatesTest(unittest.TestCase):
         by_key = {template.key: template for template in TEMPLATES}
         self.assertEqual((by_key["cari_jurnal"].action, by_key["cari_jurnal"].pro), ("riset", True))
         self.assertEqual((by_key["kerangka"].action, by_key["kerangka"].pro, by_key["kerangka"].label), ("kerangka", True, "Kerangka Bab 1–3"))
-        self.assertEqual({template.action for template in TEMPLATES if not template.pro}, {"fill"})
+        self.assertEqual({template.action for template in TEMPLATES if not template.pro}, {"fill", "edit_gambar"})
+
+    def test_edit_gambar_always_shown_and_ilustrasi_needs_image_ai(self):
+        by_key = {template.key: template for template in TEMPLATES}
+        self.assertEqual((by_key["edit_gambar"].action, by_key["edit_gambar"].pro, by_key["edit_gambar"].label),
+                         ("edit_gambar", False, "Edit gambar"))
+        self.assertEqual((by_key["ilustrasi"].action, by_key["ilustrasi"].pro, by_key["ilustrasi"].label),
+                         ("ilustrasi", True, "Ilustrasi"))
+        for args in ((False, False, False, False), (True, True, True, True), (False, False, False, False, True)):
+            self.assertIn("edit_gambar", self.keys(*args))
+        self.assertNotIn("ilustrasi", self.keys(True, True, True, True))
+        self.assertNotIn("ilustrasi", self.keys(True, True, True, True, False))
+        self.assertIn("ilustrasi", self.keys(False, False, False, False, True))
 
 
 class LatestRisetTest(unittest.TestCase):

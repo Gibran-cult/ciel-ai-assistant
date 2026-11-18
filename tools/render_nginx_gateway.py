@@ -30,7 +30,8 @@ Differences that come from nginx rather than from the rules:
     locations repeat the per-IP limit on every path.
 
 Settings use the same names as the ngrok policy (NGROK_USER, NGROK_PASSWORD,
-FLOW_ID, MEMORY_ADMIN_FLOW_ID, RESEARCH_FLOW_ID, WRITER_FLOW_ID). With
+FLOW_ID, MEMORY_ADMIN_FLOW_ID, RESEARCH_FLOW_ID, WRITER_FLOW_ID, IMAGE_FLOW_ID;
+IMAGE_FLOW_ID adds only its run path, no upload path). With
 --env-file the file is the source of truth: every name it lists wins over
 the environment, also a name left empty, so a shell that still exports old
 flow IDs cannot leak them into the config. Without --env-file, the
@@ -124,14 +125,16 @@ def build_nginx_config(
     writer_flow_id=None,
     run_per_minute=DEFAULT_RUN_PER_MINUTE,
     all_per_minute=DEFAULT_ALL_PER_MINUTE,
+    image_flow_id=None,
 ):
-    check_settings(user, password, flow_id, admin_flow_id, research_flow_id, writer_flow_id)
+    check_settings(user, password, flow_id, admin_flow_id, research_flow_id, writer_flow_id, image_flow_id)
     run_per_minute = check_rate("GATEWAY_RUN_PER_MINUTE", run_per_minute)
     all_per_minute = check_rate("GATEWAY_ALL_PER_MINUTE", all_per_minute)
     flow_id, admin_flow_id = str(uuid.UUID(flow_id)), str(uuid.UUID(admin_flow_id))
     research_flow_id = str(uuid.UUID(research_flow_id)) if research_flow_id else None
     writer_flow_id = str(uuid.UUID(writer_flow_id)) if writer_flow_id else None
-    allowed = allowed_requests(flow_id, admin_flow_id, research_flow_id, writer_flow_id)
+    image_flow_id = str(uuid.UUID(image_flow_id)) if image_flow_id else None
+    allowed = allowed_requests(flow_id, admin_flow_id, research_flow_id, writer_flow_id, image_flow_id)
 
     locations = [location(path, methods) for path, methods in methods_by_path(allowed).items()]
     return "\n".join(
@@ -175,7 +178,7 @@ def write_text(path, text):
     path.write_bytes(text.encode("utf-8"))
 
 
-FLOW_ID_NAMES = ("FLOW_ID", "MEMORY_ADMIN_FLOW_ID", "RESEARCH_FLOW_ID", "WRITER_FLOW_ID")
+FLOW_ID_NAMES = ("FLOW_ID", "MEMORY_ADMIN_FLOW_ID", "RESEARCH_FLOW_ID", "WRITER_FLOW_ID", "IMAGE_FLOW_ID")
 
 
 def gateway_settings(env_file):
@@ -220,6 +223,7 @@ def main(argv=None):
             settings.get("MEMORY_ADMIN_FLOW_ID", "").strip().lower(),
             settings.get("RESEARCH_FLOW_ID", "").strip().lower() or None,
             settings.get("WRITER_FLOW_ID", "").strip().lower() or None,
+            image_flow_id=settings.get("IMAGE_FLOW_ID", "").strip().lower() or None,
             **limits,
         )
     except PolicyError as error:

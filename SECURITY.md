@@ -37,10 +37,17 @@ The app then shows its error card; nothing on the host is reachable from the int
 |---|---|---|
 | `NGROK_PASSWORD` (and `NGROK_USER`) | `.env` on the host, Streamlit Secrets, the policy file | Generate a new value of at least 32 random characters, put it in `.env` and Streamlit Secrets, run `python tools/render_ngrok_policy.py`, restart ngrok (stop it; the watchdog starts it), then run `python tools/check_gateway.py`. |
 | `LANGFLOW_API_KEY` | `.env`, Streamlit Secrets | Langflow → Settings → API Keys: create a new key, update both places, then delete the old key. |
-| `DEEPSEEK_API_KEY`, `EXA_API_KEY`, `GEMINI_API_KEY` | Langflow global variables | Create a new key in the provider's dashboard, update the global variable, revoke the old key. |
+| `DEEPSEEK_API_KEY`, `EXA_API_KEY`, `GEMINI_API_KEY` | Langflow global variables | Create a new key in the provider's dashboard, update the global variable, revoke the old key. `DEEPSEEK_API_KEY` is also read by the Ciel Image AI flow (Edit AI and Ilustrasi), so one rotation covers it. |
 | `SUPABASE_SERVICE_KEY` | Streamlit Secrets | Supabase → Project Settings → API: roll the service key, update Streamlit Secrets. |
 | `[auth] client_secret`, `cookie_secret` | Streamlit Secrets | Google Cloud Console → Credentials for the client secret. A new `cookie_secret` signs everyone out. |
 | ngrok authtoken | ngrok agent config on the host | ngrok dashboard → Authtokens. |
+| `ANTHROPIC_API_KEY` | `deploy/vps/agent.env` (and `agent-staging.env` with its own key) | Anthropic Console → API Keys: create a new key, put it in the env file, `docker compose up -d agent`, then disable the old key. |
+| `GEMINI_API_KEY` (agent fallback) | `deploy/vps/agent.env`, `agent-staging.env` | Same as the Langflow one above, but the agent service reads it from its env file. |
+| `GOOGLE_CLIENT_SECRET` (agent device login) | `deploy/vps/agent.env`, `agent-staging.env` | Google Cloud Console → Credentials: add a new secret to the same OAuth client, update both env files and Streamlit Secrets (`[auth] client_secret`), restart, then delete the old secret. |
+| `AGENT_TICKET_KEY` | `deploy/vps/agent.env` | Put the current value in `AGENT_TICKET_KEY_OLD`, a new `openssl rand -hex 32` in `AGENT_TICKET_KEY`, restart. Clients pick up both public keys from `/v1/ticket-keys`. After one day, remove `AGENT_TICKET_KEY_OLD` and restart. |
+| `AGENT_STATE_KEY` | `deploy/vps/agent.env` | New `openssl rand -hex 32`, restart. Logins started in the last 10 minutes fail and must be retried. |
+| `AGENT_CHAIN_KEY` | `deploy/vps/agent.env` | Do not rotate without a plan: old action logs can only be checked with the key that wrote them. If it leaked, keep the old value in a safe place for checking old logs, set a new one, and note the date. |
+| Agent device tokens | Supabase `agent_device_tokens` | Revoke one device from the web (2C) or `select public.ciel_agent_revoke_device('<owner>', '<device>');`. To sign out every device: `update public.agent_devices set revoked_at = now() where revoked_at is null; delete from public.agent_device_tokens;` in the Supabase SQL editor. |
 
 ### 3. Find out what happened
 

@@ -1,6 +1,7 @@
 """Contract for flow/riset_skripsi/v1.1.0 (Ciel Riset Skripsi, Pro): v1.0.0 plus Exa excerpts for Cek kutipan."""
 
 import ast
+import hashlib
 import json
 import re
 import unittest
@@ -21,6 +22,9 @@ EMBEDDED = {
     GUARD_ID: "ciel_source_guard.py",
     BUILDER_ID: "ciel_reference_builder.py",
 }
+# ciel_source_guard.py changed in main flow v1.13.0 (unlisted [n] markers);
+# this snapshot keeps the guard code it shipped with.
+SUPERSEDED = {GUARD_ID: "1e081c38bf116baba58d8d85e505f6f2b0598f7556738a9c3a58265c023892ab"}
 
 
 class RisetFlowContractTest(unittest.TestCase):
@@ -72,10 +76,11 @@ class RisetFlowContractTest(unittest.TestCase):
     def test_embedded_component_code_matches_the_component_files(self):
         for node_id, filename in EMBEDDED.items():
             with self.subTest(node=node_id):
-                self.assertEqual(
-                    self.template(node_id)["code"]["value"],
-                    (COMPONENTS / filename).read_text(encoding="utf-8"),
-                )
+                code = self.template(node_id)["code"]["value"]
+                if node_id in SUPERSEDED:
+                    self.assertEqual(hashlib.sha256(code.encode("utf-8")).hexdigest(), SUPERSEDED[node_id])
+                else:
+                    self.assertEqual(code, (COMPONENTS / filename).read_text(encoding="utf-8"))
 
     def test_only_the_two_components_and_the_description_changed_since_v100(self):
         previous = json.loads(PREVIOUS_PATH.read_text(encoding="utf-8"))

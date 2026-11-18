@@ -1,0 +1,323 @@
+"""Penyimpanan tugas dan log aksi agent di Supabase (docs/agent-architecture.md bagian 6).
+
+Memakai cara yang sama dengan chat_store.ChatStore: service key dari secrets
+server, dan setiap permintaan difilter dengan pemilik. Semua metode
+mengembalikan None atau False saat gagal dan tidak pernah melempar exception,
+supaya loop agent bisa berhenti dengan rapi.
+"""
+
+import logging
+import re
+
+import requests
+
+from chat_store import OWNER_PATTERN, ROW_ID_PATTERN, TIMEOUT, ChatStore
+
+logger = logging.getLogger("ciel.agent_store")
+
+# Kolom tugas yang boleh diubah loop. stop_requested sengaja tidak ada di
+# sini: hanya request_stop yang menyalakannya, dan tidak ada yang mematikannya.
+TASK_FIELDS = frozenset({"plan", "scope", "mode", "status", "reason", "steps", "cost", "head_hash"})
+
+ACTION_LIMIT = 500
+HASH_RE = re.compile(r"[0-9a-f]{64}")
+TOKEN_KINDS = frozenset({"code", "access", "refresh"})
+PLATFORMS = frozenset({"extension", "desktop"})
+MAX_DEVICE_NAME = 60
+DEVICE_COLUMNS = "id,name,platform,created_at,last_seen_at,revoked_at"
+
+
+def valid_id(value):
+    return isinstance(value, str) and ROW_ID_PATTERN.match(value) is not None
+
+
+def valid_owner(value):
+    return isinstance(value, str) and OWNER_PATTERN.match(value) is not None
+
+
+class AgentStore(ChatStore):
+
+    def _post(self, action, path, body, prefer="return=minimal"):
+        """Kirim satu POST. Kembalikan response, atau None kalau jaringan gagal.
+
+        Fungsi database (rpc/...) dipanggil dengan prefer=None, karena
+        jawabannya yang dibutuhkan.
+        """
+
+        headers = {**self.headers, "Prefer": prefer} if prefer else dict(self.headers)
+
+        try:
+            return requests.post(
+                f"{self.base}/{path}",
+                headers=headers,
+                json=body,
+                timeout=TIMEOUT,
+            )
+        except requests.exceptions.RequestException as error:
+            logger.error("agent_store_error action=%s type=%s error=%s", action, type(error).__name__, error)
+            return None
+
+    def _rows(self, action, owner, table, row_id=None, **params):
+        """Baris milik pemilik ini, atau None kalau gagal atau jawabannya bukan daftar."""
+
+        response = self._request("GET", action, owner, table, row_id, params=params)
+
+        if response is None:
+            return None
+
+        try:
+            rows = response.json()
+        except ValueError as error:
+            logger.error("agent_store_error action=%s type=%s error=%s", action, type(error).__name__, error)
+            return None
+
+        return rows if isinstance(rows, list) else None
+
+    def create_task(self, owner, task_id, device, instruction):
+        """ "created", "busy" kalau akun ini masih punya tugas aktif, atau None kalau gagal."""
+
+        if not valid_owner(owner) or not valid_id(task_id) or not valid_id(device):
+            logger.error("agent_store_rejected action=create_task")
+            return None
+
+        if not isinstance(instruction, str) or not instruction:
+            return None
+
+        row = {"owner": owner, "id": task_id, "device": device, "instruction": instruction, "status": "planning"}
+        response = self._post("create_task", "agent_tasks", row)
+
+        if response is None:
+            return None
+
+        # 409: indeks agent_tasks_one_active menolak tugas aktif kedua.
+        if response.status_code == 409:
+            return "busy"
+
+        if response.status_code >= 400:
+            logger.error("agent_store_error action=create_task status=%s", response.status_code)
+            return None
+
+        return "created"
+
+    def load_task(self, owner, task_id):
+        if not valid_id(task_id):
+            return None
+
+        rows = self._rows("load_task", owner, "agent_tasks", task_id, select="*")
+
+        if not rows or not isinstance(rows[0], dict):
+            return None
+
+        return rows[0]
+
+    def _patch_task(self, action, owner, task_id, body):
+        if not valid_id(task_id):
+            return False
+
+        response = self._request(
+            "PATCH", action, owner, "agent_tasks", task_id, json=body,
+            headers={"Prefer": "return=representation"}, params={"select": "id"},
+        )
+
+        if response is None:
+            return False
+
+        # PATCH yang tidak mengenai baris mana pun tetap dijawab 200. Itu
+        # dihitung gagal, supaya hash kepala yang tidak tersimpan ketahuan.
+        try:
+            rows = response.json()
+        except ValueError as error:
+            logger.error("agent_store_error action=%s type=%s error=%s", action, type(error).__name__, error)
+            return False
+
+        return isinstance(rows, list) and len(rows) == 1 and isinstance(rows[0], dict)
+
+    def update_task(self, owner, task_id, /, **fields):
+        if not fields or not set(fields) <= TASK_FIELDS:
+            logger.error("agent_store_rejected action=update_task")
+            return False
+
+        return self._patch_task("update_task", owner, task_id, fields)
+
+    def request_stop(self, owner, task_id):
+        return self._patch_task("request_stop", owner, task_id, {"stop_requested": True})
+
+    def stop_requested(self, owner, task_id):
+        """True atau False, atau None kalau statusnya tidak terbaca."""
+
+        if not valid_id(task_id):
+            return None
+
+        rows = self._rows("stop_requested", owner, "agent_tasks", task_id, select="stop_requested")
+
+        if not rows or not isinstance(rows[0], dict):
+            return None
+
+        value = rows[0].get("stop_requested")
+        return value if isinstance(value, bool) else None
+
+    def append_action(self, row):
+        """Tambah satu baris log aksi. Baris yang sudah ada tidak pernah diubah."""
+
+        if not isinstance(row, dict) or not valid_owner(row.get("owner")) or not valid_id(row.get("task")):
+            logger.error("agent_store_rejected action=append_action")
+            return False
+
+        if type(row.get("seq")) is not int or row["seq"] < 1:
+            return False
+
+        response = self._post("append_action", "agent_actions", row)
+
+        if response is None or response.status_code >= 400:
+            return False
+
+        return True
+
+    def load_actions(self, owner, task_id):
+        if not valid_id(task_id):
+            return None
+
+        return self._rows(
+            "load_actions", owner, "agent_actions",
+            task=f"eq.{task_id}", select="*", order="seq.asc", limit=str(ACTION_LIMIT),
+        )
+
+    def cost_since(self, since_iso):
+        """Jumlah biaya model semua tugas sejak waktu itu, atau None kalau tidak terbaca."""
+
+        if not isinstance(since_iso, str) or not since_iso:
+            return None
+
+        response = self._post("cost_since", "rpc/ciel_agent_cost_since", {"p_since": since_iso}, prefer=None)
+
+        if response is None or response.status_code >= 400:
+            return None
+
+        try:
+            total = response.json()
+        except ValueError:
+            return None
+
+        return total if type(total) is int and total >= 0 else None
+
+    # Perangkat dan token (rencana 2B) ------------------------------------
+
+    def _rpc(self, action, name, body):
+        """Jawaban JSON fungsi database, atau None kalau gagal."""
+
+        response = self._post(action, f"rpc/{name}", body, prefer=None)
+
+        if response is None or response.status_code >= 400:
+            return None
+
+        try:
+            return response.json()
+        except ValueError:
+            return None
+
+    def create_device(self, owner, device, name, platform):
+        if not valid_owner(owner) or not valid_id(device) or platform not in PLATFORMS:
+            logger.error("agent_store_rejected action=create_device")
+            return False
+
+        if not isinstance(name, str) or not 0 < len(name) <= MAX_DEVICE_NAME:
+            return False
+
+        row = {"owner": owner, "id": device, "name": name, "platform": platform}
+        response = self._post("create_device", "agent_devices", row)
+        return response is not None and response.status_code < 400
+
+    def load_devices(self, owner):
+        return self._rows("load_devices", owner, "agent_devices", select=DEVICE_COLUMNS, order="created_at.asc")
+
+    def device_active(self, owner, device):
+        """True kalau perangkat ada dan belum dicabut, False kalau tidak, None kalau tidak terbaca."""
+
+        if not valid_id(device):
+            return False
+
+        rows = self._rows("device_active", owner, "agent_devices", device, select="revoked_at")
+
+        if rows is None:
+            return None
+
+        return bool(rows) and isinstance(rows[0], dict) and rows[0].get("revoked_at") is None
+
+    def touch_device(self, owner, device):
+        if not valid_id(device):
+            return False
+
+        # "now" adalah nilai khusus timestamptz di Postgres: waktu transaksi.
+        response = self._request(
+            "PATCH", "touch_device", owner, "agent_devices", device, json={"last_seen_at": "now"},
+            headers={"Prefer": "return=representation"}, params={"select": "id"},
+        )
+
+        if response is None:
+            return False
+
+        try:
+            rows = response.json()
+        except ValueError:
+            return False
+
+        return isinstance(rows, list) and len(rows) == 1
+
+    def revoke_device(self, owner, device):
+        if not valid_owner(owner) or not valid_id(device):
+            return False
+
+        return self._rpc("revoke_device", "ciel_agent_revoke_device", {"p_owner": owner, "p_device": device}) is True
+
+    def save_token(self, owner, hash_, kind, expires_at, device=None, challenge=None, redirect=None):
+        if not valid_owner(owner) or not isinstance(hash_, str) or not HASH_RE.fullmatch(hash_) or kind not in TOKEN_KINDS:
+            logger.error("agent_store_rejected action=save_token")
+            return False
+
+        if not isinstance(expires_at, str) or not expires_at or (device is not None and not valid_id(device)):
+            return False
+
+        row = {
+            "owner": owner, "hash": hash_, "kind": kind, "expires_at": expires_at,
+            "device": device, "challenge": challenge, "redirect": redirect,
+        }
+        response = self._post("save_token", "agent_device_tokens", row)
+        return response is not None and response.status_code < 400
+
+    def find_token(self, owner, hash_):
+        if not isinstance(hash_, str) or not HASH_RE.fullmatch(hash_):
+            return None
+
+        rows = self._rows("find_token", owner, "agent_device_tokens", hash=f"eq.{hash_}", select="*")
+        return rows[0] if rows and len(rows) == 1 and isinstance(rows[0], dict) else None
+
+    def use_token(self, owner, hash_):
+        """Tandai token terpakai dan kembalikan barisnya, hanya kalau belum pernah dipakai."""
+
+        if not isinstance(hash_, str) or not HASH_RE.fullmatch(hash_):
+            return None
+
+        response = self._request(
+            "PATCH", "use_token", owner, "agent_device_tokens", json={"used_at": "now"},
+            headers={"Prefer": "return=representation"},
+            params={"hash": f"eq.{hash_}", "used_at": "is.null", "select": "*"},
+        )
+
+        if response is None:
+            return None
+
+        try:
+            rows = response.json()
+        except ValueError:
+            return None
+
+        return rows[0] if isinstance(rows, list) and len(rows) == 1 and isinstance(rows[0], dict) else None
+
+    def sweep(self, idle_seconds):
+        """Jumlah tugas macet yang ditutup, atau None kalau gagal."""
+
+        if type(idle_seconds) is not int or idle_seconds < 1:
+            return None
+
+        swept = self._rpc("sweep", "ciel_agent_sweep", {"p_idle_seconds": idle_seconds})
+        return swept if type(swept) is int and swept >= 0 else None

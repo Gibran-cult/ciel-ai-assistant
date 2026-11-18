@@ -267,18 +267,20 @@ class SearchTagsTest(unittest.TestCase):
 
 class PagesWorkflowTest(unittest.TestCase):
 
-    def test_pages_workflow_deploys_the_landing_folder(self):
+    def test_pages_workflow_builds_and_deploys_the_website(self):
+        # The site at ciel-ai.web.id is now website/ (Next.js static export); landing/ is kept
+        # in the repo but no longer published.
         workflow = PAGES.read_text(encoding="utf-8")
         self.assertIn("workflow_dispatch:", workflow)
         self.assertRegex(workflow, r"branches:\s*\[\s*main\s*\]")
-        self.assertIn("- landing/**", workflow)
-        for line in ("pages: write", "id-token: write", "contents: read", "path: landing"):
+        self.assertIn("- website/**", workflow)
+        for line in ("pages: write", "id-token: write", "contents: read", "npm ci --ignore-scripts", "npm run build", "path: website/out"):
             with self.subTest(line=line):
                 self.assertIn(line, workflow)
         uses = re.findall(r"uses:\s*(\S+)", workflow)
         self.assertEqual(
             sorted(use.split("@")[0] for use in uses),
-            ["actions/checkout", "actions/configure-pages", "actions/deploy-pages", "actions/upload-pages-artifact"],
+            ["actions/checkout", "actions/configure-pages", "actions/deploy-pages", "actions/setup-node", "actions/upload-pages-artifact"],
         )
         for use in uses:
             with self.subTest(use=use):

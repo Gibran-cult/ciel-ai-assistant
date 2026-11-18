@@ -364,6 +364,15 @@ class PrivacyPageTest(unittest.TestCase):
             self.assertIn(country, text)
         self.assertNotIn("Langflow", text)
 
+    def test_training_by_recipients_is_disclosed(self):
+        # DeepSeek's privacy policy (Feb 2026) and Exa's (Jun 2026) both say
+        # inputs or queries may be used to improve their models.
+        sections = dict(__import__("privacy").privacy_sections(
+            retention_days=30, memory_enabled=True, data_controls=True))
+        text = " ".join(sections["Pihak ketiga yang menerima datamu"])
+        self.assertIn("DeepSeek dan Exa", text)
+        self.assertIn("melatih atau meningkatkan", text)
+
     def test_payment_recipient_only_when_payments_are_on(self):
         sections = dict(__import__("privacy").privacy_sections(
             retention_days=30, memory_enabled=True, data_controls=True))
@@ -387,6 +396,35 @@ class PrivacyPageTest(unittest.TestCase):
         self.assertIn("dibaca oleh layanan model AI pihak ketiga dengan paket berbayar yang tidak memakai data untuk melatih model", text)
         self.assertIn("foto dibaca oleh model di server Ciel sendiri", text)
         self.assertNotIn("Foto dan embedding memory diproses oleh model yang berjalan di server Ciel sendiri", text)
+
+    def test_gemini_fallback_for_answers_is_disclosed(self):
+        # Since flow v1.13.0 Gemini answers when DeepSeek fails; announced on
+        # the page (dated) before the flow switched, as the page promises.
+        sections = dict(__import__("privacy").privacy_sections(
+            retention_days=30, memory_enabled=True, data_controls=True))
+        recipients = " ".join(sections["Pihak ketiga yang menerima datamu"])
+        self.assertIn("menyusun jawaban saat DeepSeek sedang sibuk atau tidak tersedia", recipients)
+        processing = " ".join(sections["Apa yang terjadi saat kamu mengirim pesan"])
+        self.assertIn("model AI cadangan, Google (Gemini API), dengan paket berbayar", processing)
+        notice = " ".join(sections["Kebocoran data dan perubahan halaman ini"])
+        self.assertIn("Perubahan 3 November 2026: Google (Gemini API)", notice)
+
+    def test_ai_photo_edit_to_deepseek_is_disclosed(self):
+        # Plan 2 (image edit): Edit AI sends the photo to DeepSeek, which may train on it.
+        sections = dict(__import__("privacy").privacy_sections(
+            retention_days=30, memory_enabled=True, data_controls=True))
+        processing = " ".join(sections["Apa yang terjadi saat kamu mengirim pesan"])
+        self.assertIn("Jika kamu memakai Edit AI atau Ilustrasi (Ciel Pro), foto dan instruksimu dikirim ke DeepSeek", processing)
+        self.assertIn("DeepSeek dapat memakai data yang diterimanya untuk melatih model", processing)
+        self.assertIn("Edit manual diproses di server Ciel saja.", processing)
+        # The AI-edit line comes right after the photo line.
+        photo = next(i for i, line in enumerate(sections["Apa yang terjadi saat kamu mengirim pesan"]) if line.startswith("Foto yang kamu kirim"))
+        self.assertTrue(sections["Apa yang terjadi saat kamu mengirim pesan"][photo + 1].startswith("Jika kamu memakai Edit AI"))
+        recipients = " ".join(sections["Pihak ketiga yang menerima datamu"])
+        self.assertIn("model AI yang menyusun jawaban, memahami foto untuk Edit AI, dan menggambar ilustrasi", recipients)
+        notice = " ".join(sections["Kebocoran data dan perubahan halaman ini"])
+        self.assertIn("Perubahan 5 November 2026: foto yang kamu pilih untuk Edit AI dikirim ke DeepSeek.", notice)
+        self.assertEqual(__import__("privacy").PRIVACY_UPDATED, "5 November 2026")
 
     def test_app_passes_the_operator_name(self):
         self.assertIn("operator=OPERATOR_NAME", APP_PATH.read_text(encoding="utf-8"))
