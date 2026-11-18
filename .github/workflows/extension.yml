@@ -1,0 +1,79 @@
+name: Ciel Agent extension
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'extension/**'
+      - 'guard/**'
+      - 'agent_api/**'
+      - 'tools/export_extension_vectors.py'
+      - '.github/workflows/extension.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'extension/**'
+      - 'guard/**'
+      - 'agent_api/**'
+      - 'tools/export_extension_vectors.py'
+      - '.github/workflows/extension.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ciel-agent-extension-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  extension:
+    name: Extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: extension
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint and type check
+        run: npm run lint
+
+      # Uji manifest membaca dist/, jadi build dulu.
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      # Hanya paket yang ikut terpasang di ekstensi yang memblokir.
+      - name: Audit shipped dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit all dependencies (report only)
+        run: npm audit --audit-level=high || true
+
+      - name: Upload build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ciel-agent-extension
+          path: extension/dist
+          if-no-files-found: error
+          retention-days: 14
