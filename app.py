@@ -38,6 +38,7 @@ from answer_cache import AnswerCache, cacheable_question, question_key
 from answer_pdf import answer_pdf, answer_png, document_title, wants_document
 from beranda import greeting, has_riset_map, latest_riset, relative_time, templates_for
 from chat_sources import answer_parts, count_line, source_buttons_html, source_label, summarize
+from account_ids import owner_from_subject
 from chat_store import ChatStore
 from login import render_consent, render_login
 from payments import (
@@ -1810,7 +1811,7 @@ def memory_owner_id():
     if not subject:
         return ""
 
-    return hashlib.sha256(f"ciel-memory:{subject}".encode()).hexdigest()[:16]
+    return owner_from_subject(subject)
 
 
 def user_key():

@@ -7,6 +7,7 @@ memakai tiruan dan tidak pernah menyentuh jaringan.
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from agent_api.devices import device_router
 from agent_api.tickets import TicketSigner
 
 
@@ -30,5 +31,7 @@ def create_app(settings, *, store, models, google, clock, missing=()):
     @app.get("/v1/ticket-keys")
     def ticket_keys():
         return {"keys": signer.public_keys()}
+
+    app.include_router(device_router(settings, store, google, clock))
 
     return app
