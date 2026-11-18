@@ -100,7 +100,7 @@ def secret_vectors():
         "Nomor 4111 1111 1111 1112 salah Luhn",
         "NIK 3273012345678901",
         "😀 4111 1111 1111 1111",
-        "Kunci sk-abcdefghijklmnopqrstuv",
+        "Kunci sk-abcdefghijklmnop",
         "token ghp_0123456789abcdefghijABCDEFGHIJ",
         "aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dE3fG5",
         "Kaos_polos_lengan_pendek_warna_hitam_ukuran_XL",
