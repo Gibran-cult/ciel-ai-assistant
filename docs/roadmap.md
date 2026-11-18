@@ -114,6 +114,8 @@ Kriteria selesai: klien tiruan di uji bisa menjalankan satu tugas dari awal samp
 
 ## Fase 3: ekstensi browser tanpa pembelian
 
+Fase ini dikerjakan dalam dua rencana. 3A ([rencana](plans/2026-11-18-extension-core.md), ditulis 18 November 2026 setelah keputusan D17 sampai D19) berisi task 3.1 sampai 3.17, 3.19 sampai 3.21, dan 3.23, dan bisa diuji di laptop. 3B berisi 3.22 dan 3.24 sampai 3.26, dan butuh VPS, staging, akun Chrome Web Store, dan tinjauan ahli hukum. Task 3.18 dipindah ke rencana sesudah 3B, karena layanan 2B belum bisa melanjutkan tugas setelah koneksi putus.
+
 Tujuan: agent bisa membaca halaman, mengisi form, dan mengelola tab di situs yang diizinkan, dengan stop, indikator, dan konfirmasi yang lengkap. Fitur pembelian belum ada.
 
 | No | Task | Berkas | Cara mengecek |
