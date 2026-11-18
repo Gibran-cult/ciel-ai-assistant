@@ -48,6 +48,8 @@ CLIENT_MESSAGES = {
     "result": {"type", "task", "seq", "observation"},
     "stop": {"type"},
 }
+# Kunci yang boleh ada tetapi tidak wajib. Klien lama mengirim start tanpa page.
+OPTIONAL_KEYS = {"start": frozenset({"page"})}
 CLIENTS = frozenset({"extension", "desktop"})
 OBSERVATION_KEYS = frozenset({"ok", "source", "text", "host", "controls"})
 CONTROL_KEYS = frozenset({"field_type", "submits", "effect"})
@@ -67,7 +69,9 @@ def parse_message(text):
     if not isinstance(message, dict) or message.get("type") not in CLIENT_MESSAGES:
         return None
 
-    return message if set(message) == CLIENT_MESSAGES[message["type"]] else None
+    required = CLIENT_MESSAGES[message["type"]]
+    allowed = required | OPTIONAL_KEYS.get(message["type"], frozenset())
+    return message if required <= set(message) <= allowed else None
 
 
 def optional_text(value):
@@ -412,7 +416,7 @@ def ws_router(settings, store, model, signer, runner, clock):
         plan = "pro" if isinstance(until, (int, float)) and until > clock().timestamp() else "free"
         return Account(plan, False, SpendLimits(), 0)
 
-    def run_one(conn, owner, device, instruction):
+    def run_one(conn, owner, device, instruction, start_page=None):
         task_id = secrets.token_hex(8)
         conn.task_id = task_id
         end = {"type": "end", "status": "failed", "reason": "internal_error", "steps": 0, "report": ""}
@@ -424,6 +428,7 @@ def ws_router(settings, store, model, signer, runner, clock):
             result = run_task(
                 owner, task_id, device, instruction, model=model, client=client, store=store, config=settings.agent,
                 account=account(owner), clock=clock, chain_key=settings.chain_key, still_allowed=still_allowed,
+                start_page=start_page,
             )
             end.update(status=result.status, reason=result.reason, steps=result.steps, report=result.report)
         except Exception as error:
@@ -508,9 +513,20 @@ def ws_router(settings, store, model, signer, runner, clock):
                         await websocket.close(code=4400)
                         return
 
+                    # Bacaan tab yang sedang dibuka (task 3.27). Bentuknya sama
+                    # dengan observation di result; yang rusak menutup koneksi.
+                    start_page = None
+
+                    if message.get("page") is not None:
+                        start_page = observation_from(message["page"])
+
+                        if start_page is None:
+                            await websocket.close(code=4400)
+                            return
+
                     conn.stopped = False
                     instruction = message["instruction"]
-                    task = runner.start(lambda instruction=instruction: run_one(conn, owner, device, instruction))
+                    task = runner.start(lambda instruction=instruction, page=start_page: run_one(conn, owner, device, instruction, page))
                 elif message["type"] == "answer":
                     if type(message["id"]) is int:
                         conn.deliver(("answer", message["id"]), message["value"])

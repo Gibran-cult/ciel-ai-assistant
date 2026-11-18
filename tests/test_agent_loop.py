@@ -74,6 +74,7 @@ class HappyPathTest(unittest.TestCase):
         self.assertEqual(model.instructions, [INSTRUCTION])
         self.assertEqual(client.plans, [(("Buka toko", "Baca halaman"), {
             "hosts": ["shopee.co.id"], "kinds": ["tab_click", "tab_open", "tab_read", "tab_type"], "spend_cap": 0,
+            "start_host": None,
         })])
 
         task = store.load_task(ALICE, TASK)
