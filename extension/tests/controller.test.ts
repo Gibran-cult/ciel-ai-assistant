@@ -21,6 +21,7 @@ function setup(over: Partial<ControllerDeps> = {}) {
       },
     },
     runner: { begin: vi.fn(), end: vi.fn(), onAction: vi.fn(async () => undefined), refuse: vi.fn(), taskTab: 7 as number | null,
+      currentTask: null as string | null,
       readStart: vi.fn(async (): Promise<Observation | null> => null) },
     banner: vi.fn(),
     badge: vi.fn(),
@@ -127,7 +128,7 @@ test("end shows the report and frees the tab", async () => {
   const { controller, deps, last } = setup();
   await controller.init();
   await controller.command({ type: "start", instruction: "x", tabId: 7 });
-  controller.onServer({ type: "end", status: "done", reason: null, steps: 3, report: "Kaos ada di keranjang." });
+  controller.onServer({ type: "end", task: "t1", status: "done", reason: null, steps: 3, report: "Kaos ada di keranjang." });
   expect(last()).toMatchObject({ phase: "idle", dialog: null, ended: { status: "done", report: "Kaos ada di keranjang." } });
   expect(deps.banner).toHaveBeenLastCalledWith(7, null);
   expect(deps.badge).toHaveBeenLastCalledWith("idle", false);
@@ -195,7 +196,7 @@ test("after Stop the stopped banner stays when the server confirms the end", asy
   await controller.command({ type: "start", instruction: "x", tabId: 7 });
   await controller.command({ type: "stop" });
   vi.mocked(deps.banner).mockClear();
-  controller.onServer({ type: "end", status: "stopped", reason: "stop", steps: 1, report: "" });
+  controller.onServer({ type: "end", task: "t1", status: "stopped", reason: "stop", steps: 1, report: "" });
   expect(deps.banner).not.toHaveBeenCalledWith(7, null);
 });
 
@@ -246,4 +247,31 @@ test("task 3.27: without a readable tab, start goes without a page", async () =>
   await controller.init();
   await controller.command({ type: "start", instruction: "Isi nama", tabId: 7 });
   expect(deps.socket.startTask).toHaveBeenCalledWith("Isi nama", null);
+});
+
+test("review: a late end of the stopped task does not close the new task", async () => {
+  const { controller, deps, last } = setup();
+  await controller.init();
+  await controller.command({ type: "start", instruction: "lama", tabId: 7 });
+  // Tiket pertama tugas lama mengikat "t1".
+  (deps.runner as { currentTask: string | null }).currentTask = "t1";
+  await controller.command({ type: "stop" });
+  (deps.runner as { currentTask: string | null }).currentTask = null;
+  await controller.command({ type: "start", instruction: "baru", tabId: 7 });
+  controller.onServer({ type: "end", task: "t1", status: "stopped", reason: "stop", steps: 1, report: "" });
+  expect(last()).toMatchObject({ phase: "running", ended: null, instruction: "baru" });
+
+  // Penolakan sebelum tugas dibuat (task null) tetap sampai.
+  controller.onServer({ type: "end", task: null, status: "refused", reason: "busy", steps: 0, report: "" });
+  expect(last()).toMatchObject({ phase: "idle", ended: { reason: "busy" } });
+});
+
+test("review: the end of a stopped task still shows when no new task started", async () => {
+  const { controller, deps, last } = setup();
+  await controller.init();
+  await controller.command({ type: "start", instruction: "lama", tabId: 7 });
+  (deps.runner as { currentTask: string | null }).currentTask = "t1";
+  await controller.command({ type: "stop" });
+  controller.onServer({ type: "end", task: "t1", status: "stopped", reason: "stop", steps: 1, report: "" });
+  expect(last()).toMatchObject({ phase: "idle", ended: { status: "stopped" } });
 });

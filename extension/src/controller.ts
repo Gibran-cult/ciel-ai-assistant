@@ -91,6 +91,7 @@ export interface ControllerDeps {
     refuse(signed: unknown, reason: "stopped" | "handover"): void;
     readStart(): Promise<Observation | null>;
     readonly taskTab: number | null;
+    readonly currentTask: string | null;
   };
   banner(tabId: number, mode: BannerMode | null): void;
   badge(phase: Phase, waiting: boolean): void;
@@ -116,6 +117,9 @@ export class Controller {
   // Tab tempat banner sedang terpasang, dan apakah banner "berhenti" dibiarkan menghilang sendiri.
   private bannerTab: number | null = null;
   private keepStopped = false;
+  // Tugas yang sudah ditinggalkan (Stop atau tugas baru). end-nya yang datang
+  // terlambat tidak boleh menutup tugas yang sedang berjalan.
+  private leftTasks = new Set<string>();
 
   constructor(private deps: ControllerDeps) {
     this.session = new Session({
@@ -161,6 +165,11 @@ export class Controller {
 
     this.deps.banner(tab, mode);
     this.bannerTab = tab;
+  }
+
+  private leave(): void {
+    const task = this.deps.runner.currentTask;
+    if (task) this.leftTasks.add(task);
   }
 
   /** Halaman baru dimuat di tab tugas: pasang banner lagi. */
@@ -235,6 +244,7 @@ export class Controller {
         this.session.onAction({ ticket: message.ticket, kid: message.kid, sig: message.sig });
         return;
       case "end":
+        if (message.task !== null && this.leftTasks.has(message.task) && this.state.phase !== "stopped") return;
         this.session.onEnd();
         this.update({ dialog: null, needPermission: null, ended: { status: message.status, reason: message.reason, steps: message.steps, report: message.report } });
         return;
@@ -294,6 +304,7 @@ export class Controller {
         }
 
         this.keepStopped = false;
+        this.leave();
         this.deps.runner.begin(command.tabId);
         this.state = { ...this.state, instruction, ended: null, log: [], dialog: null, needPermission: null };
         this.session.begin();
@@ -325,6 +336,7 @@ export class Controller {
       }
 
       case "stop":
+        this.leave();
         this.keepStopped = true;
         this.state = { ...this.state, dialog: null };
         this.session.stop();

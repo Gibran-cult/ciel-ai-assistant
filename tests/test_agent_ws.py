@@ -589,5 +589,36 @@ class StartPageTest(unittest.TestCase):
         self.assertIsNone(plan["scope"]["start_host"])
 
 
+
+class EndTaskIdTest(unittest.TestCase):
+    """Temuan tinjauan 3A: setiap end membawa nomor tugasnya."""
+
+    def test_end_names_the_task_it_closes(self):
+        svc = service([OPEN, FINISH])
+        tokens = svc.login()
+
+        with connect(svc) as ws:
+            hello(ws, tokens)
+            start(ws)
+            action = answer_action(ws)
+            end = ws.receive_json()
+
+        self.assertEqual(end["task"], action["ticket"]["task"])
+
+    def test_a_refusal_before_the_task_exists_has_no_task(self):
+        svc = service([OPEN, FINISH])
+        tokens = svc.login()
+        svc.store.consent[ALICE] = False
+
+        with connect(svc) as ws:
+            hello(ws, tokens)
+            ws.send_json({"type": "start", "instruction": INSTRUCTION})
+            end = ws.receive_json()
+
+        self.assertEqual((end["type"], end["reason"]), ("end", "consent_required"))
+        self.assertIn("task", end)
+        self.assertIsNone(end["task"])
+
+
 if __name__ == "__main__":
     unittest.main()

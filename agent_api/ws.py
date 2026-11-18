@@ -419,7 +419,7 @@ def ws_router(settings, store, model, signer, runner, clock):
     def run_one(conn, owner, device, instruction, start_page=None):
         task_id = secrets.token_hex(8)
         conn.task_id = task_id
-        end = {"type": "end", "status": "failed", "reason": "internal_error", "steps": 0, "report": ""}
+        end = {"type": "end", "task": task_id, "status": "failed", "reason": "internal_error", "steps": 0, "report": ""}
 
         # Apa pun yang gagal di sini tetap berakhir dengan pesan end, supaya
         # klien tidak menunggu tanpa batas.
@@ -497,7 +497,7 @@ def ws_router(settings, store, model, signer, runner, clock):
                         return
 
                     if task is not None and task.is_alive():
-                        await conn.send({"type": "end", "status": "refused", "reason": "busy", "steps": 0, "report": ""})
+                        await conn.send({"type": "end", "task": None, "status": "refused", "reason": "busy", "steps": 0, "report": ""})
                         continue
 
                     # Persetujuan yang ditarik, atau versi teks persetujuan
@@ -506,7 +506,7 @@ def ws_router(settings, store, model, signer, runner, clock):
 
                     if consent is not True:
                         reason = "unavailable" if consent is None else "consent_required"
-                        await conn.send({"type": "end", "status": "refused", "reason": reason, "steps": 0, "report": ""})
+                        await conn.send({"type": "end", "task": None, "status": "refused", "reason": reason, "steps": 0, "report": ""})
                         continue
 
                     if not isinstance(message["instruction"], str):

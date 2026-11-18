@@ -277,3 +277,11 @@ test("review: 4403 (origin refused) stops reconnecting", async () => {
   expect(states.at(-1)).toBe("origin_refused");
   expect(timers).toEqual([]);
 });
+
+test("review: end messages carry their task", () => {
+  const base = { type: "end", status: "done", reason: null, steps: 1, report: "" };
+  expect(parseServerMessage(JSON.stringify({ ...base, task: "t1" }))).not.toBeNull();
+  expect(parseServerMessage(JSON.stringify({ ...base, task: null }))).not.toBeNull();
+  expect(parseServerMessage(JSON.stringify(base))).toBeNull();
+  expect(parseServerMessage(JSON.stringify({ ...base, task: 5 }))).toBeNull();
+});

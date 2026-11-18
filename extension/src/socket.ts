@@ -10,7 +10,7 @@ export type ServerMessage =
   | { type: "handover"; id: number; prompt: Record<string, unknown> }
   | { type: "ask"; id: number; question: string }
   | { type: "action"; ticket: unknown; kid: unknown; sig: unknown }
-  | { type: "end"; status: string; reason: string | null; steps: number; report: string };
+  | { type: "end"; task: string | null; status: string; reason: string | null; steps: number; report: string };
 
 export type SocketState = "connecting" | "ready" | "closed" | "signed_out" | "update_required" | "origin_refused";
 
@@ -22,7 +22,7 @@ const SERVER_KEYS: Record<string, string[]> = {
   handover: ["id", "prompt", "type"],
   ask: ["id", "question", "type"],
   action: ["kid", "sig", "ticket", "type"],
-  end: ["reason", "report", "status", "steps", "type"],
+  end: ["reason", "report", "status", "steps", "task", "type"],
 };
 
 const DELAYS = [1000, 2000, 4000, 8000, 30000];
@@ -48,7 +48,7 @@ function shaped(message: Record<string, unknown>): boolean {
     case "action":
       return true; // Tiketnya diperiksa runner.ts.
     case "end":
-      return typeof message.status === "string" && (message.reason === null || typeof message.reason === "string")
+      return (message.task === null || typeof message.task === "string") && typeof message.status === "string" && (message.reason === null || typeof message.reason === "string")
         && typeof message.steps === "number" && typeof message.report === "string";
     default:
       return false;

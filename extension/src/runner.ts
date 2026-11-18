@@ -150,6 +150,11 @@ export class Runner {
     return this.tabId;
   }
 
+  /** Tugas yang diikat tiket pertama yang sah, atau null. */
+  get currentTask(): string | null {
+    return this.task;
+  }
+
   /** Tugas baru dimulai di tab ini (tab aktif saat pengguna menekan Mulai). */
   begin(tabId: number): void {
     this.epoch += 1;
