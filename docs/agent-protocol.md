@@ -96,4 +96,6 @@ Ekstensi di `extension/` adalah klien acuan untuk protokol ini: `src/tickets.ts`
 
 Halaman awal (task 3.27, keputusan D20): `page` di `start` dikirim hanya untuk tab https di situs yang tidak diblokir dan sudah diizinkan. Layanan memeriksanya seperti `observation` di `result` (bentuk yang salah menutup koneksi 4400), memasukkan host-nya ke lingkup kalau `allowed_host` menerimanya, dan baru memberikan isinya ke model setelah rencana disetujui. Perencana tetap hanya membaca perintah. `page` yang `ok`-nya `false` atau `null` sama dengan tanpa halaman.
 
+Batas di ekstensi: tanpa izin `tabs`, alamat tab hanya terlihat kalau ekstensi punya izin situs itu atau `activeTab` dari klik ikon. Kalau alamatnya tidak terlihat, tugas dimulai tanpa halaman awal dan panel memberi tahu pengguna. Apakah klik ikon yang membuka side panel juga memberi `activeTab` belum dicek di browser [PERLU DICEK].
+
 `end` dengan `task` dari tugas yang sudah ditinggalkan klien (Stop atau tugas baru) diabaikan selama tugas baru berjalan.

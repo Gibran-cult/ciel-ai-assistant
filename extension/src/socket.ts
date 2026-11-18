@@ -97,7 +97,8 @@ export class Socket {
   private running = false;
   private ready = false;
   private stopPending = false;
-  // 4401 berturut-turut sejak terakhir "ready". Dua kali berarti perangkat dicabut.
+  // 4401 sejak terakhir "ready". Yang pertama memaksa token baru; perangkat
+  // yang benar-benar dicabut berakhir di refresh() -> null (signed_out).
   private unauthorized = 0;
   private forceFresh = false;
 
@@ -106,6 +107,7 @@ export class Socket {
   start(): void {
     if (this.running) return;
     this.running = true;
+    this.unauthorized = 0;
     void this.connect();
   }
 
@@ -180,17 +182,12 @@ export class Socket {
       return;
     }
 
-    // Token ditolak: coba sekali dengan token baru. Ditolak lagi berarti
-    // perangkat ini sudah dicabut, jadi keluar tanpa menyambung terus.
-    if (code === 4401) {
-      this.unauthorized += 1;
-
-      if (this.unauthorized >= 2) {
-        this.running = false;
-        this.options.onState("signed_out");
-        return;
-      }
-
+    // Token ditolak: coba sekali dengan token baru. Perangkat yang dicabut
+    // membuat penyegaran gagal (401), jadi connect() berakhir signed_out.
+    // Kalau token baru pun ditolak lagi, layanan sedang bermasalah: tunggu
+    // dan coba lagi seperti putus biasa, jangan keluarkan pengguna.
+    if (code === 4401 && this.unauthorized === 0) {
+      this.unauthorized = 1;
       this.forceFresh = true;
       void this.connect();
       return;

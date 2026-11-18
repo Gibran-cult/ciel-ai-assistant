@@ -224,8 +224,8 @@ test("task 3.27: start carries the page only when there is one", async () => {
   ]);
 });
 
-function setupWithRefresh(refreshed: (string | null)[]) {
-  const base = setup(["cat1.a.OLD"]);
+function setupWithRefresh(refreshed: (string | null)[], tokens: (string | null)[] = ["cat1.a.OLD"]) {
+  const base = setup(tokens);
   const refresh = vi.fn(async () => refreshed.shift() ?? null);
   (base.socket as unknown as { options: { refresh: typeof refresh } }).options.refresh = refresh;
   return { ...base, refresh };
@@ -244,19 +244,35 @@ test("review: 4401 forces one fresh token, then connects with it", async () => {
   expect(FakeWs.made[1]!.sent[0]).toMatchObject({ type: "hello", token: "cat1.a.FRESH" });
 });
 
-test("review: a revoked device signs out instead of reconnecting forever", async () => {
+test("review: a 4401 right after a forced refresh backs off instead of signing out", async () => {
+  // Layanan sedang bermasalah (misalnya database): token baru pun ditolak sebentar.
   const { socket, timers, states } = setupWithRefresh(["cat1.a.FRESH"]);
   socket.start();
   await flush();
   FakeWs.made[0]!.drop(4401);
   await flush();
-  timers.at(-1)?.run();
-  await flush();
-  // Token baru pun ditolak: perangkat sudah dicabut.
   FakeWs.made[1]!.drop(4401);
   await flush();
+  expect(states).not.toContain("signed_out");
+  expect(states.at(-1)).toBe("closed");
+  expect(timers.length).toBeGreaterThan(0);
+});
+
+test("review: after signing out and back in, a 4401 again forces a fresh token first", async () => {
+  const { socket, states, refresh } = setupWithRefresh([null, "cat1.a.NEW"], ["cat1.a.OLD", "cat1.a.OLD2"]);
+  socket.start();
+  await flush();
+  FakeWs.made[0]!.drop(4401);
+  await flush();
   expect(states.at(-1)).toBe("signed_out");
-  expect(FakeWs.made).toHaveLength(2);
+
+  socket.start();
+  await flush();
+  FakeWs.made.at(-1)!.drop(4401);
+  await flush();
+  expect(refresh).toHaveBeenCalledTimes(2);
+  FakeWs.made.at(-1)!.open();
+  expect(FakeWs.made.at(-1)!.sent[0]).toMatchObject({ type: "hello", token: "cat1.a.NEW" });
 });
 
 test("review: 4401 with no fresh token signs out", async () => {
