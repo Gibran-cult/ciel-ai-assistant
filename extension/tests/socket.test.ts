@@ -223,3 +223,57 @@ test("task 3.27: start carries the page only when there is one", async () => {
     { type: "start", instruction: "Isi nama" },
   ]);
 });
+
+function setupWithRefresh(refreshed: (string | null)[]) {
+  const base = setup(["cat1.a.OLD"]);
+  const refresh = vi.fn(async () => refreshed.shift() ?? null);
+  (base.socket as unknown as { options: { refresh: typeof refresh } }).options.refresh = refresh;
+  return { ...base, refresh };
+}
+
+test("review: 4401 forces one fresh token, then connects with it", async () => {
+  const { socket, timers, refresh } = setupWithRefresh(["cat1.a.FRESH"]);
+  socket.start();
+  await flush();
+  FakeWs.made[0]!.drop(4401);
+  await flush();
+  timers.at(-1)?.run();
+  await flush();
+  expect(refresh).toHaveBeenCalledTimes(1);
+  FakeWs.made[1]!.open();
+  expect(FakeWs.made[1]!.sent[0]).toMatchObject({ type: "hello", token: "cat1.a.FRESH" });
+});
+
+test("review: a revoked device signs out instead of reconnecting forever", async () => {
+  const { socket, timers, states } = setupWithRefresh(["cat1.a.FRESH"]);
+  socket.start();
+  await flush();
+  FakeWs.made[0]!.drop(4401);
+  await flush();
+  timers.at(-1)?.run();
+  await flush();
+  // Token baru pun ditolak: perangkat sudah dicabut.
+  FakeWs.made[1]!.drop(4401);
+  await flush();
+  expect(states.at(-1)).toBe("signed_out");
+  expect(FakeWs.made).toHaveLength(2);
+});
+
+test("review: 4401 with no fresh token signs out", async () => {
+  const { socket, states } = setupWithRefresh([null]);
+  socket.start();
+  await flush();
+  FakeWs.made[0]!.drop(4401);
+  await flush();
+  expect(states.at(-1)).toBe("signed_out");
+  expect(FakeWs.made).toHaveLength(1);
+});
+
+test("review: 4403 (origin refused) stops reconnecting", async () => {
+  const { socket, timers, states } = setup();
+  socket.start();
+  await flush();
+  FakeWs.made[0]!.drop(4403);
+  expect(states.at(-1)).toBe("origin_refused");
+  expect(timers).toEqual([]);
+});

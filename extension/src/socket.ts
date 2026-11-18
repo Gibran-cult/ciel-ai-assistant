@@ -12,7 +12,7 @@ export type ServerMessage =
   | { type: "action"; ticket: unknown; kid: unknown; sig: unknown }
   | { type: "end"; status: string; reason: string | null; steps: number; report: string };
 
-export type SocketState = "connecting" | "ready" | "closed" | "signed_out" | "update_required";
+export type SocketState = "connecting" | "ready" | "closed" | "signed_out" | "update_required" | "origin_refused";
 
 // Kunci persis setiap pesan dari server (agent_api/ws.py).
 const SERVER_KEYS: Record<string, string[]> = {
@@ -75,6 +75,8 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
 export interface SocketOptions {
   base: () => Promise<string>;
   token: () => Promise<string | null>;
+  /** Paksa token akses baru (setelah layanan menolak token dengan 4401). */
+  refresh?: () => Promise<string | null>;
   version: string;
   onMessage: (message: ServerMessage) => void;
   onState: (state: SocketState) => void;
@@ -95,6 +97,9 @@ export class Socket {
   private running = false;
   private ready = false;
   private stopPending = false;
+  // 4401 berturut-turut sejak terakhir "ready". Dua kali berarti perangkat dicabut.
+  private unauthorized = 0;
+  private forceFresh = false;
 
   constructor(private options: SocketOptions) {}
 
@@ -121,7 +126,9 @@ export class Socket {
     if (!this.running) return;
     this.options.onState("connecting");
     // Token baru di setiap sambungan: token akses berlaku 15 menit.
-    const token = await this.options.token();
+    const fresh = this.forceFresh && this.options.refresh;
+    this.forceFresh = false;
+    const token = fresh ? await this.options.refresh!() : await this.options.token();
 
     if (token === null) {
       this.running = false;
@@ -150,6 +157,7 @@ export class Socket {
       if (message.type === "ready") {
         this.ready = true;
         this.attempt = 0;
+        this.unauthorized = 0;
         this.options.onState("ready");
         if (this.stopPending) this.sendStop();
       }
@@ -166,9 +174,25 @@ export class Socket {
     this.ready = false;
     if (!this.running) return;
 
-    if (code === 4426) {
+    if (code === 4426 || code === 4403) {
       this.running = false;
-      this.options.onState("update_required");
+      this.options.onState(code === 4426 ? "update_required" : "origin_refused");
+      return;
+    }
+
+    // Token ditolak: coba sekali dengan token baru. Ditolak lagi berarti
+    // perangkat ini sudah dicabut, jadi keluar tanpa menyambung terus.
+    if (code === 4401) {
+      this.unauthorized += 1;
+
+      if (this.unauthorized >= 2) {
+        this.running = false;
+        this.options.onState("signed_out");
+        return;
+      }
+
+      this.forceFresh = true;
+      void this.connect();
       return;
     }
 

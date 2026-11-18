@@ -170,3 +170,14 @@ test("the API base changes only in a development build, and only to a safe addre
     expect(await apiBase(true)).toBe(PRODUCTION_API);
   }
 });
+
+test("review: the rotated refresh token is saved before the access token", async () => {
+  chrome.storage.session.data.accessToken = "cat1.owner.OLDACCESS";
+  chrome.storage.session.data.accessExpires = NOW - 1;
+  chrome.storage.local.data.refreshToken = "crt1.owner.OLDREFRESH";
+  fetchMock.mockResolvedValue(json(200, TOKENS));
+  await accessToken(NOW);
+  const local = chrome.storage.local.set.mock.invocationCallOrder[0]!;
+  const session = chrome.storage.session.set.mock.invocationCallOrder[0]!;
+  expect(local).toBeLessThan(session);
+});
