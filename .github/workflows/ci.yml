@@ -153,6 +153,7 @@ jobs:
             tests.test_agent_journal \
             tests.test_agent_loop \
             tests.test_agent_redteam \
+            tests.test_agent_log \
             tests.test_ci_coverage
 
       # Node that comes with the runner (no extra setup): the Edge Function's
