@@ -274,6 +274,12 @@ def device_router(settings, store, google, clock):
                 or not hmac.compare_digest(str(row.get("challenge")), proof)):
             return refuse(400, "invalid_grant")
 
+        # Persetujuan bisa ditarik di antara login dan penukaran kode.
+        consent = store.agent_consent(owner)
+
+        if consent is not True:
+            return refuse(503, "unavailable") if consent is None else refuse(403, "consent_required")
+
         device = secrets.token_hex(8)
 
         if not store.create_device(owner, device, body.name, body.platform):

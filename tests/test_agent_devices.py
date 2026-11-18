@@ -373,5 +373,15 @@ class RefreshLimitTest(unittest.TestCase):
         response = service.client.post("/v1/device/refresh", json={"refresh_token": response.json()["refresh_token"]})
         self.assertEqual(response.status_code, 429)
 
+class ConsentAfterLoginTest(unittest.TestCase):
+    def test_a_code_cannot_be_traded_after_consent_is_withdrawn(self):
+        service = Service()
+        verifier, back = service.device_code()
+        code = query(back.headers["location"])["code"]
+        service.store.consent[ALICE] = False
+        response = service.client.post("/v1/device/token", json={"code": code, "verifier": verifier, "name": "Chrome", "platform": "extension"})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(service.store.load_devices(ALICE), [])
+
 if __name__ == "__main__":
     unittest.main()

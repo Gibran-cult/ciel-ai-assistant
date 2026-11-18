@@ -405,10 +405,33 @@ class ChatStore:
         return type(revoked) is int and revoked >= 0
 
     def delete_agent_data(self, owner):
+        """Hapus semua data agent pemilik ini. True juga kalau SQL agent belum dipasang (tidak ada yang dihapus)."""
+
         if not OWNER_PATTERN.match(owner or ""):
             return False
 
-        return self._function("delete_agent_data", "ciel_agent_delete_owner", {"p_owner": owner}) is True
+        try:
+            response = requests.post(f"{self.base}/rpc/ciel_agent_delete_owner", headers=self.headers,
+                                     json={"p_owner": owner}, timeout=TIMEOUT)
+        except requests.exceptions.RequestException as error:
+            logger.error("chat_store_error action=delete_agent_data type=%s error=%s", type(error).__name__, error)
+            return False
+
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+
+        # PostgREST menjawab PGRST202 kalau fungsinya tidak ada: SQL agent
+        # belum pernah dijalankan, jadi memang tidak ada data agent.
+        if response.status_code == 404 and isinstance(body, dict) and body.get("code") == "PGRST202":
+            return True
+
+        if response.status_code >= 400:
+            logger.error("chat_store_error action=delete_agent_data status=%s", response.status_code)
+            return False
+
+        return body is True
 
     def load_agent_devices(self, owner):
         return self._rows_for("load_agent_devices", owner, "agent_devices",

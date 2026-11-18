@@ -92,5 +92,27 @@ class RetentionTest(unittest.TestCase):
         self.assertIsNone(TaskRunner(store).retain_once())
 
 
+class ScheduleTest(unittest.TestCase):
+    def test_retention_runs_soon_after_start_and_then_daily(self):
+        from agent_api.ws import due_jobs
+
+        self.assertIn("retention", due_jobs(1))
+        self.assertIn("retention", due_jobs(1441))
+        self.assertNotIn("retention", due_jobs(1440))
+        self.assertEqual(due_jobs(10), ["sweep", "chains"])
+        self.assertEqual(due_jobs(7), ["sweep"])
+
+    def test_one_failing_job_does_not_stop_the_others(self):
+        store = MemoryStore()
+        runner = TaskRunner(store)
+
+        def broken(*args):
+            raise RuntimeError("rusak")
+
+        with self.assertLogs("ciel.agent_api.ws", level="ERROR"):
+            self.assertIsNone(runner.run_job("chains", broken))
+
+        self.assertEqual(runner.run_job("sweep", runner.sweep_once), 0)
+
 if __name__ == "__main__":
     unittest.main()

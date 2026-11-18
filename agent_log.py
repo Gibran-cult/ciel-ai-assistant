@@ -145,20 +145,35 @@ def describe(row, today):
     )
 
 
+SAME_ACTION = ("kind", "target", "decision", "approved_by")
+
+
+def is_result_of(previous, row):
+    """Benar kalau `row` adalah baris hasil untuk baris "dikirim" `previous`.
+
+    Baris yang diblokir juga tidak punya hasil, jadi yang digabung hanya
+    baris izin atau konfirmasi tepat sebelumnya, dengan aksi yang sama.
+    """
+
+    return (
+        previous.get("result") is None and row.get("result") is not None
+        and previous.get("decision") in ("allow", "confirm")
+        and all(previous.get(key) == row.get(key) for key in SAME_ACTION)
+        and type(previous.get("seq")) is int and row.get("seq") == previous["seq"] + 1
+    )
+
+
 def pair_rows(rows):
     """Satu baris per aksi: baris "dikirim" (tanpa hasil) digantikan baris hasilnya.
 
     Loop menulis dua baris untuk aksi yang dikirim ke klien: satu sebelum
-    dikirim (hasil kosong) dan satu setelah ada hasil, dengan jenis yang sama.
+    dikirim (hasil kosong) dan satu tepat setelahnya dengan hasilnya.
     """
 
     paired = []
 
     for row in rows:
-        previous = paired[-1] if paired else None
-
-        if (previous is not None and previous.get("result") is None and row.get("result") is not None
-                and previous.get("kind") == row.get("kind")):
+        if paired and is_result_of(paired[-1], row):
             paired[-1] = row
         else:
             paired.append(row)

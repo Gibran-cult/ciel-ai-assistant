@@ -479,5 +479,19 @@ class ConnectionTest(unittest.TestCase):
         self.assertIsNone(client.run("tab_read", {}, 1, "shopee.co.id"))
         self.assertEqual(self.sent, [])
 
+class ConsentOnSocketTest(unittest.TestCase):
+    def test_start_is_refused_when_consent_is_no_longer_valid(self):
+        svc = service([OPEN, FINISH])
+        tokens = svc.login()
+        svc.store.consent[ALICE] = False
+
+        with connect(svc) as ws:
+            hello(ws, tokens)
+            ws.send_json({"type": "start", "instruction": INSTRUCTION})
+            end = ws.receive_json()
+
+        self.assertEqual((end["type"], end["status"], end["reason"]), ("end", "refused", "consent_required"))
+        self.assertEqual((svc.client.app.state.models.instructions, svc.store.tasks), ([], {}))
+
 if __name__ == "__main__":
     unittest.main()

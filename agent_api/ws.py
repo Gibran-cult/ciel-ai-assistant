@@ -351,21 +351,46 @@ class TaskRunner:
 
         return removed
 
+    def run_job(self, name, job, *args):
+        """Jalankan satu pekerjaan pemeliharaan. Galatnya dicatat, tidak menghentikan pekerjaan lain."""
+
+        try:
+            return job(*args)
+        except Exception as error:
+            logger.error("maintenance_failed job=%s type=%s", name, type(error).__name__)
+            return None
+
     async def maintain_forever(self, key, clock):
         """Pembersih tugas macet tiap menit, pemeriksa rantai tiap 10 menit, masa simpan tiap hari."""
 
         minute = 0
+        jobs = {"sweep": lambda: self.sweep_once(), "chains": lambda: self.check_chains(key, clock()),
+                "retention": lambda: self.retain_once()}
 
         while True:
             await asyncio.sleep(60)
             minute += 1
-            await asyncio.to_thread(self.sweep_once)
 
-            if minute % 10 == 0:
-                await asyncio.to_thread(self.check_chains, key, clock())
+            for name in due_jobs(minute):
+                await asyncio.to_thread(self.run_job, name, jobs[name])
 
-            if minute % 1440 == 0:
-                await asyncio.to_thread(self.retain_once)
+
+def due_jobs(minute):
+    """Pekerjaan pemeliharaan untuk menit ke-sekian sejak proses mulai.
+
+    Masa simpan jalan di menit pertama lalu sehari sekali, supaya layanan
+    yang sering dimulai ulang (deploy) tetap menjalankannya.
+    """
+
+    jobs = ["sweep"]
+
+    if minute % 10 == 0:
+        jobs.append("chains")
+
+    if minute % 1440 == 1:
+        jobs.append("retention")
+
+    return jobs
 
 
 def ws_router(settings, store, model, signer, runner, clock):
@@ -468,6 +493,15 @@ def ws_router(settings, store, model, signer, runner, clock):
 
                     if task is not None and task.is_alive():
                         await conn.send({"type": "end", "status": "refused", "reason": "busy", "steps": 0, "report": ""})
+                        continue
+
+                    # Persetujuan yang ditarik, atau versi teks persetujuan
+                    # yang naik, menahan tugas baru di koneksi yang sudah terbuka.
+                    consent = await asyncio.to_thread(store.agent_consent, owner)
+
+                    if consent is not True:
+                        reason = "unavailable" if consent is None else "consent_required"
+                        await conn.send({"type": "end", "status": "refused", "reason": reason, "steps": 0, "report": ""})
                         continue
 
                     if not isinstance(message["instruction"], str):

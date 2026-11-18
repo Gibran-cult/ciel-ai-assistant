@@ -525,14 +525,21 @@ as $$
 declare
     removed integer;
 begin
-    create temporary table expired_tasks on commit drop as
+    -- Baris log yang tugasnya sudah tidak ada (ditulis sebelum aturan
+    -- agent_actions_task_fk berlaku) juga dibuang.
+    delete from public.agent_actions a
+     where not exists (select 1 from public.agent_tasks t where t.owner = a.owner and t.id = a.task);
+
+    with expired as (
         select t.owner, t.id
           from public.agent_tasks t
           left join public.agent_settings s on s.owner = t.owner
          where t.status not in ('planning', 'running')
-           and t.created_at < now() - make_interval(days => coalesce(s.log_days, 30));
-    delete from public.agent_actions a using expired_tasks e where a.owner = e.owner and a.task = e.id;
-    delete from public.agent_tasks t using expired_tasks e where t.owner = e.owner and t.id = e.id;
+           and t.created_at < now() - make_interval(days => coalesce(s.log_days, 30))
+    ), expired_actions as (
+        delete from public.agent_actions a using expired e where a.owner = e.owner and a.task = e.id
+    )
+    delete from public.agent_tasks t using expired e where t.owner = e.owner and t.id = e.id;
     get diagnostics removed = row_count;
     return removed;
 end;
@@ -557,3 +564,17 @@ as $$
 $$;
 
 revoke execute on function public.ciel_agent_tasks_to_check(timestamptz, integer) from public, anon, authenticated;
+
+-- Baris log hanya boleh ada untuk tugas yang masih ada. Tanpa aturan ini,
+-- aksi yang sedang berjalan saat Hapus akun bisa menulis satu atau dua baris
+-- lagi setelah tugasnya terhapus, dan baris itu tersisa selamanya. Tidak
+-- divalidasi untuk baris lama; masa simpan membuang baris lama yang yatim.
+do $$
+begin
+    if not exists (select 1 from pg_constraint where conname = 'agent_actions_task_fk') then
+        alter table public.agent_actions
+            add constraint agent_actions_task_fk
+            foreign key (owner, task) references public.agent_tasks (owner, id) on delete cascade not valid;
+    end if;
+end;
+$$;

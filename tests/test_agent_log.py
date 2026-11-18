@@ -95,5 +95,23 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(set(CHAIN_TEXT), {"ok", "broken", "missing", "extra", None})
 
 
+class PairingReviewTest(unittest.TestCase):
+    def test_a_blocked_row_is_never_merged_into_the_next_answer(self):
+        rows = [row(seq=1, kind="tab_type", decision="block", reason="secret_text", result=None),
+                row(seq=2, kind="tab_type", decision="confirm", reason="submits", result="declined")]
+        self.assertEqual([item["seq"] for item in pair_rows(rows)], [1, 2])
+
+        rows = [row(seq=1, kind="ask_user", decision="block", reason="bad_args", result=None),
+                row(seq=2, kind="ask_user", decision="allow", result="ok")]
+        self.assertEqual([item["seq"] for item in pair_rows(rows)], [1, 2])
+
+    def test_only_the_next_row_of_the_same_action_merges(self):
+        rows = [row(seq=1, target="a.example", result=None), row(seq=2, target="b.example", result="ok")]
+        self.assertEqual([item["seq"] for item in pair_rows(rows)], [1, 2])
+        rows = [row(seq=1, result=None), row(seq=3, result="ok")]
+        self.assertEqual([item["seq"] for item in pair_rows(rows)], [1, 3])
+        rows = [row(seq=4, decision="confirm", approved_by="user", result=None), row(seq=5, decision="confirm", approved_by="user", result="ok")]
+        self.assertEqual([item["seq"] for item in pair_rows(rows)], [5])
+
 if __name__ == "__main__":
     unittest.main()

@@ -3120,10 +3120,18 @@ def delete_my_account():
         ("chat, proyek, dan profil", database_ok),
     )
 
-    # Data agent hanya ada (dan fungsi penghapusnya hanya terpasang) kalau
-    # agent web sudah dinyalakan; lihat RELEASE_CHECKLIST.md.
-    if AGENT_WEB_ENABLED:
-        steps += (("data agent", CHAT_STORE.delete_agent_data(chat_owner())),)
+    # Data agent selalu ikut dihapus, juga saat tab Agent dimatikan lagi
+    # (rollback tampilan). Kalau SQL agent belum dipasang, tidak ada yang
+    # dihapus dan langkah ini tetap berhasil. Persetujuan agent yang masih
+    # berlaku ditarik dulu, supaya akun yang sama tidak langsung aktif lagi
+    # kalau masuk kembali.
+    owner = chat_owner()
+    withdrawn = True
+
+    if CHAT_STORE.agent_consent(owner) is True:
+        withdrawn = CHAT_STORE.record_consent_event(owner, "agent", {"accepted": False}, AGENT_CONSENT_VERSION)
+
+    steps += (("data agent", withdrawn and CHAT_STORE.delete_agent_data(owner)),)
     left = [name for name, ok in steps if not ok]
 
     if left:

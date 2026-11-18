@@ -755,5 +755,27 @@ class AgentWebStoreTest(unittest.TestCase):
         request.assert_not_called()
 
 
+class AgentReviewSqlTest(unittest.TestCase):
+    """Temuan tinjauan cabang 2C."""
+
+    def test_action_rows_need_their_task(self):
+        self.assertIn("foreign key (owner, task) references public.agent_tasks (owner, id) on delete cascade not valid", AGENT_SQL)
+        self.assertIn("agent_actions_task_fk", AGENT_SQL)
+
+    def test_retention_also_removes_actions_whose_task_is_gone(self):
+        body = sql_function("ciel_agent_retention")
+        self.assertIn("not exists (select 1 from public.agent_tasks t where t.owner = a.owner and t.id = a.task)", body)
+
+    def test_deleting_agent_data_where_the_sql_is_missing_counts_as_done(self):
+        store = chat_store.ChatStore("https://db.example.invalid/", "service-key")
+        missing = Response({"code": "PGRST202", "message": "Could not find the function"}, status=404)
+
+        with patch("requests.post", return_value=missing):
+            self.assertTrue(store.delete_agent_data(ALICE))
+
+        for other in (Response({"code": "PGRST301"}, status=404), Response(None, status=500)):
+            with patch("requests.post", return_value=other):
+                self.assertFalse(store.delete_agent_data(ALICE))
+
 if __name__ == "__main__":
     unittest.main()
