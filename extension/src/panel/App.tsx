@@ -14,8 +14,20 @@ import { TEXT } from "./strings";
 interface Props {
   state: PanelState;
   send: (command: PanelCommand) => void;
-  activeTab: () => Promise<number | null>;
+  /** Tab aktif di jendela panel, dilacak sebelum klik supaya izin bisa diminta langsung dari klik. */
+  currentTab: { id: number; url?: string } | null;
   requestPermission: (host: string) => Promise<boolean>;
+}
+
+function startHost(url: string | undefined): string | null {
+  if (!url) return null;
+
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" ? parsed.hostname : null;
+  } catch {
+    return null;
+  }
 }
 
 function statusText(state: PanelState): string {
@@ -29,7 +41,7 @@ function statusTone(state: PanelState): string {
   return "quiet";
 }
 
-export function App({ state, send, activeTab, requestPermission }: Props) {
+export function App({ state, send, currentTab, requestPermission }: Props) {
   const [instruction, setInstruction] = useState(state.instruction);
   const busy = state.phase === "running" || state.phase === "paused" || state.phase === "handover";
   const signedIn = state.auth === "signed_in";
@@ -38,8 +50,13 @@ export function App({ state, send, activeTab, requestPermission }: Props) {
   useEffect(() => setInstruction(state.instruction), [state.instruction]);
 
   async function start() {
-    const tabId = await activeTab();
-    if (tabId !== null && instruction.trim()) send({ type: "start", instruction: instruction.trim(), tabId });
+    if (currentTab === null || !instruction.trim()) return;
+    // Izin situs diminta paling awal di klik ini (Chrome hanya mengizinkan
+    // permintaan dari gerakan pengguna). Ditolak pun tugas tetap jalan, hanya
+    // tanpa halaman awal.
+    const host = startHost(currentTab.url);
+    if (host) await requestPermission(host);
+    send({ type: "start", instruction: instruction.trim(), tabId: currentTab.id });
   }
 
   async function allow(host: string) {

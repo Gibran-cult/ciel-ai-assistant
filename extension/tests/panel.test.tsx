@@ -47,7 +47,7 @@ test("offline: the message shows and Stop still works", () => {
 });
 
 test("plan: numbered steps, scope, Tanya dulu by default, Mulai and Ubah", () => {
-  const dialog = { kind: "plan" as const, id: 3, steps: ["Buka toko", "Cari kaos"], scope: { hosts: ["toko.test"], kinds: ["tab_open", "tab_type"], spend_cap: null } };
+  const dialog = { kind: "plan" as const, id: 3, steps: ["Buka toko", "Cari kaos"], scope: { hosts: ["toko.test"], kinds: ["tab_open", "tab_type"], spend_cap: null, start_host: null } };
   const { send } = show({ phase: "running", dialog, instruction: "Cari kaos" });
   expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual(expect.arrayContaining(["Buka toko", "Cari kaos"]));
   expect(screen.getByText("toko.test")).toBeTruthy();
@@ -146,4 +146,32 @@ test("a task that ends early says why", () => {
 test("an unknown end reason still shows its code", () => {
   show({ ended: { status: "failed", reason: "baru_sekali", steps: 0, report: "" } });
   expect(screen.getByText("Kode: baru_sekali")).toBeTruthy();
+});
+
+test("task 3.27: Mulai asks for the open site first, then starts on that tab", async () => {
+  const { send, requestPermission } = show();
+  fireEvent.change(screen.getByLabelText("Apa yang perlu Ciel kerjakan di tab ini?"), { target: { value: "Isi nama" } });
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Mulai" })));
+  expect(requestPermission).toHaveBeenCalledWith("toko.test");
+  expect(requestPermission.mock.invocationCallOrder[0]!).toBeLessThan(send.mock.invocationCallOrder[0]!);
+  expect(send).toHaveBeenCalledWith({ type: "start", instruction: "Isi nama", tabId: 7 });
+});
+
+test("task 3.27: a tab without a readable https address starts without asking", async () => {
+  const { send, requestPermission } = show({}, { id: 7 });
+  fireEvent.change(screen.getByLabelText("Apa yang perlu Ciel kerjakan di tab ini?"), { target: { value: "Isi nama" } });
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Mulai" })));
+  expect(requestPermission).not.toHaveBeenCalled();
+  expect(send).toHaveBeenCalledWith({ type: "start", instruction: "Isi nama", tabId: 7 });
+});
+
+test("task 3.27: the plan card names the site the task starts on", () => {
+  show({ phase: "running", dialog: { kind: "plan", id: 3, steps: ["Isi nama"], scope: { hosts: ["toko.test"], kinds: ["tab_type"], spend_cap: 0, start_host: "toko.test" } } });
+  expect(screen.getByText("Mulai di")).toBeTruthy();
+  expect(screen.getAllByText("toko.test", { selector: "code" }).length).toBeGreaterThan(0);
+});
+
+test("review: a refused origin says what to do instead of 'koneksi putus'", () => {
+  show({ connection: "origin_refused" });
+  expect(screen.getByText("Layanan menolak ekstensi ini. Pasang ulang ekstensi dari Chrome Web Store.")).toBeTruthy();
 });

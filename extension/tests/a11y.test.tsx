@@ -12,7 +12,7 @@ const STATES: [string, Partial<PanelState>][] = [
   ["idle", {}],
   ["running", { phase: "running", log: [{ time: "10.42", action: "Mengklik", target: "toko.test", result: "Selesai" }] }],
   ["offline", { phase: "running", connection: "closed" }],
-  ["plan", { phase: "running", dialog: { kind: "plan", id: 1, steps: ["Buka toko"], scope: { hosts: ["toko.test"], kinds: ["tab_open"], spend_cap: null } } }],
+  ["plan", { phase: "running", dialog: { kind: "plan", id: 1, steps: ["Buka toko"], scope: { hosts: ["toko.test"], kinds: ["tab_open"], spend_cap: null, start_host: null } } }],
   ["confirm", { phase: "running", dialog: { kind: "confirm", id: 2, prompt: PROMPT } }],
   ["preview", { phase: "running", dialog: { kind: "confirm", id: 2, prompt: { ...PROMPT, reason: "ask_mode" } } }],
   ["handover", { phase: "handover", dialog: { kind: "handover", id: 3, prompt: PROMPT } }],

@@ -22,6 +22,7 @@ export const TEXT = {
   offline: "Koneksi putus. Ciel berhenti dulu sampai tersambung lagi.",
   connecting: "Menyambung ke Ciel…",
   updateRequired: "Versi ekstensi ini sudah terlalu lama. Perbarui ekstensi dulu.",
+  originRefused: "Layanan menolak ekstensi ini. Pasang ulang ekstensi dari Chrome Web Store.",
   status: {
     idle: "Siap",
     running: "Ciel sedang bekerja",
@@ -31,6 +32,7 @@ export const TEXT = {
     stopped: "Dihentikan",
   },
   planTitle: "Rencana Ciel",
+  planStart: "Mulai di",
   planScope: "Situs yang akan dibuka",
   planKinds: "Yang akan dilakukan",
   planMode: "Cara kerja",

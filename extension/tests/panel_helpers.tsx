@@ -8,10 +8,10 @@ export const BASE: PanelState = {
   needPermission: null, ended: null, instruction: "",
 };
 
-export function show(over: Partial<PanelState> = {}) {
+export function show(over: Partial<PanelState> = {}, currentTab: { id: number; url?: string } | null = { id: 7, url: "https://toko.test/daftar" }) {
   const send = vi.fn();
   const requestPermission = vi.fn(async () => true);
-  const view = render(<App state={{ ...BASE, ...over }} send={send} activeTab={async () => 7} requestPermission={requestPermission} />);
+  const view = render(<App state={{ ...BASE, ...over }} send={send} currentTab={currentTab} requestPermission={requestPermission} />);
   return { send, requestPermission, view };
 }
 
