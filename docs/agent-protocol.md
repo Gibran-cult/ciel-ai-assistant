@@ -41,13 +41,13 @@ Token tidak pernah dikirim di URL. Pesan pertama harus `hello` dalam 10 detik.
 | Arah | `type` | Kunci lain (persis) | Balasan |
 |---|---|---|---|
 | Klien | `hello` | `token`, `client` (`extension` atau `desktop`), `version` (`x.y.z`) | `ready` dengan `device` |
-| Klien | `start` | `instruction` (1 sampai 2.000 karakter) | Tugas dimulai. Kalau sudah ada tugas berjalan: `end` dengan status `refused`, alasan `busy`. Kalau agent sedang dimatikan atau plafon biaya harian terlewati: `end` dengan status `refused`, alasan `agent_off` atau `cost_cap`. Kalau persetujuan agent sudah ditarik atau versinya naik: `end` dengan status `refused`, alasan `consent_required`. Token dan perangkat diperiksa lagi di setiap `start`: token kedaluwarsa atau perangkat yang dicabut menutup koneksi dengan 4401 |
-| Server | `plan` | `id`, `steps`, `scope` | `answer` dengan `id` dan `value`: `"ask"`, `"auto"`, atau `null` untuk menolak |
+| Klien | `start` | `instruction` (1 sampai 2.000 karakter), dan boleh `page`: bacaan tab yang sedang dibuka, dengan bentuk `observation` (bagian berikut) | Tugas dimulai. Kalau sudah ada tugas berjalan: `end` dengan status `refused`, alasan `busy`. Kalau agent sedang dimatikan atau plafon biaya harian terlewati: `end` dengan status `refused`, alasan `agent_off` atau `cost_cap`. Kalau persetujuan agent sudah ditarik atau versinya naik: `end` dengan status `refused`, alasan `consent_required`. Token dan perangkat diperiksa lagi di setiap `start`: token kedaluwarsa atau perangkat yang dicabut menutup koneksi dengan 4401 |
+| Server | `plan` | `id`, `steps`, `scope` (`hosts`, `kinds`, `spend_cap`, dan `start_host`: situs tab awal yang masuk lingkup, atau `null`) | `answer` dengan `id` dan `value`: `"ask"`, `"auto"`, atau `null` untuk menolak |
 | Server | `confirm` | `id`, `prompt` | `answer` dengan `value` `true` atau `false` |
 | Server | `handover` | `id`, `prompt` | `answer` dengan `value` `true` (pengguna sudah mengerjakannya sendiri) atau `false` |
 | Server | `ask` | `id`, `question` | `answer` dengan `value` teks |
 | Server | `action` | `ticket`, `kid`, `sig` | `result` dengan `task` dan `seq` (sama dengan `ticket.task` dan `ticket.seq`) dan `observation` |
-| Server | `end` | `status`, `reason`, `steps`, `report` | Tidak ada |
+| Server | `end` | `task` (nomor tugas, atau `null` kalau `start` ditolak sebelum tugas dibuat), `status`, `reason`, `steps`, `report` | Tidak ada |
 | Klien | `stop` | Tidak ada | Tugas berakhir `stopped`. Server menolak semua aksi berikutnya |
 
 Pesan yang bukan JSON, lebih dari 256 KB, `type`-nya tidak dikenal, atau membawa kunci di luar daftar di atas menutup koneksi dengan kode 4400. Balasan dengan `id` atau `seq` yang tidak sedang ditunggu diabaikan.
@@ -94,4 +94,6 @@ Batas waktu menunggu balasan: rencana dan pertanyaan 300 detik, konfirmasi dan s
 
 Ekstensi di `extension/` adalah klien acuan untuk protokol ini: `src/tickets.ts` memeriksa tiket dengan vektor yang dibuat dari `agent_api/tickets.py`, `src/socket.ts` menangani koneksi dan sambung ulang, `src/runner.ts` memeriksa tiket, host tab, daftar blokir, dan izin situs sebelum setiap aksi, dan `src/content/reader.ts` membuat `observation`. Kontrol di teks halaman ditulis `[ref N: ...]`.
 
-Batas sekarang: `start` tidak membawa halaman, jadi layanan baru tahu halaman setelah aksi pertama melaporkannya. Tugas harus dimulai dengan `tab_open`; `tab_read` di tab yang sedang terbuka diblokir `no_page`. Perbaikannya task 3.27 di [roadmap.md](roadmap.md).
+Halaman awal (task 3.27, keputusan D20): `page` di `start` dikirim hanya untuk tab https di situs yang tidak diblokir dan sudah diizinkan. Layanan memeriksanya seperti `observation` di `result` (bentuk yang salah menutup koneksi 4400), memasukkan host-nya ke lingkup kalau `allowed_host` menerimanya, dan baru memberikan isinya ke model setelah rencana disetujui. Perencana tetap hanya membaca perintah. `page` yang `ok`-nya `false` atau `null` sama dengan tanpa halaman.
+
+`end` dengan `task` dari tugas yang sudah ditinggalkan klien (Stop atau tugas baru) diabaikan selama tugas baru berjalan.
