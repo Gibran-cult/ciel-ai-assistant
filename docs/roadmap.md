@@ -78,7 +78,7 @@ Fase ini dikerjakan dalam tiga rencana, supaya bagian yang tidak butuh server se
 | Rencana | Task | Status |
 |---|---|---|
 | 2A, inti loop sebagai pustaka `agent_api/` ([rencana](plans/2026-11-15-agent-loop-core.md)) | 2.3 (tabel `agent_tasks`), 2.4, 2.10 sampai 2.18 | Selesai 15 November 2026. Tanpa dependensi baru dan tanpa VPS |
-| 2B, layanan, perangkat, tiket, WebSocket, adaptor model, kontainer | 2.1, 2.2, 2.3 (tabel `agent_devices`), 2.5 sampai 2.9, 2.23, 2.24 | Belum ditulis. Menunggu VPS dan tiga keputusan pemilik yang tercatat di akhir rencana 2A |
+| 2B, layanan, perangkat, tiket, WebSocket, adaptor model, kontainer | 2.1, 2.2, 2.3 (tabel `agent_devices`), 2.5 sampai 2.9, 2.23, 2.24 | Rencana ditulis 18 November 2026 ([rencana](plans/2026-11-18-agent-service.md)), keputusan D11 sampai D13 sudah dijawab. Task 1 sampai 9 tidak butuh VPS, Task 10 dijalankan di VPS paling akhir |
 | 2C, halaman log, perangkat dan izin di Pengaturan, Hapus akun, `consent_events` | 2.19 sampai 2.22 | Belum ditulis. Perubahan UI, menunggu cek pemilik di browser |
 
 Catatan dari 2A untuk 2B: tugas yang gagal ditutup barisnya tetap berstatus `running` dan mengunci akun dari tugas baru. Layanan butuh pembersih tugas macet. Syarat pembersih itu dan gerbang lain dari tinjauan cabang 2A ada di bagian "Gerbang untuk rencana 2B" di [rencana 2A](plans/2026-11-15-agent-loop-core.md).

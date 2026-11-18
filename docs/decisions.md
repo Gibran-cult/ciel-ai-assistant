@@ -19,6 +19,16 @@ Dijawab pada 14 November 2026. Pemilik menyetujui semua rekomendasi.
 | D9 | Password manager dan m-banking | Blokir total dan serah terima ke pengguna | Lebih ketat dari "wajib konfirmasi" di brief awal. Aplikasi dan situs itu masuk R3 dan tidak bisa diizinkan pengguna | Daftar awal aplikasi dan situs yang diblokir dilengkapi pemilik (roadmap 0.15) |
 | D10 | Urutan rilis | Ekstensi browser dulu, aplikasi desktop menyusul | Fase 3 dan 4 sebelum Fase 5 | Biaya daftar Chrome Web Store yang sekarang |
 
+## Keputusan untuk layanan agent (rencana 2B)
+
+Dijawab pada 18 November 2026. Pemilik menyetujui ketiga rekomendasi. Opsi lengkapnya dibahas sebelum [rencana 2B](plans/2026-11-18-agent-service.md) ditulis.
+
+| ID | Keputusan | Jawaban | Akibat langsung | Yang masih harus dicek |
+|---|---|---|---|---|
+| D11 | Tanda tangan tiket aksi | Ed25519: server menandatangani dengan kunci privat, ekstensi dan desktop memeriksa dengan kunci publik | Klien tidak menyimpan rahasia. Ekstensi yang dibobol tidak bisa memalsukan tiket untuk desktop. Paket `cryptography` masuk lockfile layanan | Versi Chrome minimum untuk Ed25519 di WebCrypto [PERLU DICEK] |
+| D12 | Dependensi server | FastAPI dan Uvicorn, SDK resmi `anthropic` untuk Claude. Cadangan Gemini lewat HTTP biasa | Lockfile terpisah `requirements-agent.txt` | Daftar paket lengkapnya terlihat saat lockfile dibuat |
+| D13 | Tempat login perangkat | Login Google di layanan agent sendiri, dengan PKCE antara perangkat dan layanan | Tidak bergantung pada Streamlit. Pemilik menambah redirect URI layanan di Google Cloud Console. ID pemilik dihitung sama persis dengan app | Tidak ada |
+
 ## Yang belum diputuskan dan memakai usulan sampai diubah
 
 Angka dan pilihan ini ditulis sebagai usulan di dokumen masing-masing. Pemilik belum memutuskannya satu per satu.
