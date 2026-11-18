@@ -18,6 +18,7 @@ class MemoryStore:
         self.hits = []
         self.now = 0.0       # detik; waktu tiruan untuk updated_at dan token
         self.devices = {}
+        self.pro_until = {}  # pemilik -> akhir masa Pro (epoch detik)
         self.tokens = {}
 
     def create_task(self, owner, task_id, device, instruction):
@@ -71,6 +72,9 @@ class MemoryStore:
 
         return [dict(row) for row in self.actions if row["owner"] == owner and row["task"] == task_id]
 
+    def load_pro_until(self, owner):
+        return None if "load_pro_until" in self.fail else self.pro_until.get(owner, 0.0)
+
     def cost_since(self, since_iso):
         return None if "cost_since" in self.fail else self.cost_today
 
@@ -79,7 +83,8 @@ class MemoryStore:
             return False, None
 
         self.hits.append(limits)
-        return True, self.full
+        # Hanya kunci yang memang ada di permintaan ini yang bisa penuh.
+        return True, self.full if self.full in limits else None
 
     # Perangkat dan token -------------------------------------------------
 

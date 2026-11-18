@@ -67,12 +67,12 @@ class FakeSession:
 class Service:
     """Satu aplikasi uji dengan store, Google, dan jam tiruan."""
 
-    def __init__(self):
+    def __init__(self, models=None, settings=SETTINGS):
         self.store = MemoryStore()
         self.session = FakeSession()
         self.clock = Clock()
-        google = GoogleClient(self.session, SETTINGS.google_client_id, SETTINGS.google_client_secret, SETTINGS.google_redirect_uri)
-        self.client = TestClient(create_app(SETTINGS, store=self.store, models=None, google=google, clock=self.clock))
+        google = GoogleClient(self.session, settings.google_client_id, settings.google_client_secret, settings.google_redirect_uri)
+        self.client = TestClient(create_app(settings, store=self.store, models=models, google=google, clock=self.clock))
 
     def good_claims(self, nonce, sub="alice"):
         return {"iss": "https://accounts.google.com", "aud": SETTINGS.google_client_id, "sub": sub, "nonce": nonce,
