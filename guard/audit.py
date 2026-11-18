@@ -80,6 +80,33 @@ def verify_chain(rows, first_prev="", head=None, key=None):
     return None
 
 
+def explain_chain(rows, first_prev="", head=None, key=None):
+    """Keadaan rantai, untuk ditampilkan: (keadaan, indeks).
+
+    ("ok", None): utuh. ("broken", i): baris i tidak cocok. ("extra", i):
+    baris terakhir i tercatat tetapi hash kepalanya belum tersimpan, yang
+    terjadi kalau penulisan hash kepala gagal setelah baris ditambah.
+    ("missing", n): baris setelah indeks n hilang.
+    """
+
+    broken = verify_chain(rows, first_prev, key=key)
+
+    if broken is not None:
+        return "broken", broken
+
+    last = rows[-1][1] if rows else first_prev
+
+    if head is None or last == head:
+        return "ok", None
+
+    before = rows[-2][1] if len(rows) > 1 else first_prev
+
+    if rows and before == head:
+        return "extra", len(rows) - 1
+
+    return "missing", len(rows)
+
+
 def redact(text, limit=120):
     """Teks yang aman untuk log: rahasia diganti, lalu dipotong."""
 

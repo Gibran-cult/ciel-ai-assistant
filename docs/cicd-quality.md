@@ -31,6 +31,7 @@ Aturan yang dipertahankan: setiap berkas uji baru masuk daftar di `ci.yml`, urut
 | Red-team | `tests/test_guard_redteam.py`, `tests/test_agent_redteam.py`, dan kumpulan serangan (bagian 4) | Ya |
 | Keamanan | `pip-audit`, uji rahasia, analisis statis keamanan (CodeQL atau sejenis) | Ya untuk temuan tinggi |
 | Bangun | Image kontainer untuk Agent API | Ya |
+| Lockfile layanan | Job `agent-service`: hanya `requirements-agent.txt` yang dipasang (`--require-hashes`), `pip-audit`, lalu semua uji agent dan layanan | Ya |
 | Deploy staging | Otomatis setelah merge ke `main` | |
 | Uji asap staging | Satu tugas agent tiruan dari awal sampai akhir | Menahan deploy produksi |
 | Deploy produksi | Setelah persetujuan manual pemilik | |

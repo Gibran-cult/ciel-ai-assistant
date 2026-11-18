@@ -12,6 +12,7 @@ Kontrak klien (ekstensi atau desktop, lewat adaptor di rencana 2B):
     confirm(prompt) -> bool             pengguna menyetujui satu aksi
     handover(prompt) -> bool            pengguna mengerjakan sendiri langkah itu
     ask(question) -> str | None         jawaban pengguna
+    stopped() -> bool (pilihan)          pengguna menekan stop di klien; dibaca bersama stop_requested
     run(tool, args, seq, host) -> Observation
                                         hasil aksi. `host` adalah situs yang dinilai guard
                                         untuk aksi ini. Klien menolak kalau tab sudah di
@@ -27,7 +28,7 @@ from urllib.parse import unquote
 
 from agent_api.envelope import flags_injection, wrap
 from agent_api.journal import Journal
-from agent_api.limits import CONFIRM_SECONDS, day_start, over_limit, start_refusal, task_rate_limits
+from agent_api.limits import CONFIRM_SECONDS, MAX_INSTRUCTION, day_start, over_limit, start_refusal, task_rate_limits
 from agent_api.model import ModelReply, Step, TaskView
 from agent_api.plan import parse_plan, scope_to_json, widened
 from agent_api.tools import TYPING, Observation, Rejected, bind
@@ -35,13 +36,20 @@ from guard.audit import target_of
 from guard.decide import Context, Decision, decide
 from guard.domains import lookalike_of, match_allowed, normalize_host
 from guard.limits import SpendLimits
-from guard.risk import R3, Action
+from guard.risk import R3, Action, find_secrets
 
 # Alamat di dalam teks, dengan atau tanpa "https://": (host, jalur).
 LINK_RE = re.compile(r"(?:https?://)?((?:[a-z0-9-]+\.)+[a-z][a-z0-9-]+)(?::\d{1,5})?(/[^\s\"'<>]*)?", re.IGNORECASE)
 PATH_END = "/.,;:!?)]}"
 MAX_NOTE = 2000
 MAX_PREVIEW = 200
+SECRET_NOTE = "[jawaban berisi data rahasia, tidak diteruskan]"
+
+# Teks dari model yang ditampilkan ke pengguna: gambar dibuang, tautan
+# menjadi teks biasa, dan tag HTML dibuang (docs/security.md bagian 5, lapis 5).
+IMAGE_MD = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+LINK_MD = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+HTML_TAG = re.compile(r"</?[A-Za-z][^<>]*>")
 
 
 @dataclass(frozen=True)
@@ -101,13 +109,40 @@ def link_keys(text):
     return {link_key(host, path) for host, path in LINK_RE.findall(text)}
 
 
-def run_task(owner, task_id, device, instruction, *, model, client, store, config, account, clock, chain_key):
-    """Jalankan satu tugas. Selalu mengembalikan TaskResult."""
+def plain_text(text):
+    """Teks model tanpa gambar, tautan aktif, atau tag HTML."""
+
+    text = IMAGE_MD.sub("", text)
+    text = LINK_MD.sub(r"\1", text)
+    return HTML_TAG.sub("", text)
+
+
+def run_task(owner, task_id, device, instruction, *, model, client, store, config, account, clock, chain_key,
+             still_allowed=lambda: None):
+    """Jalankan satu tugas. Selalu mengembalikan TaskResult.
+
+    still_allowed dipanggil di awal setiap putaran: alasan selain None
+    (misalnya "agent_off" atau "cost_cap") menghentikan tugas.
+    """
+
+    if not isinstance(instruction, str) or not instruction.strip() or len(instruction) > MAX_INSTRUCTION:
+        return TaskResult("refused", "bad_instruction", 0, "")
+
+    # Sakelar dan plafon biaya dicek sebelum tugas dibuat, supaya tugas
+    # baru tidak memanggil model saat agent sedang dimatikan.
+    try:
+        switch = still_allowed()
+    except Exception:
+        switch = "switch_error"
+
+    if switch is not None:
+        return TaskResult("refused", switch, 0, "")
 
     run = None
 
     try:
         run = Run(owner, task_id, device, instruction, model, client, store, config, account, clock, chain_key)
+        run.still_allowed = still_allowed
         refusal = run.start()
 
         if refusal:
@@ -136,6 +171,16 @@ def run_task(owner, task_id, device, instruction, *, model, client, store, confi
                 pass
 
         return TaskResult("failed", "internal_error", steps, "")
+    except BaseException:
+        # Pembatalan dari luar (asyncio, Ctrl+C) tetap menutup baris tugas,
+        # supaya akun tidak terkunci, lalu diteruskan ke pemanggil.
+        if run is not None and run.created:
+            try:
+                run.close("failed", "internal_error")
+            except Exception:
+                pass
+
+        raise
 
 
 class Run:
@@ -164,6 +209,7 @@ class Run:
         self.page = None            # pengamatan terakhir yang berhasil, sumber fakta untuk bind
         self.observation = ""       # amplop yang dilihat model di putaran berikutnya
         self.untrusted = []         # semua isi tidak tepercaya yang sudah dilihat tugas ini
+        self.still_allowed = lambda: None
         self.history = []
         self.notes = []
 
@@ -208,7 +254,10 @@ class Run:
     def ask_model(self, method, argument):
         try:
             reply = method(argument)
-        except Exception:
+        except Exception as error:
+            # Panggilan yang gagal bisa tetap tertagih (misalnya penolakan).
+            spent = getattr(error, "cost", 0)
+            self.cost += spent if type(spent) is int and spent > 0 else 0
             raise End("failed", "model_error") from None
 
         if not isinstance(reply, ModelReply) or type(reply.cost) is not int or reply.cost < 0:
@@ -251,6 +300,8 @@ class Run:
 
         if reason:
             raise End("failed", reason)
+
+        self.check_switch()
 
         view = TaskView(self.instruction, self.plan_steps, tuple(self.history), tuple(self.notes), self.observation)
         output = self.ask_model(self.model.act, view)
@@ -352,15 +403,15 @@ class Run:
 
         if tool == "finish":
             self.log(action, decision, approved_by, "ok")
-            raise End("done", None, args["report"])
+            raise End("done", None, plain_text(args["report"]))
 
         if tool == "ask_user":
-            answer = self.from_client(self.client.ask, args["question"])
+            answer = self.from_client(self.client.ask, plain_text(args["question"]))
             answered = isinstance(answer, str) and answer != ""
             self.log(action, decision, approved_by, "ok" if answered else "failed")
 
             if answered:
-                self.notes.append(answer[:MAX_NOTE])
+                self.notes.append(SECRET_NOTE if find_secrets(answer) else answer[:MAX_NOTE])
                 self.repairs = 0
                 self.history.append(Step(tool, decision.outcome, decision.reason, "ok"))
             else:
@@ -376,6 +427,10 @@ class Run:
         # sudah dihentikan.
         if approved_by:
             self.recheck(action)
+
+        # Sakelar bisa dinyalakan selama model berpikir. Dicek lagi tepat
+        # sebelum aksi dicatat dan dikirim.
+        self.check_switch()
 
         # Baris log ditulis sebelum aksi dikirim. Kalau log tidak bisa
         # ditulis, self.log mengakhiri tugas dan klien tidak pernah dipanggil.
@@ -418,7 +473,7 @@ class Run:
         """Keputusan guard. Stop dan klien yang hilang langsung mengakhiri tugas."""
 
         context = Context(
-            stopped=self.store.stop_requested(self.owner, self.task_id) is not False,
+            stopped=self.store.stop_requested(self.owner, self.task_id) is not False or self.client_stopped(),
             ticket_ok=self.from_client(self.client.active) is True,
             mode=self.mode,
             scope=self.scope,
@@ -435,6 +490,32 @@ class Run:
             raise End("stopped", "stop") if decision.reason == "stopped" else End("failed", "client_gone")
 
         return decision
+
+    def client_stopped(self):
+        """Stop yang dilaporkan klien sendiri, sebelum sampai ke database.
+
+        Metode stopped() di klien bersifat pilihan. Kalau ada tetapi gagal
+        dipanggil, dihitung sebagai stop.
+        """
+
+        method = getattr(self.client, "stopped", None)
+
+        if method is None:
+            return False
+
+        try:
+            return method() is not False
+        except Exception:
+            return True
+
+    def check_switch(self):
+        try:
+            switch = self.still_allowed()
+        except Exception:
+            raise End("failed", "switch_error") from None
+
+        if switch is not None:
+            raise End("stopped", switch)
 
     def recheck(self, action):
         """Hentikan tugas kalau stop ditekan, klien hilang, atau waktu habis selama dialog."""

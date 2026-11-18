@@ -21,6 +21,9 @@ SECRET_PATTERNS = {
     "github": re.compile(r"gh[pousr]_[A-Za-z0-9]{36}"),
     "midtrans": re.compile(r"(?:SB-)?Mid-server-[A-Za-z0-9_-]{16,}"),
     "private_key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+    # Kode, token akses, dan token pembaruan perangkat Ciel Agent API.
+    "agent_token": re.compile(r"c(?:at|rt|dc)1\.[A-Za-z0-9_-]{8,64}\.[A-Za-z0-9_-]{20,}"),
+    "anthropic": re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"),
 }
 
 
@@ -68,6 +71,9 @@ class SecretScanTest(unittest.TestCase):
             "github": ["ghp_" + "d" * 36],
             "midtrans": ["Mid-server-" + "e" * 20, "SB-Mid-server-" + "f" * 20],
             "private_key": ["-----BEGIN " + "PRIVATE KEY-----", "-----BEGIN RSA " + "PRIVATE KEY-----"],
+            "agent_token": ["cat" + "1.a1b2c3d4e5f60718." + "g" * 43, "crt" + "1.a1b2c3d4e5f60718." + "h" * 43,
+                            "cdc" + "1.a1b2c3d4e5f60718." + "i" * 43],
+            "anthropic": ["sk-" + "ant-api03-" + "j" * 30],
         }
 
         self.assertEqual(set(samples), set(SECRET_PATTERNS))

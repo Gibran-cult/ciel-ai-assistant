@@ -4,7 +4,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from guard.audit import AuditEvent, chain_hash, redact, target_of, verify_chain
+from guard.audit import AuditEvent, chain_hash, explain_chain, redact, target_of, verify_chain
 from guard.risk import Action
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -170,6 +170,25 @@ class SqlTest(unittest.TestCase):
             with self.subTest(column=column):
                 self.assertIn(column, table)
 
+
+class ExplainChainTest(unittest.TestCase):
+    """Gerbang 2B: baris lebih di ujung tidak dilaporkan sebagai pemotongan."""
+
+    def test_the_four_outcomes(self):
+        key = b"kunci-rantai-uji-0123456789"
+        rows = chain([event(1), event(2), event(3)], key=key)
+        hashes = [stored for _, stored in rows]
+        self.assertEqual(explain_chain(rows, head=hashes[2], key=key), ("ok", None))
+        self.assertEqual(explain_chain(rows, head=hashes[1], key=key), ("extra", 2))
+        self.assertEqual(explain_chain(rows[:2], head=hashes[2], key=key), ("missing", 2))
+        broken = [rows[0], (replace(rows[1][0], result="failed"), rows[1][1]), rows[2]]
+        self.assertEqual(explain_chain(broken, head=hashes[2], key=key), ("broken", 1))
+
+    def test_one_extra_row_after_an_empty_head(self):
+        key = b"kunci-rantai-uji-0123456789"
+        rows = chain([event(1)], key=key)
+        self.assertEqual(explain_chain(rows, head="", key=key), ("extra", 0))
+        self.assertEqual(explain_chain(rows, key=key), ("ok", None))
 
 if __name__ == "__main__":
     unittest.main()

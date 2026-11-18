@@ -97,5 +97,17 @@ class ScopeJsonTest(unittest.TestCase):
         )
 
 
+class PlanHostRulesTest(unittest.TestCase):
+    def test_plan_hosts_must_be_registrable_names(self):
+        for host in ("co.id", "web.id", "github.io", "vercel.app", "127.1", "192.168.1", "0x7f.1", "10.0.0.1", "xn--shpee-3qa.co.id",
+                     "toko.xn--p1ai", "localhost"):
+            with self.subTest(host=host):
+                self.assertIsNone(parse_plan({**GOOD, "hosts": [host]}, 0))
+
+    def test_ordinary_shop_hosts_still_pass(self):
+        for host in ("shopee.co.id", "ciel-ai.web.id", "user.github.io", "tokopedia.com", "toko123.id"):
+            with self.subTest(host=host):
+                self.assertEqual(parse_plan({**GOOD, "hosts": [host]}, 0).scope.hosts, frozenset({host}))
+
 if __name__ == "__main__":
     unittest.main()

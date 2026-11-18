@@ -196,5 +196,147 @@ class AgentStoreTest(unittest.TestCase):
             self.assertIn(text, SQL)
 
 
+H = "a" * 64
+
+
+def function_body(sql, name):
+    start = sql.index(f"create or replace function public.{name}(")
+    return sql[start:sql.index("$$;", sql.index("$$", start) + 2)]
+
+
+def sent_params(request):
+    return request.call_args.kwargs["params"]
+
+
+class DeviceStoreTest(unittest.TestCase):
+    """Perangkat, token, dan pembersih tugas macet (rencana 2B, Task 3)."""
+
+    def test_new_agent_tables_have_rls_and_no_policy(self):
+        for table in ("agent_devices", "agent_device_tokens"):
+            self.assertIn(f"create table if not exists public.{table} (", SQL)
+            self.assertIn(f"alter table public.{table} enable row level security;", SQL)
+        self.assertNotIn("create policy", SQL.lower())
+        self.assertIn("check (kind in ('code', 'access', 'refresh'))", SQL)
+        self.assertIn("check (platform in ('extension', 'desktop'))", SQL)
+
+    def test_tasks_record_their_last_activity(self):
+        self.assertIn("alter table public.agent_tasks add column if not exists updated_at timestamptz not null default now();", SQL)
+        self.assertIn("before update on public.agent_tasks", SQL)
+
+    def test_sweep_sets_stop_and_status_in_one_statement(self):
+        body = function_body(SQL, "ciel_agent_sweep")
+        self.assertEqual(body.lower().count("update public.agent_tasks"), 1)
+        self.assertIn("stop_requested = true", body)
+        self.assertIn("status = 'failed'", body)
+        self.assertIn("reason = 'swept'", body)
+        self.assertIn("revoke execute on function public.ciel_agent_sweep(integer) from public, anon, authenticated;", SQL)
+
+    def test_revoking_is_one_function_that_also_drops_tokens(self):
+        body = function_body(SQL, "ciel_agent_revoke_device")
+        self.assertIn("revoked_at = now()", body)
+        self.assertIn("delete from public.agent_device_tokens", body)
+        self.assertIn("revoke execute on function public.ciel_agent_revoke_device(text, text) from public, anon, authenticated;", SQL)
+
+    def test_create_device_checks_its_fields(self):
+        with patch("requests.post", return_value=Response(status=201)) as post:
+            self.assertTrue(store().create_device(ALICE, "d0011223344556677"[:16], "Chrome di laptop", "extension"))
+        self.assertEqual(post.call_args.kwargs["json"], {"owner": ALICE, "id": "d0011223344556677"[:16], "name": "Chrome di laptop", "platform": "extension"})
+
+        with patch("requests.post") as post:
+            for args in (("x", "d1", "n", "extension"), (ALICE, "d 1", "n", "extension"), (ALICE, "d1", "", "extension"),
+                         (ALICE, "d1", "n" * 61, "extension"), (ALICE, "d1", "n", "ponsel"), (ALICE, "d1", None, "desktop")):
+                self.assertFalse(store().create_device(*args))
+        post.assert_not_called()
+
+    def test_a_revoked_device_is_not_active(self):
+        for rows, expected in (([{"revoked_at": None}], True), ([{"revoked_at": "2026-11-18T00:00:00Z"}], False), ([], False)):
+            with patch("requests.request", return_value=Response(rows)):
+                self.assertIs(store().device_active(ALICE, "d1"), expected)
+
+        for failure in (requests.exceptions.ConnectionError("mati"),):
+            with patch("requests.request", side_effect=failure):
+                self.assertIsNone(store().device_active(ALICE, "d1"))
+
+        with patch("requests.request", return_value=Response("bukan daftar")):
+            self.assertIsNone(store().device_active(ALICE, "d1"))
+
+    def test_revoke_device_calls_the_owner_filtered_function(self):
+        with patch("requests.post", return_value=Response(True)) as post:
+            self.assertTrue(store().revoke_device(ALICE, "d1"))
+        self.assertTrue(post.call_args.args[0].endswith("/rpc/ciel_agent_revoke_device"))
+        self.assertEqual(post.call_args.kwargs["json"], {"p_owner": ALICE, "p_device": "d1"})
+
+        with patch("requests.post", return_value=Response(False)):
+            self.assertFalse(store().revoke_device(ALICE, "d1"))
+
+    def test_save_find_and_use_a_token_once(self):
+        with patch("requests.post", return_value=Response(status=201)) as post:
+            self.assertTrue(store().save_token(ALICE, H, "code", "2026-11-18T03:01:00+00:00", challenge="c" * 43, redirect="ciel://auth"))
+        self.assertEqual(post.call_args.kwargs["json"], {
+            "owner": ALICE, "hash": H, "kind": "code", "expires_at": "2026-11-18T03:01:00+00:00",
+            "device": None, "challenge": "c" * 43, "redirect": "ciel://auth",
+        })
+
+        with patch("requests.request", return_value=Response([{"hash": H, "kind": "access"}])) as request:
+            self.assertEqual(store().find_token(ALICE, H)["kind"], "access")
+        self.assertEqual((sent_params(request)["owner"], sent_params(request)["hash"]), ("eq." + ALICE, "eq." + H))
+
+        with patch("requests.request", return_value=Response([{"hash": H, "kind": "code"}])) as request:
+            self.assertEqual(store().use_token(ALICE, H)["kind"], "code")
+        params = sent_params(request)
+        self.assertEqual((request.call_args.args[0], params["owner"], params["hash"], params["used_at"]), ("PATCH", "eq." + ALICE, "eq." + H, "is.null"))
+        self.assertEqual(request.call_args.kwargs["headers"]["Prefer"], "return=representation")
+
+        for payload in ([], [{}, {}], None, ValueError("x")):
+            with patch("requests.request", return_value=Response(payload)):
+                self.assertIsNone(store().use_token(ALICE, H))
+
+    def test_bad_token_input_never_reaches_the_database(self):
+        with patch("requests.request") as request, patch("requests.post") as post:
+            for bad in ("pendek", "A" * 64, H + "0", None):
+                self.assertIsNone(store().find_token(ALICE, bad))
+                self.assertIsNone(store().use_token(ALICE, bad))
+                self.assertFalse(store().save_token(ALICE, bad, "code", "2026-11-18T03:01:00+00:00"))
+            self.assertFalse(store().save_token(ALICE, H, "kunci", "2026-11-18T03:01:00+00:00"))
+            self.assertFalse(store().save_token(ALICE, H, "access", ""))
+            self.assertIsNone(store().find_token("x", H))
+        request.assert_not_called()
+        post.assert_not_called()
+
+    def test_load_devices_and_touch_are_owner_filtered(self):
+        with patch("requests.request", return_value=Response([{"id": "d1"}])) as request:
+            self.assertEqual(store().load_devices(ALICE), [{"id": "d1"}])
+        self.assertEqual(sent_params(request)["owner"], "eq." + ALICE)
+
+        with patch("requests.request", return_value=Response([{"id": "d1"}])) as request:
+            self.assertTrue(store().touch_device(ALICE, "d1"))
+        self.assertEqual((sent_params(request)["owner"], sent_params(request)["id"]), ("eq." + ALICE, "eq.d1"))
+        self.assertEqual(request.call_args.kwargs["json"], {"last_seen_at": "now"})
+
+    def test_sweep_reports_the_count(self):
+        with patch("requests.post", return_value=Response(2)) as post:
+            self.assertEqual(store().sweep(900), 2)
+        self.assertEqual(post.call_args.kwargs["json"], {"p_idle_seconds": 900})
+
+        for payload in (None, "dua", -1, True):
+            with patch("requests.post", return_value=Response(payload)):
+                self.assertIsNone(store().sweep(900))
+
+        with patch("requests.post") as post:
+            for bad in (0, -5, "900", 1.5):
+                self.assertIsNone(store().sweep(bad))
+        post.assert_not_called()
+
+
+class RpcHeaderTest(unittest.TestCase):
+    def test_database_functions_are_asked_for_their_answer(self):
+        calls = ((lambda s: s.sweep(900), 2), (lambda s: s.revoke_device(ALICE, "d1"), True),
+                 (lambda s: s.cost_since("2026-11-18T00:00:00+07:00"), 5))
+
+        for call, payload in calls:
+            with patch("requests.post", return_value=Response(payload)) as post:
+                call(store())
+            self.assertNotEqual(post.call_args.kwargs["headers"].get("Prefer"), "return=minimal")
+
 if __name__ == "__main__":
     unittest.main()

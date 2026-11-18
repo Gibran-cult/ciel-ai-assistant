@@ -362,6 +362,43 @@ repository's Settings, Secrets and variables, Actions:
 GitHub disables scheduled workflows after 60 days without activity in the repository. If
 the alerts stop, re-enable the workflow in the Actions tab.
 
+## 13. Ciel Agent API
+
+Do this last, after steps 1 to 12 work. The plan is `docs/plans/2026-11-18-agent-service.md`; its
+"Langkah pemilik" section is the order. The agent stays off for users until the owner fills in
+`AGENT_ENABLED`.
+
+1. DNS: add DNS-only A records `agent` and `agent-staging` pointing at the VPS (like `api`).
+2. Google Cloud Console, the app's OAuth client: add the redirect URIs
+   `https://agent.ciel-ai.web.id/v1/device/callback` and
+   `https://agent-staging.ciel-ai.web.id/v1/device/callback`.
+3. Supabase: run the agent sections at the end of `docs/chat_store.sql` in the production
+   project, and the whole file in the staging project.
+4. Copy `agent.env.example` to `agent.env` and `agent-staging.env.example` to
+   `agent-staging.env`, then fill them in. Make every `AGENT_*_KEY` with `openssl rand -hex 32`,
+   different for production and staging. Leave `AGENT_ENABLED` empty in `agent.env`.
+
+       chmod 600 agent.env agent-staging.env
+
+5. Build and start both services, then check them from the laptop:
+
+       docker compose up -d agent agent-staging
+       docker compose ps agent agent-staging
+
+       python tools/agent_smoke.py --base https://agent-staging.ciel-ai.web.id --origin chrome-extension://<extension id>
+       python tools/agent_smoke.py --base https://agent.ciel-ai.web.id --origin chrome-extension://<extension id>
+
+   The smoke check takes about 15 seconds (it waits for the hello timeout) and spends no model
+   money. It prints `ok` or the list of problems.
+
+Kill switch for running tasks (takes effect at the next turn of every task):
+
+       docker compose exec agent touch /data/agent_off
+       docker compose exec agent rm /data/agent_off
+
+Stopping the service (`docker compose stop agent`) also ends every running task; the sweeper
+closes their rows within 15 minutes of the next start.
+
 ## Rollback to the laptop
 
 The laptop backend stays as it is until the VPS has run for 14 days without a problem.
