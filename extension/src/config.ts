@@ -18,7 +18,8 @@ function safeBase(value: unknown): value is string {
   }
 }
 
-export async function apiBase(development: boolean = import.meta.env.DEV): Promise<string> {
+// Build rilis (mode "production") selalu memakai alamat produksi.
+export async function apiBase(development: boolean = import.meta.env.MODE !== "production"): Promise<string> {
   if (!development) return PRODUCTION_API;
   const { apiBase: chosen } = await chrome.storage.local.get("apiBase");
   return safeBase(chosen) ? chosen : PRODUCTION_API;

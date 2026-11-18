@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from agent_api.devices import device_router
@@ -86,6 +87,12 @@ def create_app(settings, *, store, models, google, clock, missing=()):
         return app
 
     signer = TicketSigner(settings.ticket_keys)
+
+    # Ekstensi tidak punya izin host tetap untuk layanan ini, jadi browser
+    # hanya membiarkan jawabannya terbaca kalau ada header CORS. Hanya origin
+    # ekstensi yang terdaftar (AGENT_WS_ORIGINS), tanpa cookie.
+    app.add_middleware(CORSMiddleware, allow_origins=sorted(settings.ws_origins), allow_credentials=False,
+                       allow_methods=["GET", "POST", "DELETE"], allow_headers=["authorization", "content-type"], max_age=600)
 
     @app.get("/v1/ticket-keys")
     def ticket_keys():
