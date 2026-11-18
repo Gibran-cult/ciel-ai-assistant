@@ -10,6 +10,8 @@ bagian yang salah lalu melanjutkan akan menghasilkan rencana yang tidak
 pernah dilihat pengguna.
 """
 
+import re
+
 from dataclasses import dataclass, replace
 
 from guard.domains import match_allowed, normalize_host
@@ -34,12 +36,30 @@ def plannable(kind):
     return isinstance(kind, str) and ACTION_LEVELS.get(kind, R3) != R3
 
 
+# Akhiran yang dipakai banyak pemilik berbeda. Host persis seperti ini
+# di lingkup tugas akan cocok dengan semua situs di bawahnya.
+PUBLIC_SUFFIXES = frozenset({
+    "co.id", "ac.id", "or.id", "go.id", "web.id", "my.id", "biz.id", "sch.id", "net.id", "mil.id", "desa.id", "ponpes.id",
+    "github.io", "vercel.app", "netlify.app", "pages.dev", "web.app", "firebaseapp.com", "blogspot.com", "herokuapp.com",
+})
+TLD_RE = re.compile(r"[a-z]{2,63}")
+
+
 def allowed_host(host):
-    """Host yang sudah dirapikan, atau None kalau tidak sah atau selalu ditolak."""
+    """Host yang sudah dirapikan, atau None kalau tidak sah atau selalu ditolak.
+
+    Yang ditolak: akhiran publik, alamat IP dalam bentuk apa pun (label
+    terakhir harus huruf), dan nama punycode (tab_open juga menolaknya).
+    """
 
     host = normalize_host(host)
 
-    if host is None or match_allowed(host, BLOCKED_HOSTS):
+    if host is None or match_allowed(host, BLOCKED_HOSTS) or host in PUBLIC_SUFFIXES:
+        return None
+
+    labels = host.split(".")
+
+    if not TLD_RE.fullmatch(labels[-1]) or any(label.startswith("xn--") for label in labels):
         return None
 
     return host

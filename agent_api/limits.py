@@ -16,6 +16,7 @@ from guard.limits import JAKARTA
 MAX_STEPS = 40      # usulan model per tugas
 MAX_SECONDS = 900   # 15 menit
 MAX_REPAIRS = 2     # langkah gagal berturut-turut yang masih boleh dicoba ulang
+MAX_INSTRUCTION = 2000  # karakter perintah pengguna
 CONFIRM_SECONDS = 120   # jawaban dialog konfirmasi yang lebih lama dari ini tidak berlaku
 DAY = 86400
 MONTH = 30 * DAY    # jendela kuota tugas: 30 hari bergulir

@@ -45,6 +45,10 @@ class BindTest(unittest.TestCase):
         # Efek yang rusak diteruskan apa adanya: guard yang memblokirnya.
         self.assertEqual(classify(bind(call("tab_click", ref=4), page).action).reason, "unknown_kind")
 
+    def test_an_address_with_a_secret_is_refused(self):
+        self.assertEqual(bind(call("tab_open", url="https://shopee.co.id/search?q=4111111111111111"), None), Rejected("tab_open", "secret_text"))
+        self.assertEqual(bind(call("tab_open", url="https://shopee.co.id/search?q=mouse"), None).tool, "tab_open")
+
     def test_typed_text_reaches_the_guard(self):
         bound = bind(call("tab_type", ref=1, text="4111 1111 1111 1111"), PAGE)
         self.assertEqual(bound.action.text, "4111 1111 1111 1111")

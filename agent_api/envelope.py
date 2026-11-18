@@ -6,10 +6,11 @@ dan dengan penanda yang tidak bisa ditiru dari dalam isi.
 """
 
 import re
+import secrets
 
 SOURCES = frozenset({"page", "file", "screen", "listing", "tool"})
 MAX_CHARS = 20_000
-CLOSE = "<<<AKHIR DATA>>>"
+NONCE_RE = re.compile(r"[0-9a-f]{8}")
 CUT = "\n[dipotong]"
 
 # Tiga tanda berurutan di dalam isi diganti dengan tanda kutip sudut. Sisa
@@ -29,8 +30,17 @@ INJECTION_RE = re.compile(
 )
 
 
-def wrap(source, text):
-    """Bungkus isi tidak tepercaya untuk dikirim ke model."""
+def wrap(source, text, nonce=None):
+    """Bungkus isi tidak tepercaya untuk dikirim ke model.
+
+    Setiap amplop punya id acak di kedua penandanya. Model diberi tahu bahwa
+    amplop hanya berakhir di penanda penutup dengan id yang sama, jadi
+    tiruan penanda di dalam isi (termasuk hasil penggantian di SWAPS) tidak
+    bisa dibaca sebagai akhir data.
+    """
+
+    if not isinstance(nonce, str) or not NONCE_RE.fullmatch(nonce):
+        nonce = secrets.token_hex(4)
 
     label = source if isinstance(source, str) and source in SOURCES else "unknown"
     body = text if isinstance(text, str) else ""
@@ -41,7 +51,7 @@ def wrap(source, text):
     for marker, safe in SWAPS:
         body = body.replace(marker, safe)
 
-    return f"<<<DATA sumber={label}>>>\n{body}\n{CLOSE}"
+    return f"<<<DATA sumber={label} id={nonce}>>>\n{body}\n<<<AKHIR DATA {nonce}>>>"
 
 
 def flags_injection(text):

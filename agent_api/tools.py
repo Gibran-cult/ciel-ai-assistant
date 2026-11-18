@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from guard.domains import check_url, normalize_host
-from guard.risk import Action
+from guard.risk import Action, find_secrets
 
 
 @dataclass(frozen=True)
@@ -105,6 +105,11 @@ def bind(call, page):
         return Bound(tool, args, Action(kind=tool))
 
     if tool == "tab_open":
+        # Alamat yang memuat rahasia (nomor kartu di kueri, misalnya) tidak
+        # dibuka: alamat itu ikut ke riwayat browser dan ke server situs.
+        if find_secrets(args["url"]):
+            return Rejected(tool, "secret_text")
+
         target = check_url(args["url"])
 
         if target.problem:

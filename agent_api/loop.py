@@ -27,7 +27,7 @@ from urllib.parse import unquote
 
 from agent_api.envelope import flags_injection, wrap
 from agent_api.journal import Journal
-from agent_api.limits import CONFIRM_SECONDS, day_start, over_limit, start_refusal, task_rate_limits
+from agent_api.limits import CONFIRM_SECONDS, MAX_INSTRUCTION, day_start, over_limit, start_refusal, task_rate_limits
 from agent_api.model import ModelReply, Step, TaskView
 from agent_api.plan import parse_plan, scope_to_json, widened
 from agent_api.tools import TYPING, Observation, Rejected, bind
@@ -35,13 +35,20 @@ from guard.audit import target_of
 from guard.decide import Context, Decision, decide
 from guard.domains import lookalike_of, match_allowed, normalize_host
 from guard.limits import SpendLimits
-from guard.risk import R3, Action
+from guard.risk import R3, Action, find_secrets
 
 # Alamat di dalam teks, dengan atau tanpa "https://": (host, jalur).
 LINK_RE = re.compile(r"(?:https?://)?((?:[a-z0-9-]+\.)+[a-z][a-z0-9-]+)(?::\d{1,5})?(/[^\s\"'<>]*)?", re.IGNORECASE)
 PATH_END = "/.,;:!?)]}"
 MAX_NOTE = 2000
 MAX_PREVIEW = 200
+SECRET_NOTE = "[jawaban berisi data rahasia, tidak diteruskan]"
+
+# Teks dari model yang ditampilkan ke pengguna: gambar dibuang, tautan
+# menjadi teks biasa, dan tag HTML dibuang (docs/security.md bagian 5, lapis 5).
+IMAGE_MD = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+LINK_MD = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+HTML_TAG = re.compile(r"</?[A-Za-z][^<>]*>")
 
 
 @dataclass(frozen=True)
@@ -101,13 +108,30 @@ def link_keys(text):
     return {link_key(host, path) for host, path in LINK_RE.findall(text)}
 
 
-def run_task(owner, task_id, device, instruction, *, model, client, store, config, account, clock, chain_key):
-    """Jalankan satu tugas. Selalu mengembalikan TaskResult."""
+def plain_text(text):
+    """Teks model tanpa gambar, tautan aktif, atau tag HTML."""
+
+    text = IMAGE_MD.sub("", text)
+    text = LINK_MD.sub(r"\1", text)
+    return HTML_TAG.sub("", text)
+
+
+def run_task(owner, task_id, device, instruction, *, model, client, store, config, account, clock, chain_key,
+             still_allowed=lambda: None):
+    """Jalankan satu tugas. Selalu mengembalikan TaskResult.
+
+    still_allowed dipanggil di awal setiap putaran: alasan selain None
+    (misalnya "agent_off" atau "cost_cap") menghentikan tugas.
+    """
+
+    if not isinstance(instruction, str) or not instruction.strip() or len(instruction) > MAX_INSTRUCTION:
+        return TaskResult("refused", "bad_instruction", 0, "")
 
     run = None
 
     try:
         run = Run(owner, task_id, device, instruction, model, client, store, config, account, clock, chain_key)
+        run.still_allowed = still_allowed
         refusal = run.start()
 
         if refusal:
@@ -136,6 +160,16 @@ def run_task(owner, task_id, device, instruction, *, model, client, store, confi
                 pass
 
         return TaskResult("failed", "internal_error", steps, "")
+    except BaseException:
+        # Pembatalan dari luar (asyncio, Ctrl+C) tetap menutup baris tugas,
+        # supaya akun tidak terkunci, lalu diteruskan ke pemanggil.
+        if run is not None and run.created:
+            try:
+                run.close("failed", "internal_error")
+            except Exception:
+                pass
+
+        raise
 
 
 class Run:
@@ -164,6 +198,7 @@ class Run:
         self.page = None            # pengamatan terakhir yang berhasil, sumber fakta untuk bind
         self.observation = ""       # amplop yang dilihat model di putaran berikutnya
         self.untrusted = []         # semua isi tidak tepercaya yang sudah dilihat tugas ini
+        self.still_allowed = lambda: None
         self.history = []
         self.notes = []
 
@@ -251,6 +286,14 @@ class Run:
 
         if reason:
             raise End("failed", reason)
+
+        try:
+            switch = self.still_allowed()
+        except Exception:
+            raise End("failed", "switch_error") from None
+
+        if switch is not None:
+            raise End("stopped", switch)
 
         view = TaskView(self.instruction, self.plan_steps, tuple(self.history), tuple(self.notes), self.observation)
         output = self.ask_model(self.model.act, view)
@@ -352,15 +395,15 @@ class Run:
 
         if tool == "finish":
             self.log(action, decision, approved_by, "ok")
-            raise End("done", None, args["report"])
+            raise End("done", None, plain_text(args["report"]))
 
         if tool == "ask_user":
-            answer = self.from_client(self.client.ask, args["question"])
+            answer = self.from_client(self.client.ask, plain_text(args["question"]))
             answered = isinstance(answer, str) and answer != ""
             self.log(action, decision, approved_by, "ok" if answered else "failed")
 
             if answered:
-                self.notes.append(answer[:MAX_NOTE])
+                self.notes.append(SECRET_NOTE if find_secrets(answer) else answer[:MAX_NOTE])
                 self.repairs = 0
                 self.history.append(Step(tool, decision.outcome, decision.reason, "ok"))
             else:

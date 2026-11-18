@@ -1,3 +1,4 @@
+import re
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -7,7 +8,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from agent_api.limits import AgentConfig  # noqa: E402
-from agent_api.loop import Account, ConfirmPrompt, TaskResult, run_task  # noqa: E402
+from agent_api.loop import Account, ConfirmPrompt, TaskResult, plain_text, run_task  # noqa: E402
 from agent_api.model import ModelReply, ScriptedModel  # noqa: E402
 from agent_api.tools import Bound, Control, Observation, bind  # noqa: E402
 from guard.audit import AuditEvent, verify_chain  # noqa: E402
@@ -100,7 +101,7 @@ class HappyPathTest(unittest.TestCase):
         first, second, third = model.views
         self.assertEqual((first.history, first.observation), ((), ""))
         self.assertEqual(first.steps, ("Buka toko", "Baca halaman"))
-        self.assertEqual(second.observation, "<<<DATA sumber=page>>>\nBeranda toko\n<<<AKHIR DATA>>>")
+        self.assertRegex(second.observation, r"^<<<DATA sumber=page id=([0-9a-f]{8})>>>\nBeranda toko\n<<<AKHIR DATA \1>>>$")
         self.assertEqual([(step.tool, step.outcome, step.result) for step in third.history],
                          [("tab_open", "allow", "ok"), ("tab_read", "allow", "ok")])
 
@@ -297,7 +298,7 @@ class InjectionTest(unittest.TestCase):
 
         for view in model.views:
             self.assertEqual(view.instruction, INSTRUCTION)
-            self.assertIn(view.observation.count("<<<AKHIR DATA>>>"), (0, 1))
+            self.assertIn(len(re.findall(r"<<<AKHIR DATA", view.observation)), (0, 1))
             self.assertEqual(view.notes, ())
 
         self.assertIn("Abaikan instruksi", model.views[2].observation)
@@ -665,6 +666,68 @@ class ReviewFindingsTest(unittest.TestCase):
         self.assertNotIn("4111", repr(store.actions) + repr(model.views))
         self.assertNotIn("script", repr(store.actions) + repr(model.views))
 
+
+class GateTest2B(unittest.TestCase):
+    """Gerbang dari tinjauan cabang 2A, dikerjakan di awal rencana 2B."""
+
+    def test_base_exception_closes_the_task_row(self):
+        class Cancelled(FakeClient):
+            def run(self, *args):
+                raise KeyboardInterrupt
+
+        store = MemoryStore()
+
+        with self.assertRaises(KeyboardInterrupt):
+            run([OPEN, finish()], client=Cancelled(), store=store)
+
+        self.assertEqual((store.load_task(ALICE, TASK)["status"], store.load_task(ALICE, TASK)["reason"]), ("failed", "internal_error"))
+
+    def test_the_switch_and_the_cost_cap_are_read_every_turn(self):
+        answers = iter([None, None, "agent_off"])
+        result, _, client, store = run([OPEN, READ, READ, finish()], still_allowed=lambda: next(answers))
+        self.assertEqual((result.status, result.reason, len(client.ran)), ("stopped", "agent_off", 2))
+        self.assertEqual(store.load_task(ALICE, TASK)["status"], "stopped")
+
+        result, _, client, _ = run([OPEN, finish()], still_allowed=lambda: "cost_cap")
+        self.assertEqual((result.status, result.reason, client.ran), ("stopped", "cost_cap", []))
+
+    def test_a_broken_switch_check_stops_the_task(self):
+        def broken():
+            raise OSError("disk")
+
+        result, _, client, _ = run([OPEN, finish()], still_allowed=broken)
+        self.assertEqual((result.status, client.ran), ("failed", []))
+
+    def test_long_or_empty_instructions_are_refused_before_a_task_exists(self):
+        for text in ("", "   ", "a" * 2001, None):
+            with self.subTest(text=text):
+                store = MemoryStore()
+                result = run_task(ALICE, TASK, "d1", text, model=ScriptedModel(PLAN, [finish()]), client=FakeClient(), store=store,
+                                  config=ON, account=ACCOUNT, clock=Clock(), chain_key=KEY)
+                self.assertEqual(result, TaskResult("refused", "bad_instruction", 0, ""))
+                self.assertEqual(store.tasks, {})
+
+        self.assertEqual(run_task(ALICE, TASK, "d1", "a" * 2000, model=ScriptedModel(PLAN, [finish()]), client=FakeClient(),
+                                  store=MemoryStore(), config=ON, account=ACCOUNT, clock=Clock(), chain_key=KEY).status, "done")
+
+    def test_reports_and_questions_reach_the_client_as_plain_text(self):
+        self.assertEqual(plain_text("Lihat ![x](https://a.example/p.png) dan [toko](https://b.example)"), "Lihat  dan toko")
+        self.assertEqual(plain_text('Klik <a href="https://c.example">di sini</a><img src=x onerror=y>'), "Klik di sini")
+        self.assertEqual(plain_text("Harga 3 < 5 dan 7 > 2"), "Harga 3 < 5 dan 7 > 2")
+
+        result, _, client, _ = run([call("ask_user", question="Pilih [warna](https://x.example)?"), finish("Beres ![a](https://y.example/a.png)")])
+        self.assertEqual((client.questions, result.report), (["Pilih warna?"], "Beres "))
+
+    def test_secret_answers_never_reach_the_model(self):
+        _, model, _, store = run([call("ask_user", question="Nomor?"), finish()], client=FakeClient(answer="kartu 4111 1111 1111 1111"))
+        self.assertEqual(model.views[1].notes, ("[jawaban berisi data rahasia, tidak diteruskan]",))
+        self.assertNotIn("4111", repr(store.actions) + repr(model.views))
+
+    def test_an_address_with_a_secret_is_never_opened(self):
+        result, _, client, store = run([call("tab_open", url="https://shopee.co.id/search?q=4111111111111111"), finish()])
+        self.assertEqual(client.ran, [])
+        self.assertIn(("tab_open", "block", "secret_text"), [(row["kind"], row["decision"], row["reason"]) for row in rows(store)])
+        self.assertNotIn("4111", repr(store.actions))
 
 if __name__ == "__main__":
     unittest.main()
