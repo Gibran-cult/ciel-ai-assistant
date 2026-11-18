@@ -150,7 +150,7 @@ describe("Runner", () => {
 
   test("tab_read injects the content script first when the page has none", async () => {
     const { runner, executeScript, result, reading } = setup();
-    executeScript.mockImplementationOnce(async () => [{ result: null }]);
+    executeScript.mockImplementationOnce(async () => [{ result: "ciel:no_script" }]);
     await runner.onAction(sign({ tool: "tab_read", args: {} }));
     expect(executeScript.mock.calls.some(([details]) => details.files?.[0] === "content.js")).toBe(true);
     expect(result).toHaveBeenCalledWith("t1", 3, reading.observation);
@@ -158,7 +158,7 @@ describe("Runner", () => {
 
   test("a click on a page with no content script is refused, never retried on a new page", async () => {
     const { runner, executeScript, result } = setup();
-    executeScript.mockImplementation(async () => [{ result: null }]);
+    executeScript.mockImplementation(async () => [{ result: "ciel:no_script" }]);
     await runner.onAction(sign());
     expect(executeScript.mock.calls.every(([details]) => !details.files)).toBe(true);
     expect(result).toHaveBeenCalledWith("t1", 3, expect.objectContaining({ ok: false }));
@@ -204,4 +204,86 @@ test("refuse answers a held or late action without touching the tab", async () =
     ["t1", 4, expect.objectContaining({ ok: false, text: expect.stringContaining("serah terima") })],
   ]);
   expect(executeScript).not.toHaveBeenCalled();
+});
+
+test("each verified action is reported for the panel log", async () => {
+  const log = vi.fn();
+  const result = vi.fn(() => true);
+  const runner = new Runner({
+    keys: async () => KEYS, device: async () => "d1", now: () => NOW,
+    tabs: { get: vi.fn(async () => ({ id: 1, windowId: 9, url: "https://shopee.co.id/" })), create: vi.fn(), remove: vi.fn() },
+    scripting: { executeScript: vi.fn(async () => [{ result: { observation: { ok: true, source: "page", text: "", host: "shopee.co.id", controls: {} }, generation: 1 } }]) },
+    hasPermission: async () => true, waitForLoad: async () => undefined, result, needPermission: vi.fn(), log,
+  });
+  runner.begin(1);
+  await runner.onAction(sign());
+  await runner.onAction(sign({ seq: 4, host: "klikbca.com" }));
+  await runner.onAction({ ...sign({ seq: 5 }), sig: "AAAA" });
+  expect(log.mock.calls).toEqual([
+    [{ tool: "tab_click", host: "shopee.co.id", outcome: "ok" }],
+    [{ tool: "tab_click", host: "klikbca.com", outcome: "refused" }],
+  ]);
+});
+
+test("reading a page that is still loading is retried before giving up", async () => {
+  const reading = { observation: { ok: true, source: "page", text: "Terima kasih", host: "shopee.co.id", controls: {} }, generation: 2 };
+  let calls = 0;
+  const executeScript = vi.fn(async (details: { files?: string[] }): Promise<{ result?: unknown }[]> => {
+    if (details.files) return [{ result: undefined }];
+    calls += 1;
+    if (calls === 1) throw new Error("Frame with ID 0 was removed.");
+    if (calls === 2) throw new Error("Cannot access contents of the page");
+    return [{ result: reading }];
+  });
+  const result = vi.fn(() => true);
+  const runner = new Runner({
+    keys: async () => KEYS, device: async () => "d1", now: () => NOW,
+    tabs: { get: vi.fn(async () => ({ id: 1, windowId: 9, url: "https://shopee.co.id/" })), create: vi.fn(), remove: vi.fn() },
+    scripting: { executeScript }, hasPermission: async () => true, waitForLoad: async () => undefined, result,
+    needPermission: vi.fn(), pause: async () => undefined,
+  });
+  runner.begin(1);
+  await runner.onAction(sign());
+  expect(result).toHaveBeenCalledWith("t1", 3, reading.observation);
+});
+
+test("an action whose page navigates away reports the new page, not a refusal", async () => {
+  const reading = { observation: { ok: true, source: "page", text: "Terima kasih", host: "shopee.co.id", controls: {} }, generation: 2 };
+  let calls = 0;
+  const executeScript = vi.fn(async (details: { files?: string[] }): Promise<{ result?: unknown }[]> => {
+    if (details.files) return [{ result: undefined }];
+    calls += 1;
+    // Klik mengirim formulir: bingkainya hilang sebelum ada hasil.
+    return calls === 1 ? [{}] : [{ result: reading }];
+  });
+  const result = vi.fn(() => true);
+  const runner = new Runner({
+    keys: async () => KEYS, device: async () => "d1", now: () => NOW,
+    tabs: { get: vi.fn(async () => ({ id: 1, windowId: 9, url: "https://shopee.co.id/" })), create: vi.fn(), remove: vi.fn() },
+    scripting: { executeScript }, hasPermission: async () => true, waitForLoad: async () => undefined, result,
+    needPermission: vi.fn(), pause: async () => undefined,
+  });
+  runner.begin(1);
+  await runner.onAction(sign({ tool: "form_submit" }));
+  expect(result).toHaveBeenCalledWith("t1", 3, reading.observation);
+});
+
+test("a null result after acting means the page navigated away", async () => {
+  const reading = { observation: { ok: true, source: "page", text: "Terima kasih", host: "shopee.co.id", controls: {} }, generation: 2 };
+  let calls = 0;
+  const executeScript = vi.fn(async (details: { files?: string[] }): Promise<{ result?: unknown }[]> => {
+    if (details.files) return [{ result: undefined }];
+    calls += 1;
+    return calls === 1 ? [{ result: null }] : [{ result: reading }];
+  });
+  const result = vi.fn(() => true);
+  const runner = new Runner({
+    keys: async () => KEYS, device: async () => "d1", now: () => NOW,
+    tabs: { get: vi.fn(async () => ({ id: 1, windowId: 9, url: "https://shopee.co.id/" })), create: vi.fn(), remove: vi.fn() },
+    scripting: { executeScript }, hasPermission: async () => true, waitForLoad: async () => undefined, result,
+    needPermission: vi.fn(), pause: async () => undefined,
+  });
+  runner.begin(1);
+  await runner.onAction(sign({ tool: "form_submit" }));
+  expect(result).toHaveBeenCalledWith("t1", 3, reading.observation);
 });

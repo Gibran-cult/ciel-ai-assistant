@@ -98,17 +98,29 @@ export interface RunnerDeps {
   };
   hasPermission: (host: string) => Promise<boolean>;
   waitForLoad: (tabId: number) => Promise<void>;
+  /** Jeda singkat antara percobaan membaca halaman yang masih berganti. */
+  pause?: (ms: number) => Promise<void>;
   result: (task: string, seq: number, observation: Observation) => boolean;
   needPermission: (host: string) => void;
+  /** Satu baris log panel per aksi yang tiketnya sah. */
+  /** Content script baru disuntikkan ke tab tugas (halaman baru). */
+  onPage?: (tabId: number) => void;
+  log?: (entry: { tool: string; host: string | null; outcome: "ok" | "failed" | "refused" }) => void;
 }
 
-// Fungsi ini disalin Chrome ke tab, jadi tidak boleh memakai apa pun dari luar.
+const NO_SCRIPT = "ciel:no_script";
+
+// Fungsi ini disalin Chrome ke tab, jadi tidak boleh memakai apa pun dari luar
+// (nilai NO_SCRIPT ditulis ulang di dalamnya). Chrome melaporkan null juga
+// kalau bingkainya hilang di tengah jalan, jadi "tidak ada content script"
+// butuh penanda sendiri.
 function callInPage(tool: string, args: unknown, generation: number): unknown {
   const agent = (globalThis as { cielAgent?: { act: (...values: unknown[]) => unknown; observe: () => unknown } }).cielAgent;
-  if (!agent) return null;
+  if (!agent) return "ciel:no_script";
   return tool === "tab_read" ? agent.observe() : agent.act(tool, args, generation);
 }
 
+const READ_ATTEMPTS = 5;
 const PAGE_TOOLS = new Set(["tab_read", "tab_click", "form_submit", "tab_type", "tab_select", "tab_scroll"]);
 
 export class Runner {
@@ -188,6 +200,11 @@ export class Runner {
 
     const observation = reason === null ? await this.run(ticket!.tool as string, ticket!.args) : refusal(reason);
     if (replyTo) this.deps.result(replyTo.task, replyTo.seq, observation);
+
+    if (PASSED_TICKET.has(reason as RefuseReason | null) && ticket) {
+      const outcome = reason !== null ? "refused" : observation.ok ? "ok" : "failed";
+      this.deps.log?.({ tool: String(ticket.tool), host: normalizeHost(ticket.host), outcome });
+    }
   }
 
   /** Jawab aksi dengan {ok: false} tanpa memeriksa atau menyentuh tab (tugas dihentikan, serah terima). */
@@ -199,26 +216,48 @@ export class Runner {
     }
   }
 
-  private async call(tool: string, args: unknown): Promise<Reading | null> {
+  /**
+   * Jalankan tool di tab. "no_script": content script tidak ada sebelum aksi
+   * (halaman sudah berganti sejak dibaca). "gone": bingkai hilang di tengah
+   * aksi, artinya aksi itu membuat tab pindah halaman.
+   */
+  private async call(tool: string, args: unknown): Promise<Reading | "no_script" | "gone"> {
     const [frame] = await this.deps.scripting.executeScript({
       target: { tabId: this.tabId! },
       func: callInPage as (...values: never[]) => unknown,
       args: [tool, args, this.generation],
     });
-    const reading = frame?.result as Reading | null | undefined;
-    if (!reading || !isObject(reading.observation)) return null;
+    const result = frame?.result;
+    if (result === NO_SCRIPT) return "no_script";
+    const reading = result as Reading | undefined;
+    if (!reading || !isObject(reading.observation)) return "gone";
     this.generation = reading.generation;
     return reading;
   }
 
   private async inject(): Promise<void> {
     await this.deps.scripting.executeScript({ target: { tabId: this.tabId! }, files: ["content.js"] });
+    this.deps.onPage?.(this.tabId!);
   }
 
+  // Halaman yang baru berpindah bisa belum siap disuntik; coba beberapa kali.
   private async readFresh(): Promise<Observation> {
-    await this.deps.waitForLoad(this.tabId!);
-    await this.inject();
-    return (await this.call("tab_read", {}))?.observation ?? refusal("failed");
+    const pause = this.deps.pause ?? ((ms: number) => new Promise<void>((done) => setTimeout(done, ms)));
+
+    for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
+      if (attempt > 0) await pause(400);
+      await this.deps.waitForLoad(this.tabId!);
+
+      try {
+        await this.inject();
+        const reading = await this.call("tab_read", {});
+        if (typeof reading === "object") return reading.observation;
+      } catch {
+        // Halaman masih berganti.
+      }
+    }
+
+    return refusal("failed");
   }
 
   private async run(tool: string, args: unknown): Promise<Observation> {
@@ -242,23 +281,24 @@ export class Runner {
 
       if (tool === "tab_read") {
         const reading = await this.call(tool, args);
-        if (reading) return reading.observation;
-        await this.inject();
-        return (await this.call(tool, args))?.observation ?? refusal("failed");
+        if (typeof reading === "object") return reading.observation;
+        return await this.readFresh();
       }
 
       // Aksi dengan nomor rujukan hanya berlaku di halaman yang dibaca terakhir.
       // Tanpa content script, halamannya sudah baru: jangan diulang di sana.
-      let reading: Reading | null;
+      let reading: Reading | "no_script" | "gone";
 
       try {
         reading = await this.call(tool, args);
       } catch {
-        // Aksinya membuat tab berpindah halaman di tengah jalan.
-        return await this.readFresh();
+        reading = "gone";
       }
 
-      return reading?.observation ?? refusal("no_script");
+      if (reading === "no_script") return refusal("no_script");
+      // Aksinya membuat tab berpindah halaman di tengah jalan: baca halaman baru.
+      if (reading === "gone") return await this.readFresh();
+      return reading.observation;
     } catch {
       return refusal("failed");
     }

@@ -7,7 +7,9 @@
     "build": "vite build && vite build -c vite.content.config.ts",
     "test": "vitest run",
     "lint": "tsc --noEmit && eslint src tests",
-    "tokens": "node scripts/tokens.mjs"
+    "tokens": "node scripts/tokens.mjs",
+    "build:e2e": "vite build --mode e2e && vite build -c vite.content.config.ts --mode e2e",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@noble/curves": "2.4.0",
@@ -25,6 +27,7 @@
     "@vitejs/plugin-react": "6.3.0",
     "axe-core": "4.14.1",
     "eslint": "10.15.0",
+    "geist": "1.8.2",
     "jsdom": "31.0.1",
     "typescript": "5.9.3",
     "typescript-eslint": "8.73.0",
