@@ -91,7 +91,7 @@ class PageRefs {
 
 export const pageRefs = new PageRefs();
 
-function squash(text: string): string {
+export function squash(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
@@ -104,7 +104,7 @@ function words(value: string): string[] {
   return value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 }
 
-function isSecretField(element: Element): boolean {
+export function isSecretField(element: Element): boolean {
   if (element.tagName === "INPUT" && (element as HTMLInputElement).type === "password") return true;
 
   const autocomplete = (element.getAttribute("autocomplete") ?? "").toLowerCase().split(/\s+/);
@@ -169,9 +169,9 @@ function formHasSubmitButton(form: HTMLFormElement): boolean {
   return form.querySelector("button:not([type]), button[type=submit], input[type=submit], input[type=image]") !== null;
 }
 
-type Kind = "link" | "button" | "field" | "select" | "check" | "textarea";
+export type Kind = "link" | "button" | "field" | "select" | "check" | "textarea";
 
-function kindOf(element: Element): Kind | null {
+export function kindOf(element: Element): Kind | null {
   const tag = element.tagName;
   if (tag === "A") return element.hasAttribute("href") ? "link" : null;
   if (tag === "BUTTON") return "button";
@@ -372,4 +372,15 @@ export function readPage(doc: Document = document, maxChars = 20_000): Observati
   for (const [ref, control] of reader.controls) if (present.has(ref)) controls[String(ref)] = control;
 
   return { ok: true, source: "page", text, host: doc.location?.hostname || null, controls };
+}
+
+export interface Reading {
+  observation: Observation;
+  generation: number;
+}
+
+/** Bacaan halaman beserta generation-nya. Generation tidak dikirim ke server (kunci di luar protokol). */
+export function observe(doc: Document = document, maxChars = 20_000): Reading {
+  const observation = readPage(doc, maxChars);
+  return { observation, generation: pageRefs.generation };
 }
