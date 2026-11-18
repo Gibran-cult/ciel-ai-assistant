@@ -354,3 +354,33 @@ test("review: a navigation that lands on a blocked or non-https site is never re
     expect(observation.text).toMatch(/tidak dibaca/);
   }
 });
+
+describe("readStart (task 3.27)", () => {
+  function starter(url: string | undefined, permitted = true) {
+    const reading = { observation: { ok: true, source: "page", text: "Daftar", host: "shopee.co.id", controls: {} }, generation: 7, document: "dd" };
+    const executeScript = vi.fn(async (details: { files?: string[] }): Promise<{ result?: unknown }[]> =>
+      details.files ? [{ result: undefined }] : [{ result: reading }]);
+    const runner = new Runner({
+      keys: async () => KEYS, device: async () => "d1", now: () => NOW,
+      tabs: { get: vi.fn(async () => ({ id: 1, windowId: 9, url })), create: vi.fn(), remove: vi.fn() },
+      scripting: { executeScript }, hasPermission: async () => permitted, waitForLoad: async () => undefined,
+      result: vi.fn(() => true), needPermission: vi.fn(), pause: async () => undefined,
+    });
+    runner.begin(1);
+    return { runner, executeScript, reading };
+  }
+
+  test("the open https tab is read and becomes the first page", async () => {
+    const { runner, reading } = starter("https://shopee.co.id/daftar");
+    expect(await runner.readStart()).toEqual(reading.observation);
+  });
+
+  test("an http, blocked, hidden or unpermitted tab is never read", async () => {
+    for (const [url, permitted] of [["http://shopee.co.id/", true], ["https://ib.klikbca.com/", true], [undefined, true],
+      ["https://shopee.co.id/", false]] as const) {
+      const { runner, executeScript } = starter(url, permitted);
+      expect(await runner.readStart()).toBeNull();
+      expect(executeScript).not.toHaveBeenCalled();
+    }
+  });
+});

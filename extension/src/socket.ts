@@ -192,9 +192,10 @@ export class Socket {
     }
   }
 
-  startTask(instruction: string): boolean {
+  /** Mulai tugas. `page` adalah bacaan tab yang sedang dibuka, kalau ada (task 3.27). */
+  startTask(instruction: string, page: Observation | null = null): boolean {
     this.stopPending = false;
-    return this.send({ type: "start", instruction });
+    return this.send(page ? { type: "start", instruction, page } : { type: "start", instruction });
   }
 
   answer(id: number, value: unknown): boolean {

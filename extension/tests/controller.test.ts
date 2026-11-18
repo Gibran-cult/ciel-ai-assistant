@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { vi } from "vitest";
 import { Controller, type ControllerDeps, type PanelState } from "../src/controller";
+import type { Observation } from "../src/shared/protocol";
 
 function setup(over: Partial<ControllerDeps> = {}) {
   let ready = true;
@@ -19,7 +20,8 @@ function setup(over: Partial<ControllerDeps> = {}) {
         return ready;
       },
     },
-    runner: { begin: vi.fn(), end: vi.fn(), onAction: vi.fn(async () => undefined), refuse: vi.fn(), taskTab: 7 as number | null },
+    runner: { begin: vi.fn(), end: vi.fn(), onAction: vi.fn(async () => undefined), refuse: vi.fn(), taskTab: 7 as number | null,
+      readStart: vi.fn(async (): Promise<Observation | null> => null) },
     banner: vi.fn(),
     badge: vi.fn(),
     now: () => new Date(2026, 10, 18, 10, 42),
@@ -56,7 +58,7 @@ test("starting a task binds the tab and sends start", async () => {
   await controller.init();
   await controller.command({ type: "start", instruction: "Cari kaos polos", tabId: 7 });
   expect(deps.runner.begin).toHaveBeenCalledWith(7);
-  expect(deps.socket.startTask).toHaveBeenCalledWith("Cari kaos polos");
+  expect(deps.socket.startTask).toHaveBeenCalledWith("Cari kaos polos", null);
   expect(last()).toMatchObject({ phase: "running", instruction: "Cari kaos polos" });
   expect(deps.banner).toHaveBeenLastCalledWith(7, "active");
   expect(deps.badge).toHaveBeenLastCalledWith("running", false);
@@ -227,4 +229,21 @@ test("review: a drop with no task changes nothing but the connection", async () 
   await controller.init();
   controller.onSocketState("connecting");
   expect(last()).toMatchObject({ phase: "idle", ended: null, connection: "connecting" });
+});
+
+test("task 3.27: start sends the reading of the open tab", async () => {
+  const { controller, deps } = setup();
+  const page: Observation = { ok: true, source: "page", text: "Daftar", host: "toko.test", controls: {} };
+  vi.mocked(deps.runner.readStart).mockResolvedValue(page);
+  await controller.init();
+  await controller.command({ type: "start", instruction: "Isi nama", tabId: 7 });
+  expect(vi.mocked(deps.runner.begin).mock.invocationCallOrder[0]!).toBeLessThan(vi.mocked(deps.runner.readStart).mock.invocationCallOrder[0]!);
+  expect(deps.socket.startTask).toHaveBeenCalledWith("Isi nama", page);
+});
+
+test("task 3.27: without a readable tab, start goes without a page", async () => {
+  const { controller, deps } = setup();
+  await controller.init();
+  await controller.command({ type: "start", instruction: "Isi nama", tabId: 7 });
+  expect(deps.socket.startTask).toHaveBeenCalledWith("Isi nama", null);
 });

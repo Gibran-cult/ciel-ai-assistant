@@ -207,3 +207,19 @@ test("stop while offline is sent as soon as the connection is ready again", asyn
   ws.receive({ type: "ready", device: "d1" });
   expect(ws.sent).toEqual([expect.objectContaining({ type: "hello" }), { type: "stop" }]);
 });
+
+test("task 3.27: start carries the page only when there is one", async () => {
+  const { socket } = setup();
+  socket.start();
+  await flush();
+  const ws = FakeWs.made[0]!;
+  ws.open();
+  ws.receive({ type: "ready", device: "d1" });
+  const page = { ok: true, source: "page" as const, text: "x", host: "toko.test", controls: {} };
+  socket.startTask("Isi nama", page);
+  socket.startTask("Isi nama", null);
+  expect(ws.sent.slice(1)).toEqual([
+    { type: "start", instruction: "Isi nama", page },
+    { type: "start", instruction: "Isi nama" },
+  ]);
+});

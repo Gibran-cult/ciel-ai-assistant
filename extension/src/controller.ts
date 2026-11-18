@@ -2,6 +2,7 @@
 // dialog menjadi satu PanelState yang dikirim ke side panel. Panel hanya
 // menampilkan keadaan ini dan mengirim perintah; semua keputusan ada di sini.
 import type { LoginResult } from "./auth";
+import type { Observation } from "./shared/protocol";
 import logText from "./shared/vectors/log_text.json";
 import type { ServerMessage, SocketState } from "./socket";
 import { type Phase, Session } from "./stop";
@@ -16,6 +17,8 @@ export interface PlanScope {
   hosts: string[];
   kinds: string[];
   spend_cap: number | null;
+  /** Situs tab awal yang masuk lingkup (keputusan D20), atau null. */
+  start_host?: string | null;
 }
 
 function strings(value: unknown): string[] {
@@ -24,7 +27,10 @@ function strings(value: unknown): string[] {
 
 function planScope(raw: unknown): PlanScope {
   const scope = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
-  return { hosts: strings(scope.hosts), kinds: strings(scope.kinds), spend_cap: typeof scope.spend_cap === "number" ? scope.spend_cap : null };
+  return {
+    hosts: strings(scope.hosts), kinds: strings(scope.kinds), spend_cap: typeof scope.spend_cap === "number" ? scope.spend_cap : null,
+    start_host: typeof scope.start_host === "string" ? scope.start_host : null,
+  };
 }
 
 export interface PanelLogLine {
@@ -73,7 +79,7 @@ export interface ControllerDeps {
   socket: {
     start(): void;
     close(): void;
-    startTask(instruction: string): boolean;
+    startTask(instruction: string, page: Observation | null): boolean;
     answer(id: number, value: unknown): boolean;
     sendStop(): boolean;
     readonly isReady: boolean;
@@ -83,6 +89,7 @@ export interface ControllerDeps {
     end(): void;
     onAction(signed: unknown): Promise<void>;
     refuse(signed: unknown, reason: "stopped" | "handover"): void;
+    readStart(): Promise<Observation | null>;
     readonly taskTab: number | null;
   };
   banner(tabId: number, mode: BannerMode | null): void;
@@ -290,7 +297,10 @@ export class Controller {
         this.deps.runner.begin(command.tabId);
         this.state = { ...this.state, instruction, ended: null, log: [], dialog: null, needPermission: null };
         this.session.begin();
-        this.deps.socket.startTask(instruction);
+        // Tab yang sedang dibuka ikut dikirim sebagai halaman awal (task 3.27).
+        const page = await this.deps.runner.readStart();
+        if (this.state.phase !== "running") return;
+        this.deps.socket.startTask(instruction, page);
         return;
       }
 

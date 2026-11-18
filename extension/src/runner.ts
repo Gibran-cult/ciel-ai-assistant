@@ -287,6 +287,33 @@ export class Runner {
     return refusal("failed");
   }
 
+  /**
+   * Bacaan tab yang sedang dibuka saat tugas dimulai (task 3.27), atau null.
+   * Hanya tab https di situs yang tidak diblokir dan sudah diizinkan yang
+   * dibaca; tab lain tidak pernah disuntik.
+   */
+  async readStart(): Promise<Observation | null> {
+    if (this.tabId === null) return null;
+    let url: string | undefined;
+
+    try {
+      url = (await this.deps.tabs.get(this.tabId)).url;
+    } catch {
+      return null;
+    }
+
+    const host = httpsHost(url);
+    if (host === null || isBlockedHost(host) || !(await this.deps.hasPermission(host))) return null;
+
+    try {
+      await this.inject();
+      const reading = await this.call("tab_read", {});
+      return typeof reading === "object" && reading.observation.ok ? reading.observation : null;
+    } catch {
+      return null;
+    }
+  }
+
   private async landedOn(): Promise<Observation | null> {
     let url: string | undefined;
 
