@@ -243,6 +243,33 @@ class SocketSafetyTest(unittest.TestCase):
         self.assertEqual((end["type"], end["status"], end["reason"]), ("end", "stopped", "stop"))
         self.assertTrue(task_of(svc.store)["stop_requested"])
 
+    def test_stop_is_reported_as_stop_even_when_the_database_is_slow(self):
+        # Di CI, request_stop ke database selesai setelah thread tugas sudah
+        # memutuskan langkah berikutnya. Stop dari klien tetap harus terbaca
+        # sebagai stop, tidak sebagai klien yang hilang.
+        import time
+
+        svc = service([OPEN, READ, FINISH])
+        tokens = svc.login()
+        slow = svc.store.request_stop
+
+        def request_stop(owner, task_id):
+            time.sleep(0.3)
+            return slow(owner, task_id)
+
+        svc.store.request_stop = request_stop
+
+        with connect(svc) as ws:
+            hello(ws, tokens)
+            start(ws)
+            ws.receive_json()
+            ws.send_json({"type": "stop"})
+            end = ws.receive_json()
+
+        self.assertEqual((end["status"], end["reason"]), ("stopped", "stop"))
+        svc.client.app.state.runner.join(timeout=5)
+        self.assertEqual(task_of(svc.store)["status"], "stopped")
+
     def test_revoking_the_device_mid_task_ends_it(self):
         svc = service([OPEN, READ, FINISH])
         tokens = svc.login()

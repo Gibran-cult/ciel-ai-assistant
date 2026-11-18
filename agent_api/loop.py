@@ -12,6 +12,7 @@ Kontrak klien (ekstensi atau desktop, lewat adaptor di rencana 2B):
     confirm(prompt) -> bool             pengguna menyetujui satu aksi
     handover(prompt) -> bool            pengguna mengerjakan sendiri langkah itu
     ask(question) -> str | None         jawaban pengguna
+    stopped() -> bool (pilihan)          pengguna menekan stop di klien; dibaca bersama stop_requested
     run(tool, args, seq, host) -> Observation
                                         hasil aksi. `host` adalah situs yang dinilai guard
                                         untuk aksi ini. Klien menolak kalau tab sudah di
@@ -472,7 +473,7 @@ class Run:
         """Keputusan guard. Stop dan klien yang hilang langsung mengakhiri tugas."""
 
         context = Context(
-            stopped=self.store.stop_requested(self.owner, self.task_id) is not False,
+            stopped=self.store.stop_requested(self.owner, self.task_id) is not False or self.client_stopped(),
             ticket_ok=self.from_client(self.client.active) is True,
             mode=self.mode,
             scope=self.scope,
@@ -489,6 +490,23 @@ class Run:
             raise End("stopped", "stop") if decision.reason == "stopped" else End("failed", "client_gone")
 
         return decision
+
+    def client_stopped(self):
+        """Stop yang dilaporkan klien sendiri, sebelum sampai ke database.
+
+        Metode stopped() di klien bersifat pilihan. Kalau ada tetapi gagal
+        dipanggil, dihitung sebagai stop.
+        """
+
+        method = getattr(self.client, "stopped", None)
+
+        if method is None:
+            return False
+
+        try:
+            return method() is not False
+        except Exception:
+            return True
 
     def check_switch(self):
         try:

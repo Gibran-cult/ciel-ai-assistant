@@ -229,10 +229,15 @@ class WsClient:
         return self.conn.wait(("answer", number), seconds)
 
     def active(self):
-        if self.conn.closed or self.conn.stopped:
+        # Stop tidak dihitung di sini: stop dilaporkan lewat stopped(),
+        # supaya tugas berakhir "stopped", tidak "client_gone".
+        if self.conn.closed:
             return False
 
         return self.store.device_active(self.owner, self.device) is True
+
+    def stopped(self):
+        return self.conn.stopped
 
     def show_plan(self, steps, scope):
         value = self.dialog("plan", PLAN_SECONDS, steps=list(steps), scope=scope)

@@ -752,6 +752,25 @@ class ModelCostTest(unittest.TestCase):
         self.assertEqual(store.load_task(ALICE, TASK)["cost"], 1 + 1 + 5)  # rencana, satu aksi, panggilan yang gagal
 
 
+class ClientStopTest(unittest.TestCase):
+    def test_a_stop_reported_by_the_client_ends_the_task_as_stop(self):
+        class Stops(FakeClient):
+            def stopped(self):
+                return len(self.ran) >= 1
+
+        result, _, client, store = run([OPEN, READ, finish()], client=Stops())
+        self.assertEqual((result.status, result.reason, tools_run(client)), ("stopped", "stop", ["tab_open"]))
+        self.assertEqual(store.load_task(ALICE, TASK)["status"], "stopped")
+
+    def test_a_broken_stopped_method_counts_as_stop(self):
+        class Broken(FakeClient):
+            def stopped(self):
+                raise RuntimeError("rusak")
+
+        result, _, client, _ = run([OPEN, finish()], client=Broken())
+        self.assertEqual((result.status, result.reason, client.ran), ("stopped", "stop", []))
+
+
 class SwitchBeforeSendTest(unittest.TestCase):
     def test_the_switch_is_read_before_the_task_and_before_every_send(self):
         result, model, client, store = run([OPEN, finish()], still_allowed=lambda: "agent_off")
