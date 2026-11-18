@@ -19,6 +19,8 @@ class MemoryStore:
         self.now = 0.0       # detik; waktu tiruan untuk updated_at dan token
         self.devices = {}
         self.pro_until = {}  # pemilik -> akhir masa Pro (epoch detik)
+        self.consent = {}    # pemilik -> persetujuan agent; bawaannya setuju
+        self.retained = 0
         self.tokens = {}
 
     def create_task(self, owner, task_id, device, instruction):
@@ -152,6 +154,30 @@ class MemoryStore:
 
         row["used_at"] = self.now
         return dict(row)
+
+    def agent_consent(self, owner):
+        return None if "agent_consent" in self.fail else self.consent.get(owner, True)
+
+    def tasks_to_check(self, before_iso, limit):
+        if "tasks_to_check" in self.fail:
+            return None
+
+        due = [
+            {"owner": key[0], "id": key[1], "head_hash": task["head_hash"]}
+            for key, task in self.tasks.items()
+            if task["status"] not in ACTIVE and (task.get("chain_checked_at") is None or task["chain_checked_at"] < before_iso)
+        ]
+        return due[:limit]
+
+    def save_chain_status(self, owner, task_id, status, checked_at_iso):
+        if (owner, task_id) not in self.tasks:
+            return False
+
+        self.tasks[(owner, task_id)].update(chain_status=status, chain_checked_at=checked_at_iso)
+        return True
+
+    def retention(self):
+        return None if "retention" in self.fail else self.retained
 
     def sweep(self, idle_seconds):
         if "sweep" in self.fail:

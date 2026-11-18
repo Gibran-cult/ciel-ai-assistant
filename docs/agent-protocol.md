@@ -13,6 +13,7 @@ Setiap pemasangan ekstensi atau desktop adalah satu perangkat. Login memakai aku
    - `redirect` harus persis salah satu alamat terdaftar di server (`AGENT_DEVICE_REDIRECTS`). Ekstensi memakai `https://<id-ekstensi>.chromiumapp.org/` lewat `chrome.identity.launchWebAuthFlow`. Desktop memakai skema sendiri, misalnya `ciel://auth`.
    - `state` adalah teks acak klien (1 sampai 128 karakter `A-Z a-z 0-9 . _ ~ -`), untuk dicocokkan saat kembali.
 3. Pengguna login di Google. Server kembali ke `redirect?code=cdc1...&state=<state klien>`. Kode berlaku 60 detik dan hanya sekali pakai.
+   Kalau akun itu belum mengaktifkan agent di Pengaturan > Agent di web, server kembali ke `redirect?error=consent_required&state=<state klien>` tanpa kode. Klien menampilkan ajakan untuk mengaktifkan agent di web, lalu login lagi.
 4. Klien menukar kode: `POST /v1/device/token` dengan JSON `{"code", "verifier", "name", "platform"}`. `name` 1 sampai 60 karakter, `platform` `extension` atau `desktop`. Jawabannya `{"device", "access_token", "refresh_token", "expires_in": 900}`.
 5. Token akses berlaku 15 menit. Sebelum habis, klien memanggil `POST /v1/device/refresh` dengan `{"refresh_token"}` dan menerima pasangan baru. Token pembaruan hanya bisa dipakai sekali. Kalau token lama dipakai lagi, perangkat itu dicabut.
 

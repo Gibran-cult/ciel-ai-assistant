@@ -16,11 +16,13 @@ import os
 import secrets
 import threading
 from collections.abc import Mapping
-from dataclasses import asdict
+from dataclasses import asdict, fields
+from datetime import timedelta
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from agent_api.devices import authenticate
+from guard.audit import AuditEvent, explain_chain
 from agent_api.limits import CONFIRM_SECONDS, day_start
 from agent_api.loop import Account, run_task
 from agent_api.tickets import make_ticket
@@ -36,6 +38,7 @@ RUN_SECONDS = 60
 SEND_SECONDS = 5
 MAX_MESSAGE = 256 * 1024
 ACTION_LIMIT = (30, 60)   # aksi per menit per akun
+EVENT_FIELDS = tuple(item.name for item in fields(AuditEvent))
 
 # Kunci persis setiap pesan dari klien.
 CLIENT_MESSAGES = {
@@ -308,10 +311,61 @@ class TaskRunner:
 
         return swept
 
-    async def sweep_forever(self, every=60):
+    def check_chains(self, key, now, limit=200):
+        """Periksa rantai log tugas yang sudah selesai dan simpan hasilnya (keputusan D14).
+
+        Tugas diperiksa lagi sehari sekali, supaya catatan yang diubah
+        setelah pemeriksaan pertama tetap ketahuan. Log yang tidak terbaca
+        dilewati, tidak ditandai.
+        """
+
+        tasks = self.store.tasks_to_check((now - timedelta(hours=24)).isoformat(), limit)
+        checked = 0
+
+        for task in tasks or []:
+            owner, task_id = task.get("owner"), task.get("id")
+            rows = self.store.load_actions(owner, task_id)
+
+            if rows is None:
+                continue
+
+            try:
+                chain = [(AuditEvent(**{name: row[name] for name in EVENT_FIELDS}), row["hash"]) for row in rows]
+                status, _ = explain_chain(chain, head=task.get("head_hash") or "", key=key)
+            except (KeyError, TypeError, ValueError):
+                status = "broken"
+
+            if self.store.save_chain_status(owner, task_id, status, now.isoformat()):
+                checked += 1
+
+            if status != "ok":
+                logger.warning("chain_problem owner=%s task=%s status=%s", owner, task_id, status)
+
+        return checked
+
+    def retain_once(self):
+        removed = self.store.retention()
+
+        if removed:
+            logger.info("retention_removed tasks=%s", removed)
+
+        return removed
+
+    async def maintain_forever(self, key, clock):
+        """Pembersih tugas macet tiap menit, pemeriksa rantai tiap 10 menit, masa simpan tiap hari."""
+
+        minute = 0
+
         while True:
-            await asyncio.sleep(every)
+            await asyncio.sleep(60)
+            minute += 1
             await asyncio.to_thread(self.sweep_once)
+
+            if minute % 10 == 0:
+                await asyncio.to_thread(self.check_chains, key, clock())
+
+            if minute % 1440 == 0:
+                await asyncio.to_thread(self.retain_once)
 
 
 def ws_router(settings, store, model, signer, runner, clock):
