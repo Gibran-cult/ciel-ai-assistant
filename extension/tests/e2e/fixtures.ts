@@ -26,7 +26,11 @@ function launch(profile: string): Promise<BrowserContext> {
     ignoreHTTPSErrors: true,
     args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`, "--host-resolver-rules=MAP toko.test 127.0.0.1",
       // Browser baru mematikan --load-extension secara bawaan; nyalakan lagi untuk profil uji sementara ini.
-      "--disable-features=DisableLoadExtensionCommandLineSwitch"],
+      "--disable-features=DisableLoadExtensionCommandLineSwitch",
+      // Toko tiruan memakai sertifikat buatan sendiri. ignoreHTTPSErrors hanya
+      // berlaku untuk tab yang dibuka Playwright; tab dari chrome.tabs.create
+      // (tab_open) butuh pengecualian di tingkat browser uji ini.
+      "--ignore-certificate-errors"],
   });
 }
 
