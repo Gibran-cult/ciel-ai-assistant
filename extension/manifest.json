@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ciel Agent",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Ciel mengerjakan tugas di browser untukmu, dengan persetujuanmu di setiap langkah yang berisiko.",
   "minimum_chrome_version": "116",
   "icons": {
