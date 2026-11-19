@@ -42,7 +42,7 @@ class AssetLicensesTest(unittest.TestCase):
 
         for font in FONTS:
             with self.subTest(font=font):
-                self.assertRegex(text, rf"(?m)^| {re.escape(font)} |")\| {re.escape(font)} \|", )
+                self.assertRegex(text, rf"(?m)^\| {re.escape(font)} \|")
 
 
 if __name__ == "__main__":
