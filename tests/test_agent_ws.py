@@ -620,5 +620,23 @@ class EndTaskIdTest(unittest.TestCase):
         self.assertIsNone(end["task"])
 
 
+
+class PlanTaskIdTest(unittest.TestCase):
+    """Rencana groundwork, Task 3: pesan plan menyebut tugasnya."""
+
+    def test_the_plan_names_the_task_its_actions_will_carry(self):
+        svc = service([OPEN, FINISH])
+        tokens = svc.login()
+
+        with connect(svc) as ws:
+            hello(ws, tokens)
+            plan = start(ws)
+            action = answer_action(ws)
+            end = ws.receive_json()
+
+        self.assertEqual(plan["task"], action["ticket"]["task"])
+        self.assertEqual(end["task"], plan["task"])
+
+
 if __name__ == "__main__":
     unittest.main()
