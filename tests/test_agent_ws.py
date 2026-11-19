@@ -668,5 +668,38 @@ class StartPageLogTest(unittest.TestCase):
         self.assertFalse(any(row["reason"] == "start_page" for row in svc.store.actions))
 
 
+
+class BlockedSiteInPlanTest(unittest.TestCase):
+    """Tinjauan groundwork: situs yang diblokir di perintah bukan "rencana tidak sah"."""
+
+    def run_plan(self, plan):
+        svc = service([FINISH], plan=plan)
+        tokens = svc.login()
+
+        with connect(svc) as ws:
+            hello(ws, tokens)
+            ws.send_json({"type": "start", "instruction": "Cek kurs USD di BCA hari ini"})
+            return ws.receive_json()
+
+    def test_a_plan_that_needs_a_blocked_site_ends_with_its_own_reason(self):
+        end = self.run_plan({"steps": ["Buka situs BCA"], "hosts": ["bca.co.id", "shopee.co.id"], "kinds": ["tab_open"]})
+        self.assertEqual((end["type"], end["status"], end["reason"]), ("end", "refused", "blocked_host"))
+        self.assertIn("bca.co.id", end["report"])
+        self.assertNotIn("shopee.co.id", end["report"])
+
+    def test_a_subdomain_of_a_blocked_site_counts_too(self):
+        end = self.run_plan({"steps": ["Buka"], "hosts": ["ib.bri.co.id"], "kinds": ["tab_open"]})
+        self.assertEqual(end["reason"], "blocked_host")
+
+    def test_a_malformed_plan_without_blocked_sites_is_still_bad_plan(self):
+        end = self.run_plan({"steps": [], "hosts": ["toko.example"], "kinds": ["tab_open"]})
+        self.assertEqual(end["reason"], "bad_plan")
+
+    def test_a_blocked_site_wins_over_other_plan_problems(self):
+        # Rencana yang diperbaiki pun tetap akan gagal di situs itu.
+        end = self.run_plan({"steps": [], "hosts": ["bca.co.id"], "kinds": ["tab_open"]})
+        self.assertEqual(end["reason"], "blocked_host")
+
+
 if __name__ == "__main__":
     unittest.main()

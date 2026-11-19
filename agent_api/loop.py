@@ -30,7 +30,7 @@ from agent_api.envelope import flags_injection, wrap
 from agent_api.journal import Journal
 from agent_api.limits import CONFIRM_SECONDS, MAX_INSTRUCTION, day_start, over_limit, start_refusal, task_rate_limits
 from agent_api.model import ModelReply, Step, TaskView
-from agent_api.plan import allowed_host, parse_plan, scope_to_json, widened
+from agent_api.plan import allowed_host, blocked_hosts_in, parse_plan, scope_to_json, widened
 from agent_api.tools import TYPING, Observation, Rejected, bind
 from guard.audit import target_of
 from guard.decide import Context, Decision, decide
@@ -279,9 +279,18 @@ class Run:
     # Rencana ------------------------------------------------------------
 
     def plan(self):
-        plan = parse_plan(self.ask_model(self.model.plan, self.instruction), self.account.limits.per_tx)
+        output = self.ask_model(self.model.plan, self.instruction)
+        plan = parse_plan(output, self.account.limits.per_tx)
 
         if plan is None:
+            # Perintah yang membutuhkan bank, dompet digital, investasi, atau
+            # pengelola kata sandi tidak bisa dikerjakan agent. Pengguna perlu
+            # tahu situs mana, bukan diminta menulis ulang perintahnya.
+            blocked = blocked_hosts_in(output)
+
+            if blocked:
+                raise End("refused", "blocked_host", "Situs yang selalu diblokir untuk agent: " + ", ".join(blocked))
+
             raise End("failed", "bad_plan")
 
         # Keputusan D20: situs tab awal masuk lingkup dan ditunjukkan di kartu

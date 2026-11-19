@@ -65,6 +65,21 @@ def allowed_host(host):
     return host
 
 
+def blocked_hosts_in(output):
+    """Host di rencana model yang selalu diblokir (D9, D21), urut, tanpa duplikat.
+
+    parse_plan menolak rencana seperti itu. Dengan daftar ini tugas bisa
+    berakhir dengan alasan yang benar, bukan "rencana tidak sah".
+    """
+
+    hosts = output.get("hosts") if isinstance(output, dict) else None
+
+    if not isinstance(hosts, list):
+        return []
+
+    return sorted({host for host in map(normalize_host, hosts) if host and match_allowed(host, BLOCKED_HOSTS)})
+
+
 def parse_plan(output, per_tx):
     """Plan dari keluaran model, atau None kalau ada bagian yang tidak sah."""
 
