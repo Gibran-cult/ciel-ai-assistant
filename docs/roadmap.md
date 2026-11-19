@@ -43,8 +43,8 @@ Tujuan: semua hal yang menahan pekerjaan lain selesai atau punya jawaban.
 | 0.11 | Selesai 15 November 2026: dua jalur tercatat dengan harga, yaitu MSIX lewat Microsoft Store dan sertifikat individu | `docs/agent-architecture.md` bagian 5, `docs/cicd-quality.md` bagian 5 | Sisa sebelum Fase 5: syarat akun perusahaan Microsoft tanpa badan hukum, dan dukungan MSIX di Tauri |
 | 0.12 | Tugas pemilik: konsultasi ahli hukum dengan lima draf di `docs/legal/` dan daftar pertanyaan | `docs/legal/agent-usage-policy.md` bagian 10 | Catatan jawaban tersimpan, draf direvisi |
 | 0.13 | Tugas pemilik: wawancara 8 sampai 10 calon pengguna | `docs/prd.md` bagian "Fakta dan asumsi" | Asumsi A1 sampai A4 diberi status terbukti atau tidak |
-| 0.14 | Buat `docs/asset-licenses.md` dengan aset yang sekarang dipakai | `docs/asset-licenses.md` | Setiap gambar dan huruf punya baris lisensi |
-| 0.15 | Isi daftar awal aplikasi dan situs yang selalu ditolak (perbankan, dompet digital, password manager) | `guard/blocked_targets.json` | Setiap entri punya sumber yang dicek |
+| 0.14 | Selesai 19 November 2026: `docs/asset-licenses.md` mencatat asal dan lisensi setiap huruf dan folder gambar. Asal `og.png` website dan gambar uji Vision belum tercatat [PERLU DICEK] | `docs/asset-licenses.md`, `tests/test_asset_licenses.py` | Uji gagal kalau ada folder gambar atau huruf tanpa baris |
+| 0.15 | Selesai 19 November 2026: 41 situs bank, dompet digital, pengelola kata sandi, investasi, dan paylater (D9 dan D21 opsi B), masing-masing dicek dari situsnya sendiri dan disetujui pemilik. Aplikasi desktop sudah ada di daftar `apps` | `guard/blocked_targets.json`, `docs/blocked-targets.md`, `tests/test_blocked_targets.py` | Setiap entri punya bukti, dan uji menolak entri yang terlalu luas |
 
 Kriteria selesai: D1 sampai D10 terjawab, backend berjalan di VPS dengan cadangan dan peringatan, vendor yang dipakai punya status DPA yang jelas, dan ahli hukum sudah melihat draf legal.
 

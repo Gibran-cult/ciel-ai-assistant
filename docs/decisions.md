@@ -47,6 +47,7 @@ Catatan 18 November 2026 (rencana 3A, Task 3): pustaka cadangan D19 menjadi `@no
 | ID | Keputusan | Jawaban | Akibat langsung | Yang masih harus dicek |
 |---|---|---|---|---|
 | D20 | Situs tab awal dan lingkup tugas (task 3.27) | Opsi A, dijawab pemilik 18 November 2026: host tab awal otomatis masuk lingkup dan ditampilkan di kartu rencana ("Mulai di"). Isi halaman sampai ke model setelah rencana disetujui. Perencana tetap hanya membaca perintah | Tugas yang dimulai di halaman tidak butuh dialog perluasan lingkup. Situs yang selalu diblokir tidak pernah masuk lewat jalur ini | Tidak ada |
+| D21 | Kategori daftar situs yang selalu diblokir | Opsi B, dijawab pemilik 18 November 2026: kategori D9 (bank, dompet digital, pengelola kata sandi) ditambah investasi (saham, reksa dana, kripto) serta paylater dan pinjaman daring. Daftar 41 domain disetujui pemilik 19 November 2026 | Agent tidak bisa membuka situs tempat uang berpindah atau utang dibuat. Dompet digital di dalam marketplace (ShopeePay, GoPay di aplikasi Gojek) tidak bisa diblokir lewat domain; untuk itu berlaku D4 | Tidak ada |
 
 ## Yang belum diputuskan dan memakai usulan sampai diubah
 
