@@ -81,6 +81,7 @@ export const TEXT = {
     agent_off: "Agent sedang dimatikan sementara.",
     cost_cap: "Batas pemakaian harian sudah tercapai. Coba lagi besok.",
     consent_required: "Agent belum aktif untuk akun ini. Aktifkan dulu di web Ciel lewat Pengaturan > Agent.",
+    blocked_host: "Tugas ini membutuhkan situs yang selalu diblokir untuk agent (bank, dompet digital, investasi, paylater, atau pengelola kata sandi). Buka situs itu sendiri.",
   } as Record<string, string>,
   endCode: (reason: string) => `Kode: ${reason}`,
   dismiss: "Tutup",

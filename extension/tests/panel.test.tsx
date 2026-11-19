@@ -193,3 +193,11 @@ test("review: no such note when the tab can be read", () => {
   show();
   expect(screen.queryByText(/Ciel belum bisa melihat alamat tab ini/)).toBeNull();
 });
+
+test("groundwork review: a task that needs a blocked site says so and names it", () => {
+  show({ ended: { status: "refused", reason: "blocked_host", steps: 0, report: "Situs yang selalu diblokir untuk agent: bca.co.id" } });
+  expect(screen.getByText(/membutuhkan situs yang selalu diblokir/)).toBeTruthy();
+  expect(screen.getByText(/Buka situs itu sendiri/)).toBeTruthy();
+  expect(screen.getByText("Situs yang selalu diblokir untuk agent: bca.co.id")).toBeTruthy();
+  expect(screen.queryByText(/Kode: blocked_host/)).toBeNull();
+});
