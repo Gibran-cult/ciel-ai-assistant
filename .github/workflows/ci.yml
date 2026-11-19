@@ -201,6 +201,7 @@ jobs:
           python -m unittest -v \
             tests.test_agent_api_health \
             tests.test_agent_tickets \
+            tests.test_asset_licenses \
             tests.test_blocked_targets \
             tests.test_agent_cors \
             tests.test_extension_vectors \
