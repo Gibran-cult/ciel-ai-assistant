@@ -5,7 +5,7 @@ import type { Observation } from "./shared/protocol";
 
 export type ServerMessage =
   | { type: "ready"; device: string }
-  | { type: "plan"; id: number; steps: unknown; scope: unknown }
+  | { type: "plan"; task: string; id: number; steps: unknown; scope: unknown }
   | { type: "confirm"; id: number; prompt: Record<string, unknown> }
   | { type: "handover"; id: number; prompt: Record<string, unknown> }
   | { type: "ask"; id: number; question: string }
@@ -17,7 +17,7 @@ export type SocketState = "connecting" | "ready" | "closed" | "signed_out" | "up
 // Kunci persis setiap pesan dari server (agent_api/ws.py).
 const SERVER_KEYS: Record<string, string[]> = {
   ready: ["device", "type"],
-  plan: ["id", "scope", "steps", "type"],
+  plan: ["id", "scope", "steps", "task", "type"],
   confirm: ["id", "prompt", "type"],
   handover: ["id", "prompt", "type"],
   ask: ["id", "question", "type"],
@@ -39,7 +39,7 @@ function shaped(message: Record<string, unknown>): boolean {
     case "ready":
       return typeof message.device === "string";
     case "plan":
-      return isId(message.id) && Array.isArray(message.steps);
+      return typeof message.task === "string" && isId(message.id) && Array.isArray(message.steps);
     case "confirm":
     case "handover":
       return isId(message.id) && isObject(message.prompt);

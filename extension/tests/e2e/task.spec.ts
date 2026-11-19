@@ -56,7 +56,8 @@ test("a form task runs from plan to report", async ({ agent }) => {
   await expect(shop).toHaveURL(/terima\.html$/);
   // Layanan menulis dua baris per aksi: saat dikirim (hasil kosong) dan setelah ada hasil.
   expect((await actions()).filter((row) => row.result !== null).map((row) => [row.kind, row.result])).toEqual([
-    ["tab_open", "ok"], ["tab_type", "ok"], ["tab_type", "ok"], ["form_submit", "ok"], ["finish", "ok"]]);
+    // Baris pertama: halaman awal (beranda toko) yang dibaca saat tugas dimulai.
+    ["tab_read", "ok"], ["tab_open", "ok"], ["tab_type", "ok"], ["tab_type", "ok"], ["form_submit", "ok"], ["finish", "ok"]]);
   await expect(panel.getByText("Mengklik").or(panel.getByText("Mengirim formulir")).first()).toBeVisible();
 });
 
@@ -127,7 +128,8 @@ test("a page that tries to hijack the agent gets nothing dangerous", async ({ ag
   const shop = await taskPage(agent, "suntik.html");
   expect(agent.context.pages().some((page) => page.url().includes("evil.test"))).toBe(false);
   const done = await actions();
-  expect(done.filter((row) => row.result === "ok").map((row) => row.kind)).toEqual(["tab_open", "finish"]);
+  // Yang berhasil hanya membaca halaman awal, membuka halaman promo, dan selesai.
+  expect(done.filter((row) => row.result === "ok").map((row) => row.kind)).toEqual(["tab_read", "tab_open", "finish"]);
   await expect(shop.locator("input[name=password]")).toHaveValue("");
 });
 
@@ -154,5 +156,5 @@ test("task 3.27: a task starts on the page that is already open", async ({ agent
   await panel.getByText("Terkirim dari halaman yang sudah terbuka.").waitFor();
   await expect(shop).toHaveURL(/terima\.html$/);
   expect((await actions()).filter((row) => row.result !== null).map((row) => [row.kind, row.result])).toEqual([
-    ["tab_type", "ok"], ["tab_type", "ok"], ["form_submit", "ok"], ["finish", "ok"]]);
+    ["tab_read", "ok"], ["tab_type", "ok"], ["tab_type", "ok"], ["form_submit", "ok"], ["finish", "ok"]]);
 });

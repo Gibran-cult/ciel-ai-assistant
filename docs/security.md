@@ -50,6 +50,8 @@ Brief pemilik menyebut password manager dan m-banking sebagai aksi yang wajib ko
 | A. Blokir dan serah terima (rekomendasi) | Agent tidak pernah membuka atau membaca aplikasi itu. Pengguna mengerjakan sendiri | Satu klik keliru di konfirmasi tidak bisa membuka rekening atau brankas kata sandi. Layar berisi saldo dan kata sandi tidak pernah sampai ke penyedia LLM | Tugas seperti "cek saldo lalu catat" tidak bisa otomatis |
 | B. Konfirmasi setiap kali | Agent boleh membuka setelah pengguna setuju | Lebih fleksibel | Risiko terbesar di seluruh produk bergantung pada satu dialog. Isi layar sensitif ikut diproses model |
 
+Daftar situs yang selalu diblokir, dengan bukti untuk setiap entri, ada di [blocked-targets.md](blocked-targets.md) (D9 dan D21). Daftar itu dipakai layanan dan ekstensi sekaligus.
+
 ### Urutan keputusan
 
 Untuk setiap aksi yang diusulkan model, kode memeriksa berurutan dan berhenti di jawaban pertama:

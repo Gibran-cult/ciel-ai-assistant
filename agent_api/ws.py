@@ -247,7 +247,9 @@ class WsClient:
         return self.conn.stopped
 
     def show_plan(self, steps, scope):
-        value = self.dialog("plan", PLAN_SECONDS, steps=list(steps), scope=scope)
+        # Nomor tugas ikut di rencana, pesan pertama setiap tugas, supaya klien
+        # tahu tugasnya sebelum aksi pertama (dan bisa mengabaikan end tugas lama).
+        value = self.dialog("plan", PLAN_SECONDS, task=self.task_id, steps=list(steps), scope=scope)
         return value if isinstance(value, str) else None
 
     def confirm(self, prompt):

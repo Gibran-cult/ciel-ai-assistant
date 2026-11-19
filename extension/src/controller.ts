@@ -120,6 +120,10 @@ export class Controller {
   // Tugas yang sudah ditinggalkan (Stop atau tugas baru). end-nya yang datang
   // terlambat tidak boleh menutup tugas yang sedang berjalan.
   private leftTasks = new Set<string>();
+  // Tugas yang sedang berjalan menurut pesan plan (ada sebelum aksi pertama),
+  // dan tugas yang end-nya ditunggu setelah Stop.
+  private planTask: string | null = null;
+  private awaitingEnd: string | null = null;
 
   constructor(private deps: ControllerDeps) {
     this.session = new Session({
@@ -168,8 +172,7 @@ export class Controller {
   }
 
   private leave(): void {
-    const task = this.deps.runner.currentTask;
-    if (task) this.leftTasks.add(task);
+    for (const task of [this.deps.runner.currentTask, this.planTask]) if (task) this.leftTasks.add(task);
   }
 
   /** Halaman baru dimuat di tab tugas: pasang banner lagi. */
@@ -228,6 +231,7 @@ export class Controller {
   onServer(message: ServerMessage): void {
     switch (message.type) {
       case "plan":
+        this.planTask = message.task;
         this.update({ dialog: { kind: "plan", id: message.id, steps: (message.steps as unknown[]).map(String), scope: planScope(message.scope) } });
         return;
       case "confirm":
@@ -244,7 +248,14 @@ export class Controller {
         this.session.onAction({ ticket: message.ticket, kid: message.kid, sig: message.sig });
         return;
       case "end":
-        if (message.task !== null && this.leftTasks.has(message.task) && this.state.phase !== "stopped") return;
+        // end tugas yang sudah ditinggalkan hanya diterima kalau itu tugas yang
+        // baru saja dihentikan dan panel masih menunggu hasilnya.
+        if (message.task !== null && this.leftTasks.has(message.task)) {
+          const awaited = this.state.phase === "stopped" && (this.awaitingEnd === null || message.task === this.awaitingEnd);
+          if (!awaited) return;
+        }
+
+        this.awaitingEnd = null;
         this.session.onEnd();
         this.update({ dialog: null, needPermission: null, ended: { status: message.status, reason: message.reason, steps: message.steps, report: message.report } });
         return;
@@ -305,6 +316,8 @@ export class Controller {
 
         this.keepStopped = false;
         this.leave();
+        this.planTask = null;
+        this.awaitingEnd = null;
         this.deps.runner.begin(command.tabId);
         this.state = { ...this.state, instruction, ended: null, log: [], dialog: null, needPermission: null };
         this.session.begin();
@@ -336,6 +349,7 @@ export class Controller {
       }
 
       case "stop":
+        this.awaitingEnd = this.planTask ?? this.deps.runner.currentTask;
         this.leave();
         this.keepStopped = true;
         this.state = { ...this.state, dialog: null };

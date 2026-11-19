@@ -301,3 +301,10 @@ test("review: end messages carry their task", () => {
   expect(parseServerMessage(JSON.stringify(base))).toBeNull();
   expect(parseServerMessage(JSON.stringify({ ...base, task: 5 }))).toBeNull();
 });
+
+test("groundwork: plan messages carry their task", () => {
+  const base = { type: "plan", id: 1, steps: ["Baca"], scope: {} };
+  expect(parseServerMessage(JSON.stringify({ ...base, task: "t1" }))).not.toBeNull();
+  expect(parseServerMessage(JSON.stringify(base))).toBeNull();
+  expect(parseServerMessage(JSON.stringify({ ...base, task: null }))).toBeNull();
+});

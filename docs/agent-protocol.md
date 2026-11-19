@@ -42,7 +42,7 @@ Token tidak pernah dikirim di URL. Pesan pertama harus `hello` dalam 10 detik.
 |---|---|---|---|
 | Klien | `hello` | `token`, `client` (`extension` atau `desktop`), `version` (`x.y.z`) | `ready` dengan `device` |
 | Klien | `start` | `instruction` (1 sampai 2.000 karakter), dan boleh `page`: bacaan tab yang sedang dibuka, dengan bentuk `observation` (bagian berikut) | Tugas dimulai. Kalau sudah ada tugas berjalan: `end` dengan status `refused`, alasan `busy`. Kalau agent sedang dimatikan atau plafon biaya harian terlewati: `end` dengan status `refused`, alasan `agent_off` atau `cost_cap`. Kalau persetujuan agent sudah ditarik atau versinya naik: `end` dengan status `refused`, alasan `consent_required`. Token dan perangkat diperiksa lagi di setiap `start`: token kedaluwarsa atau perangkat yang dicabut menutup koneksi dengan 4401 |
-| Server | `plan` | `id`, `steps`, `scope` (`hosts`, `kinds`, `spend_cap`, dan `start_host`: situs tab awal yang masuk lingkup, atau `null`) | `answer` dengan `id` dan `value`: `"ask"`, `"auto"`, atau `null` untuk menolak |
+| Server | `plan` | `id`, `task` (nomor tugas, sama dengan `ticket.task` di aksinya), `steps`, `scope` (`hosts`, `kinds`, `spend_cap`, dan `start_host`: situs tab awal yang masuk lingkup, atau `null`) | `answer` dengan `id` dan `value`: `"ask"`, `"auto"`, atau `null` untuk menolak |
 | Server | `confirm` | `id`, `prompt` | `answer` dengan `value` `true` atau `false` |
 | Server | `handover` | `id`, `prompt` | `answer` dengan `value` `true` (pengguna sudah mengerjakannya sendiri) atau `false` |
 | Server | `ask` | `id`, `question` | `answer` dengan `value` teks |

@@ -81,7 +81,7 @@ test("plan, confirm and ask become dialogs, answered once", async () => {
   await controller.init();
   await controller.command({ type: "start", instruction: "x", tabId: 7 });
 
-  controller.onServer({ type: "plan", id: 1, steps: ["Buka toko"], scope: { hosts: ["toko.test"], kinds: ["tab_read"], spend_cap: null } });
+  controller.onServer({ type: "plan", task: "t1", id: 1, steps: ["Buka toko"], scope: { hosts: ["toko.test"], kinds: ["tab_read"], spend_cap: null } });
   expect(last().dialog).toMatchObject({ kind: "plan", id: 1 });
   expect(deps.banner).toHaveBeenLastCalledWith(7, "waiting");
   expect(deps.badge).toHaveBeenLastCalledWith("running", true);
@@ -274,4 +274,31 @@ test("review: the end of a stopped task still shows when no new task started", a
   await controller.command({ type: "stop" });
   controller.onServer({ type: "end", task: "t1", status: "stopped", reason: "stop", steps: 1, report: "" });
   expect(last()).toMatchObject({ phase: "idle", ended: { status: "stopped" } });
+});
+
+test("groundwork: a task stopped before its first action does not close the next task", async () => {
+  const { controller, last } = setup();
+  await controller.init();
+  await controller.command({ type: "start", instruction: "lama", tabId: 7 });
+  controller.onServer({ type: "plan", task: "A", id: 1, steps: ["Baca"], scope: {} });
+  await controller.command({ type: "stop" });
+  await controller.command({ type: "start", instruction: "baru", tabId: 7 });
+  controller.onServer({ type: "end", task: "A", status: "stopped", reason: "stop", steps: 0, report: "" });
+  expect(last()).toMatchObject({ phase: "running", ended: null, instruction: "baru" });
+});
+
+test("groundwork: after two stops, only the end of the stopped task is shown", async () => {
+  const { controller, last } = setup();
+  await controller.init();
+  await controller.command({ type: "start", instruction: "A", tabId: 7 });
+  controller.onServer({ type: "plan", task: "A", id: 1, steps: ["Baca"], scope: {} });
+  await controller.command({ type: "stop" });
+  await controller.command({ type: "start", instruction: "B", tabId: 7 });
+  controller.onServer({ type: "plan", task: "B", id: 2, steps: ["Baca"], scope: {} });
+  await controller.command({ type: "stop" });
+
+  controller.onServer({ type: "end", task: "A", status: "stopped", reason: "stop", steps: 4, report: "" });
+  expect(last()).toMatchObject({ phase: "stopped", ended: null });
+  controller.onServer({ type: "end", task: "B", status: "stopped", reason: "stop", steps: 1, report: "" });
+  expect(last()).toMatchObject({ phase: "idle", ended: { status: "stopped", steps: 1 } });
 });

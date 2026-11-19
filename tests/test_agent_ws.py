@@ -620,5 +620,86 @@ class EndTaskIdTest(unittest.TestCase):
         self.assertIsNone(end["task"])
 
 
+
+class PlanTaskIdTest(unittest.TestCase):
+    """Rencana groundwork, Task 3: pesan plan menyebut tugasnya."""
+
+    def test_the_plan_names_the_task_its_actions_will_carry(self):
+        svc = service([OPEN, FINISH])
+        tokens = svc.login()
+
+        with connect(svc) as ws:
+            hello(ws, tokens)
+            plan = start(ws)
+            action = answer_action(ws)
+            end = ws.receive_json()
+
+        self.assertEqual(plan["task"], action["ticket"]["task"])
+        self.assertEqual(end["task"], plan["task"])
+
+
+
+class StartPageLogTest(unittest.TestCase):
+    """Rencana groundwork, Task 4: halaman awal tercatat di log aksi."""
+
+    def test_the_start_page_is_logged_as_a_read_after_the_plan_is_approved(self):
+        svc = service([FINISH], plan=START_PLAN)
+        tokens = svc.login()
+
+        with connect(svc) as ws:
+            hello(ws, tokens)
+            start_with_page(ws, FORM_PAGE)
+            ws.receive_json()
+
+        rows = [(row["kind"], row["target"], row["decision"], row["reason"], row["result"]) for row in svc.store.actions]
+        self.assertEqual(rows[0], ("tab_read", "toko.example", "allow", "start_page", "ok"))
+        task = task_of(svc.store)
+        self.assertIsNone(verify_chain(chain_of(svc.store), head=task["head_hash"], key=bytes.fromhex(ENV["AGENT_CHAIN_KEY"])))
+
+    def test_no_row_without_a_start_page(self):
+        svc = service([FINISH], plan=START_PLAN)
+        tokens = svc.login()
+
+        with connect(svc) as ws:
+            hello(ws, tokens)
+            start(ws)
+            ws.receive_json()
+
+        self.assertFalse(any(row["reason"] == "start_page" for row in svc.store.actions))
+
+
+
+class BlockedSiteInPlanTest(unittest.TestCase):
+    """Tinjauan groundwork: situs yang diblokir di perintah bukan "rencana tidak sah"."""
+
+    def run_plan(self, plan):
+        svc = service([FINISH], plan=plan)
+        tokens = svc.login()
+
+        with connect(svc) as ws:
+            hello(ws, tokens)
+            ws.send_json({"type": "start", "instruction": "Cek kurs USD di BCA hari ini"})
+            return ws.receive_json()
+
+    def test_a_plan_that_needs_a_blocked_site_ends_with_its_own_reason(self):
+        end = self.run_plan({"steps": ["Buka situs BCA"], "hosts": ["bca.co.id", "shopee.co.id"], "kinds": ["tab_open"]})
+        self.assertEqual((end["type"], end["status"], end["reason"]), ("end", "refused", "blocked_host"))
+        self.assertIn("bca.co.id", end["report"])
+        self.assertNotIn("shopee.co.id", end["report"])
+
+    def test_a_subdomain_of_a_blocked_site_counts_too(self):
+        end = self.run_plan({"steps": ["Buka"], "hosts": ["ib.bri.co.id"], "kinds": ["tab_open"]})
+        self.assertEqual(end["reason"], "blocked_host")
+
+    def test_a_malformed_plan_without_blocked_sites_is_still_bad_plan(self):
+        end = self.run_plan({"steps": [], "hosts": ["toko.example"], "kinds": ["tab_open"]})
+        self.assertEqual(end["reason"], "bad_plan")
+
+    def test_a_blocked_site_wins_over_other_plan_problems(self):
+        # Rencana yang diperbaiki pun tetap akan gagal di situs itu.
+        end = self.run_plan({"steps": [], "hosts": ["bca.co.id"], "kinds": ["tab_open"]})
+        self.assertEqual(end["reason"], "blocked_host")
+
+
 if __name__ == "__main__":
     unittest.main()
