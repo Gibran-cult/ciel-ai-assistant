@@ -19,3 +19,7 @@ deploy/vps/nginx/ciel.htpasswd
 deploy/vps/.env
 deploy/vps/agent.env
 deploy/vps/agent-staging.env
+
+# App VPS secrets (deploy/app/README.md, step 5)
+deploy/app/.env
+deploy/app/secrets.toml
