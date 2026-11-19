@@ -638,5 +638,35 @@ class PlanTaskIdTest(unittest.TestCase):
         self.assertEqual(end["task"], plan["task"])
 
 
+
+class StartPageLogTest(unittest.TestCase):
+    """Rencana groundwork, Task 4: halaman awal tercatat di log aksi."""
+
+    def test_the_start_page_is_logged_as_a_read_after_the_plan_is_approved(self):
+        svc = service([FINISH], plan=START_PLAN)
+        tokens = svc.login()
+
+        with connect(svc) as ws:
+            hello(ws, tokens)
+            start_with_page(ws, FORM_PAGE)
+            ws.receive_json()
+
+        rows = [(row["kind"], row["target"], row["decision"], row["reason"], row["result"]) for row in svc.store.actions]
+        self.assertEqual(rows[0], ("tab_read", "toko.example", "allow", "start_page", "ok"))
+        task = task_of(svc.store)
+        self.assertIsNone(verify_chain(chain_of(svc.store), head=task["head_hash"], key=bytes.fromhex(ENV["AGENT_CHAIN_KEY"])))
+
+    def test_no_row_without_a_start_page(self):
+        svc = service([FINISH], plan=START_PLAN)
+        tokens = svc.login()
+
+        with connect(svc) as ws:
+            hello(ws, tokens)
+            start(ws)
+            ws.receive_json()
+
+        self.assertFalse(any(row["reason"] == "start_page" for row in svc.store.actions))
+
+
 if __name__ == "__main__":
     unittest.main()

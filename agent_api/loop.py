@@ -36,7 +36,7 @@ from guard.audit import target_of
 from guard.decide import Context, Decision, decide
 from guard.domains import lookalike_of, match_allowed, normalize_host
 from guard.limits import SpendLimits
-from guard.risk import R3, Action, find_secrets
+from guard.risk import R0, R3, Action, find_secrets
 
 # Alamat di dalam teks, dengan atau tanpa "https://": (host, jalur).
 LINK_RE = re.compile(r"(?:https?://)?((?:[a-z0-9-]+\.)+[a-z][a-z0-9-]+)(?::\d{1,5})?(/[^\s\"'<>]*)?", re.IGNORECASE)
@@ -299,8 +299,10 @@ class Run:
         self.save(plan={"steps": list(plan.steps)}, scope=scope_to_json(scope), mode=choice, status="running")
         self.started = self.clock()
 
-        # Isi halaman awal baru sampai ke model setelah rencana disetujui.
+        # Isi halaman awal baru sampai ke model setelah rencana disetujui, dan
+        # tercatat di log aksi seperti bacaan lain.
         if start_host:
+            self.log(Action(kind="tab_read", host=start_host), Decision("allow", R0, "start_page"), None, "ok")
             self.see_page(self.start_page, Step("tab_read", "allow", "start_page", "ok"))
 
     def start_host(self):
